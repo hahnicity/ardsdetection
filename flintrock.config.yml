@@ -1,0 +1,16 @@
+provider: ec2
+
+services:
+  spark:
+    version: 1.6.1
+
+launch:
+  num-slaves: 19
+
+providers:
+  ec2:
+    key-name: gr-pair-gondolin
+    identity-file: /Users/greg/.ssh/gr-pair-gondolin.pem
+    region: us-west-1
+    ami: ami-6e84fa0e
+    user: ec2-user

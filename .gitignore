@@ -1,0 +1,11 @@
+venv*
+*.pyc
+*.sw[op]
+__pycache__/
+*.out
+*.test
+twilio.config
+backups/
+ardscohort/
+copdcohort/
+controlcohort/
