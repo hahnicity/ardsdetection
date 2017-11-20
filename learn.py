@@ -10,7 +10,6 @@ import operator
 from random import randint, sample
 import time
 
-import matplotlib.pyplot as plt
 from numpy import append, inf, nan
 from numpy.random import permutation
 import pandas as pd
@@ -43,7 +42,7 @@ def get_cross_patient_train_test_idx(df, split_ratio):
     for k, v in mapping.items():
         num_patients = len(v)
         proportion = float(num_patients) / len(unique_patients)
-        num_to_use = round(total_test_patients * proportion)
+        num_to_use = int(round(total_test_patients * proportion))
         if num_to_use < 1:
             raise Exception("You do not have enough patients for {} cohort".format(k))
         patients = sample(v, num_to_use)
@@ -67,8 +66,8 @@ def get_cross_patient_kfold_idxs(df, folds):
     for i in range(folds):
         patients_to_use = []
         for k, v in mapping.items():
-            lower_bound = round(i * len(v) / folds)
-            upper_bound = round((i + 1) * len(v) / folds)
+            lower_bound = int(round(i * len(v) / folds))
+            upper_bound = int(round((i + 1) * len(v) / folds))
             if upper_bound < 1:
                 raise Exception("You do not have enough patients for {} cohort".format(k))
             patients = v[lower_bound:upper_bound]
@@ -458,6 +457,7 @@ def main():
         results = aggregate_statistics(y_test, predictions, results)
         perform_voting(predictions, suppl_data, args.no_plot)
         print("-------------------")
+
     print_results(results)
 
 if __name__ == "__main__":

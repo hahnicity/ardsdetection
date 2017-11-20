@@ -7,11 +7,11 @@ from pandas import DataFrame, read_csv, Series
 
 necessities = ['ventBN']
 flow_time_feature_set = necessities + [
-    'mean_flow_from_pef', 'inst_RR', 'minF_to_zero', 'epAUC', 'pef_+0.16_to_zero',
-    'brunner', 'iTime', 'eTime', 'I:E ratio', 'min_vent'
+    'mean_flow_from_pef', 'inst_RR', 'minF_to_zero', 'pef_+0.16_to_zero',
+    'iTime', 'eTime', 'I:E ratio', 'min_vent', 'dyn_compliance',
 ]
 broad_feature_set = flow_time_feature_set + [
-    'TVi', 'TVe', 'vol_at_.5_sec', 'Maw', 'ipAUC', 'PIP', 'PEEP', 'dyn_compliance'
+    'TVi', 'TVe', 'vol_at_.5_sec', 'Maw', 'ipAUC', 'PIP', 'PEEP', 'epAUC',
 ]
 
 
