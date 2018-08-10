@@ -19,13 +19,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
 
-from collate import (
-    broad_feature_set,
-    collate_all_to_non_rolling_frame,
-    collate_all_to_rolling_average,
-    collate_all_to_rolling_frame,
-    flow_time_feature_set,
-)
+from collate import Dataset
+from metrics import *
 
 
 PATHO = {0: 'ctrl', 1: 'ards', 2: 'copd'}
@@ -95,7 +90,6 @@ def preprocess_and_split_x_y(
     breaths_to_stack,
     is_cross_patient_kfold,
     folds,
-    is_simple_split
 ):
     def finalize_data(x_train, x_test):
         x_train, scaling_factors = perform_initial_scaling(x_train, breaths_to_stack)
@@ -122,16 +116,6 @@ def preprocess_and_split_x_y(
     if is_cross_patient_split:
         x_train, x_test, y_train, y_test = train_test_split_by_patient(
             x, y, train_idx, test_idx
-        )
-        x_train, x_test = finalize_data(x_train, x_test)
-        yield (x_train, x_test, y_train, y_test, suppl_data)
-    elif is_simple_split:
-        if samples:
-            x = x.sample(n=samples)
-            y = y.loc[x.index]
-
-        x_train, x_test, y_train, y_test = train_test_split(
-            x, y, test_size=split_ratio, random_state=randint(0, 100)
         )
         x_train, x_test = finalize_data(x_train, x_test)
         yield (x_train, x_test, y_train, y_test, suppl_data)
@@ -170,104 +154,6 @@ def perform_subsequent_scaling(df, max_mins):
         val = max_mins[modulo_idx]
         df.iloc[:, col] = (df.iloc[:, col] - val['min']) / (val['max'] - val['min'])
     return df
-
-
-def get_fns_idx(actual, predictions, label):
-    pos = actual[actual == label]
-    pos_loc = predictions.loc[pos.index]
-    return pos_loc[pos_loc != label].index
-
-
-def get_fns(actual, predictions, label):
-    pos = actual[actual == label]
-    pos_loc = predictions.loc[pos.index]
-    return len(pos_loc[pos_loc != label])
-
-
-def get_tns(actual, predictions, label):
-    neg = actual[actual != label]
-    neg_loc = predictions.loc[neg.index]
-    return len(neg_loc[neg_loc != label])
-
-
-def get_fps_idx(actual, predictions, label):
-    neg = actual[actual != label]
-    neg_loc = predictions.loc[neg.index]
-    return neg_loc[neg_loc == label].index
-
-
-def get_fps_full_rows(actual, predictions, label, filename):
-    idx = get_fps_idx(actual, predictions, label)
-    full_df = read_pickle(filename)
-    return full_df.loc[idx]
-
-
-def get_fps(actual, predictions, label):
-    neg = actual[actual != label]
-    neg_loc = predictions.loc[neg.index]
-    return len(neg_loc[neg_loc == label])
-
-
-def get_tps(actual, predictions, label):
-    pos = actual[actual == label]
-    pos_loc = predictions.loc[pos.index]
-    return len(pos_loc[pos_loc == label])
-
-
-def false_positive_rate(actual, predictions, label):
-    fp = get_fps(actual, predictions, label)
-    tn = get_tns(actual, predictions, label)
-    if fp == 0 and tn == 0:
-        return 0
-    else:
-        return round(float(fp) / (fp + tn), 4)
-
-
-def specificity(actual, predictions, label):
-    """
-    Also known as the true negative rate
-    """
-    fp = get_fps(actual, predictions, label)
-    tn = get_tns(actual, predictions, label)
-    if fp == 0 and tn == 0:
-        return 1
-    else:
-        return round(float(tn) / (tn + fp), 4)
-
-
-def sensitivity(actual, predictions, label):
-    """
-    Also known as recall
-    """
-    tps = get_tps(actual, predictions, label)
-    fns = get_fns(actual, predictions, label)
-    if tps == 0 and fns == 0:
-        return nan
-    return tps / (tps+fns)
-
-
-def aggregate_statistics(actual, predictions, results):
-    cols = []
-    tmp = []
-    for i in range(0, 3):
-        patho = {0: 'ctrl', 1: 'ards', 2: 'copd'}[i]
-        tmp.extend([
-            get_tps(actual, predictions, i),
-            get_fps(actual, predictions, i),
-            get_tns(actual, predictions, i),
-            get_fns(actual, predictions, i),
-        ])
-        cols.extend([
-            '{}_tps'.format(patho),
-            '{}_fps'.format(patho),
-            '{}_tns'.format(patho),
-            '{}_fns'.format(patho),
-        ])
-    if isinstance(results, type(None)):
-        results = pd.DataFrame([tmp], columns=cols)
-    else:
-        results = results.append(pd.Series(tmp, index=cols), ignore_index=True)
-    return results
 
 
 def make_predictions(clf, x_test, y_test, suppl_data):
@@ -375,18 +261,15 @@ def calc_label(y_train, y_test, label):
 
 
 def create_df(args):
-    feature_set = {"flow_time": flow_time_feature_set, "broad": broad_feature_set}[args.feature_set]
+    """
+    Create dataframe for use in model
+
+    :param args: Arguments from CLI parser
+    """
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
 
-    if args.metadata_processing_type == "non_rolling":
-        df = collate_all_to_non_rolling_frame(args.samples, feature_set)
-        args.stacks = df.shape[1]
-    elif args.metadata_processing_type == "rolling_average":
-        df = collate_all_to_rolling_average(args.stacks, args.samples, feature_set)
-    elif args.metadata_processing_type == "rolling_frame":
-        df = collate_all_to_rolling_frame(args.stacks, args.samples, feature_set)
-
+    df = Dataset(args.cohort_description, args.feature_set, args.stacks).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
     return df
@@ -465,15 +348,10 @@ def print_results(results, patient_results, fold_copd):
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("--samples", type=int, default=None, help="used only with simple split")
-    parser.add_argument(
-        "--test-size", type=float, default=0.20, help="percentage of patients to use in test"
-    )
+    parser.add_argument('--cohort-description', default='cohort-description.csv', help='path to cohort description file')
     parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "broad"])
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
-    parser.add_argument("--metadata-processing-type", default="rolling_average", choices=["rolling_average", "non_rolling", "rolling_frame"])
     parser.add_argument("--cross-validate", action="store_true")
-    parser.add_argument("--simple-split", action="store_true")
     parser.add_argument("--cross-patient-split", action="store_true")
     parser.add_argument("--cross-patient-kfold", action="store_true")
     parser.add_argument("--folds", type=int, default=5)
@@ -482,11 +360,12 @@ def main():
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
     parser.add_argument("--fold-copd", action="store_true")
     args = parser.parse_args()
+
     df = create_df(args)
     results = None
     patient_results = {}
     for x_train, x_test, y_train, y_test, suppl_data in preprocess_and_split_x_y(
-        df, args.test_size, args.cross_patient_split, args.samples, args.stacks, args.cross_patient_kfold, args.folds, args.simple_split
+        df, args.test_size, args.cross_patient_split, args.samples, args.stacks, args.cross_patient_kfold, args.folds
     ):
         for i in range(0, 3):
             patho = PATHO[i]
