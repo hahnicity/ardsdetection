@@ -81,7 +81,7 @@ def copy_non_ards_patient(row, skip_existing_patients):
 def main():
     parser = ArgumentParser()
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
-    parser.add_argument('--experiment', default=1, choices=[1, 2])
+    parser.add_argument('--experiment', default=1, choices=[1, 2], type=int)
     parser.add_argument('--skip-existing-patients', action='store_true', help='Dont collect more data for patients who already have data')
     args = parser.parse_args()
 
