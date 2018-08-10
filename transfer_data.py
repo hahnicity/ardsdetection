@@ -6,8 +6,8 @@ import subprocess
 
 import pandas as pd
 
-SERVER_NAME = 'b2c-main'
-SERVER_DIRNAME = '/Users/retriever/'
+SERVER_NAME = 'b2c-compute'
+SERVER_DIRNAME = '/x1/data/results/backups'
 # XXX change in future to be generalizable
 DATA_PATH = 'data/experiment1/training/raw'
 
@@ -69,6 +69,8 @@ def copy_non_ards_patient(row, skip_existing_patients):
     if stdout == '':
         print('No files found for patient: {}'.format(patient_id))
         return
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode()
     date_str = re.search(r'(\d{4}-\d{2}-\d{2}-\d{2}-\d{2})', stdout).groups()[0]
     try:
         init_dt = datetime.strptime(date_str, '%Y-%m-%d-%H-%M')
