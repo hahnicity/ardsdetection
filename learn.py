@@ -17,7 +17,7 @@ from sklearn.cross_validation import KFold, train_test_split
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.grid_search import GridSearchCV
-from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_curve
+from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
 
 from collate import (
     broad_feature_set,
@@ -314,10 +314,12 @@ def perform_learning(x_train, x_test, y_train, y_test, suppl_data):
     return predictions
 
 
-def perform_voting(predictions, suppl_data, no_plot):
+def perform_voting(patient_results, predictions, suppl_data):
     """
     Perform majority rules voting on what disease subtype that a patient has
     """
+    patient_results.setdefault("predicted", {})
+    patient_results.setdefault('actual', {})
     voting = {}
     ards_pred, ards_real = set(), set()
     copd_pred, copd_real = set(), set()
@@ -351,19 +353,18 @@ def perform_voting(predictions, suppl_data, no_plot):
         print("Patient pecificity for label {}: {}".format(label, spec))
 
     diff = (pt_predictions - actual)
-    incorrect_pts = diff[diff != 0].index
+    incorrect_pts = diff[diff != 0].index.tolist()
+    correct_pts = diff[diff == 0].index.tolist()
+    for k, v in dict(actual).items():
+        patient_results['actual'][k] = v
+    for k, v in dict(pt_predictions).items():
+        patient_results['predicted'][k] = v
+
     for i in incorrect_pts:
         print("Patient {}: Prediction: {}, Actual: {}. Voting {}".format(
             i, pt_predictions.loc[i], actual.loc[i], voting[i]
         ))
-
-    # XXX temporarily out of commission
-#    if not no_plot:
-#        for patient in incorrect_pts:
-#            obs = predictions.loc[patient_idxs[patient]]
-#            obs['idx'] = range(0, len(obs))
-#            obs.plot.scatter('idx', 'y', title=patient)
-#            plt.show()
+    return patient_results
 
 
 def calc_label(y_train, y_test, label):
@@ -391,8 +392,42 @@ def create_df(args):
     return df
 
 
-def print_results(results):
-    for i in range(0, 3):
+def print_results(results, patient_results, fold_copd):
+    actual_arr = []
+    pred_arr = []
+    for k, v in patient_results['actual'].items():
+        actual_arr.append(v)
+        pred_arr.append(patient_results['predicted'][k])
+
+    # sigh... this analysis is hack upon hack
+    if fold_copd:
+        for i, v in enumerate(actual_arr):
+            if v == 2:
+                actual_arr[i] = 0
+            if pred_arr[i] == 2:
+                pred_arr[i] = 0
+        print("AUC {}".format(roc_auc_score(actual_arr, pred_arr)))
+
+        for k, v in patient_results['actual'].items():
+            if v == 2:
+                patient_results['actual'][k] = 0
+        for k, v in patient_results['predicted'].items():
+            if v == 2:
+                patient_results['predicted'][k] = 0
+        max_range = 2
+    else:
+        max_range = 3
+
+    for i in range(0, max_range):
+        actual_pts = []
+        predicted_pts = []
+        for k, v in patient_results['actual'].items():
+            if v == i:
+                actual_pts.append(k)
+        for k, v in patient_results['predicted'].items():
+            if v == i:
+                predicted_pts.append(k)
+
         patho = {0: 'ctrl', 1: 'ards', 2: 'copd'}[i]
         # sensitivity (recall) = tps / (tps+fns)
         # specificity =  tns / (tns+fps)
@@ -408,6 +443,24 @@ def print_results(results):
         print("{} total sensitivity: {}".format(patho, sen))
         print("{} total specificity: {}".format(patho, spec))
         print("{} total precision: {}".format(patho, prec))
+        pt_tps = 0
+        pt_fps = 0
+        pt_tns = 0
+        pt_fns = 0
+        for patient in actual_pts:
+            if patient in predicted_pts:
+                pt_tps += 1
+            else:
+                pt_fns += 1
+        for patient in predicted_pts:
+            if patient not in actual_pts:
+                pt_fps += 1
+        pt_tns = len(patient_results['actual']) - pt_tps - pt_fns - pt_fps
+        print("{} patient accuracy: {}".format(patho, (pt_tps+pt_tns) / (pt_tps+pt_tns+pt_fps+pt_fns)))
+        print("{} patient sensitivity: {}".format(patho, pt_tps / (pt_tps+pt_fns)))
+        print("{} patient specificity: {}".format(patho, pt_tns / (pt_tns+pt_fps)))
+        print("{} patient precision: {}".format(patho, pt_tps / (pt_tps+pt_fps)))
+        print("")
 
 
 def main():
@@ -427,10 +480,11 @@ def main():
     parser.add_argument("--stacks", default=20, type=int)
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
-    parser.add_argument("--no-plot", action="store_true", help="Do not perform any plotting actions at the end of fold execution")
+    parser.add_argument("--fold-copd", action="store_true")
     args = parser.parse_args()
     df = create_df(args)
     results = None
+    patient_results = {}
     for x_train, x_test, y_train, y_test, suppl_data in preprocess_and_split_x_y(
         df, args.test_size, args.cross_patient_split, args.samples, args.stacks, args.cross_patient_kfold, args.folds, args.simple_split
     ):
@@ -455,10 +509,10 @@ def main():
         else:
             predictions = perform_learning(x_train, x_test, y_train, y_test, suppl_data)
         results = aggregate_statistics(y_test, predictions, results)
-        perform_voting(predictions, suppl_data, args.no_plot)
+        patient_results = perform_voting(patient_results, predictions, suppl_data)
         print("-------------------")
 
-    print_results(results)
+    print_results(results, patient_results, args.fold_copd)
 
 if __name__ == "__main__":
     main()
