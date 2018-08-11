@@ -7,6 +7,7 @@ model.
 """
 from collections import OrderedDict
 import csv
+from datetime import datetime
 from glob import glob
 import os
 
@@ -64,7 +65,10 @@ class Dataset(object):
             pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient]
             if len(pt_row) > 1:
                 raise Exception('Found more than 1 row for patient: {}'.format(patient))
-            patho = pt_row['Pathophysiology'].str.strip()
+            elif len(pt_row) == 0:
+                raise Exception('Found more than no rows for patient: {}'.format(patient))
+            pt_row = pt_row.iloc[0]
+            patho = pt_row['Pathophysiology'].strip()
             files = self.file_map[patient]
 
             # Handle COPD+ARDS as just ARDS wrt to the model for now. We can be
@@ -72,6 +76,7 @@ class Dataset(object):
             if 'ARDS' in patho:
                 gt_label = 1
                 pt_start_time = pt_row['Date when Berlin criteria first met (m/dd/yyy)']
+                pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M"))
             elif 'COPD' in patho:
                 gt_label = 2
                 pt_start_time = None
@@ -98,26 +103,29 @@ class Dataset(object):
         intermediate_fname = "breath_meta_{}".format(base_filename)
         meta_dir = os.path.dirname(filename).replace('raw', 'meta')
         metadata_path = os.path.join(meta_dir, intermediate_fname)
+        load_from_raw = True
 
         if self.load_intermediates:
             try:
                 with open(metadata_path) as f:
-                    lines = []
+                    meta = []
                     reader = csv.reader(f)
-                    for l in lines:
-                        lines.append(l)
-            except FileNotFoundError:
+                    for l in reader:
+                        meta.append(l)
+                load_from_raw = False
+            except IOError:
                 pass
 
-        meta = get_file_experimental_breath_meta(filename)[1:]
-        try:
-            os.mkdir(meta_dir)
-        except OSError:  # dir likely exists
-            pass
+        if load_from_raw:
+            meta = get_file_experimental_breath_meta(filename)[1:]
+            try:
+                os.mkdir(meta_dir)
+            except OSError:  # dir likely exists
+                pass
 
-        with open(metadata_path, 'w') as f:
-            writer = csv.writer(f)
-            writer.writerows(meta)
+            with open(metadata_path, 'w') as f:
+                writer = csv.writer(f)
+                writer.writerows(meta)
 
         return meta
 
@@ -127,10 +135,15 @@ class Dataset(object):
         for f in pt_files:
             meta.extend(self.load_breath_meta_file(f))
             # XXX in future add filename as well. Especially if debugging necessary
-        meta = self.process_features(np.array(meta), start_time)
-        meta = self.to_stacked_median(meta)
+
+        if len(meta) != 0:
+            meta = self.process_features(np.array(meta), start_time)
+            meta = self.to_stacked_median(meta)
         cols = list(self.features.keys())
-        df = pd.DataFrame(meta, columns=cols)
+        try:
+            df = pd.DataFrame(meta, columns=cols)
+        except:
+            raise Exception('Failed to capture any data for patient: {}'.format(patient_id))
         df['patient'] = patient_id
         return df
 
@@ -141,11 +154,12 @@ class Dataset(object):
         :param mat: matrix of data to process
         :param start_time: time we wish to start using data from patient
         """
+        mat = mat[mat[:, 29].argsort()]
         if start_time is not None:
             # index of abs bs is 29
             dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
-            mask = dt < start_time
-            mat = mat[~mask]
+            mask = dt >= start_time
+            mat = mat[mask]
         row_idxs = list(self.features.values())
         mat = mat[:, row_idxs]
         mat = mat.astype(np.float32)

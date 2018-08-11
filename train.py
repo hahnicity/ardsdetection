@@ -26,11 +26,12 @@ from metrics import *
 PATHO = {0: 'ctrl', 1: 'ards', 2: 'copd'}
 
 def get_cross_patient_train_test_idx(df, split_ratio):
-    unique_patients = df['filename'].unique()
-    mapping = {'control': [], 'ards': [], 'copd': []}
-    for f in list(unique_patients):
-        type_ = f.split('/')[0].replace('cohort', '')
-        mapping[type_].append(f)
+    unique_patients = df['patient'].unique()
+    mapping = {'ctrl': [], 'ards': [], 'copd': []}
+    for patient in list(unique_patients):
+        patient_rows = df[df.patient == patient]
+        type_ = PATHO[df.y.unique()[0]]
+        mapping[type_].append(patient)
 
     patients_to_use = []
     total_test_patients = round(len(unique_patients) * split_ratio)
@@ -45,18 +46,19 @@ def get_cross_patient_train_test_idx(df, split_ratio):
         print("number {} patients in test: {}".format(k, len(patients)))
         patients_to_use.extend(patients)
 
-    train_patient_data = df.query('filename not in {}'.format(patients_to_use))
-    test_patient_data = df.query('filename in {}'.format(patients_to_use))
+    train_patient_data = df.query('patient not in {}'.format(patients_to_use))
+    test_patient_data = df.query('patient in {}'.format(patients_to_use))
     return train_patient_data.index, test_patient_data.index
 
 
 def get_cross_patient_kfold_idxs(df, folds):
     idxs = []
-    unique_patients = df['filename'].unique()
-    mapping = {'control': [], 'ards': [], 'copd': []}
-    for f in list(unique_patients):
-        type_ = f.split('/')[0].replace('cohort', '')
-        mapping[type_].append(f)
+    unique_patients = df['patient'].unique()
+    mapping = {'ctrl': [], 'ards': [], 'copd': []}
+    for patient in list(unique_patients):
+        patient_rows = df[df.patient == patient]
+        type_ = PATHO[df.y.unique()[0]]
+        mapping[type_].append(patient)
     total_test_patients = round(len(unique_patients) / folds)
     for i in range(folds):
         patients_to_use = []
@@ -67,8 +69,8 @@ def get_cross_patient_kfold_idxs(df, folds):
                 raise Exception("You do not have enough patients for {} cohort".format(k))
             patients = v[lower_bound:upper_bound]
             patients_to_use.extend(patients)
-        train_patient_data = df.query('filename not in {}'.format(patients_to_use))
-        test_patient_data = df.query('filename in {}'.format(patients_to_use))
+        train_patient_data = df.query('patient not in {}'.format(patients_to_use))
+        test_patient_data = df.query('patient in {}'.format(patients_to_use))
         idxs.append((train_patient_data.index, test_patient_data.index))
 
     return idxs
@@ -82,15 +84,7 @@ def train_test_split_by_patient(x, y, train_idx, test_idx):
     return x_train, x_test, y_train, y_test
 
 
-def preprocess_and_split_x_y(
-    df,
-    split_ratio,
-    is_cross_patient_split,
-    samples,
-    breaths_to_stack,
-    is_cross_patient_kfold,
-    folds,
-):
+def preprocess_and_split_x_y(df, is_cross_patient_split, breaths_to_stack, is_cross_patient_kfold, folds):
     def finalize_data(x_train, x_test):
         x_train, scaling_factors = perform_initial_scaling(x_train, breaths_to_stack)
         x_test = perform_subsequent_scaling(x_test, scaling_factors)
@@ -102,13 +96,13 @@ def preprocess_and_split_x_y(
         idxs = get_cross_patient_kfold_idxs(df, folds)
 
     y = df['y']
-    suppl_data = pd.DataFrame({'ventBN': df.ventBN.values, 'patient': df.filename.values}, index=df.index)
+    suppl_data = pd.DataFrame({'ventBN': df.ventBN.values, 'patient': df.patient.values}, index=df.index)
     suppl_data['patient'] = suppl_data.patient.str.extract('(\d{4}RPI\d{10})')
     suppl_data['patho'] = 'ctrl'
     for i in range(3):
         patho = PATHO[i]
         suppl_data.loc[y[y == i].index, 'patho'] = patho
-    df = df.drop(['y', 'filename', 'ventBN'], axis=1)
+    df = df.drop(['y', 'patient', 'ventBN'], axis=1)
 
     x = pd.DataFrame(df)
     y = pd.Series(y)
@@ -350,7 +344,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='path to cohort description file')
     parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "broad"])
-    parser.add_argument('--load-intermediates', action='store_true', help='only load from intermediate data')
+    parser.add_argument('--load-intermediates', action='store_true', help='do best to load from intermediate data')
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
     parser.add_argument("--cross-validate", action="store_true")
     parser.add_argument("--cross-patient-split", action="store_true")
@@ -365,9 +359,7 @@ def main():
     df = create_df(args)
     results = None
     patient_results = {}
-    for x_train, x_test, y_train, y_test, suppl_data in preprocess_and_split_x_y(
-        df, args.test_size, args.cross_patient_split, args.samples, args.stacks, args.cross_patient_kfold, args.folds
-    ):
+    for x_train, x_test, y_train, y_test, suppl_data in preprocess_and_split_x_y(df, args.cross_patient_split, args.stacks, args.cross_patient_kfold, args.folds):
         for i in range(0, 3):
             patho = PATHO[i]
             test_pts = suppl_data.loc[y_test[y_test == i].index].patient.unique()

@@ -93,7 +93,7 @@ def main():
 
     for idx, row in enrollment.iterrows():
         patho = row['Pathophysiology']
-        if patho == 'ARDS':
+        if 'ARDS' in patho:
             copy_ards_patient(row, args.skip_existing_patients)
         else:
             copy_non_ards_patient(row, args.skip_existing_patients)
