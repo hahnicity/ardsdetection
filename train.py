@@ -10,14 +10,14 @@ import operator
 from random import randint, sample
 import time
 
-from numpy import append, inf, nan
-from numpy.random import permutation
+import numpy as np
 import pandas as pd
 from sklearn.cross_validation import KFold, train_test_split
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
+from sklearn.preprocessing import MinMaxScaler
 
 from collate import Dataset
 from metrics import *
@@ -25,233 +25,186 @@ from metrics import *
 
 PATHO = {0: 'ctrl', 1: 'ards', 2: 'copd'}
 
-def get_cross_patient_train_test_idx(df, split_ratio):
-    unique_patients = df['patient'].unique()
-    mapping = {'ctrl': [], 'ards': [], 'copd': []}
-    for patient in list(unique_patients):
-        patient_rows = df[df.patient == patient]
-        type_ = PATHO[df.y.unique()[0]]
-        mapping[type_].append(patient)
 
-    patients_to_use = []
-    total_test_patients = round(len(unique_patients) * split_ratio)
-    for k, v in mapping.items():
-        num_patients = len(v)
-        proportion = float(num_patients) / len(unique_patients)
-        num_to_use = int(round(total_test_patients * proportion))
-        if num_to_use < 1:
-            raise Exception("You do not have enough patients for {} cohort".format(k))
-        patients = sample(v, num_to_use)
-        print("number {} patients in training: {}".format(k, num_patients - len(patients)))
-        print("number {} patients in test: {}".format(k, len(patients)))
-        patients_to_use.extend(patients)
+class ARDSDetectionModel(object):
+    def __init__(self, args, data):
+        """
+        :param args: CLI args
+        :param data: DataFrame containing train+test data
+        """
+        self.args = args
+        self.data = data
+        self.models = []
+        results_cols = ["patient", "patho"]
+        # XXX in future update so that we can merge COPD patients into OTHERS
+        # if desired
+        for n, patho in PATHO.iteritems():
+            results_cols.extend([
+                "{}_tps".format(patho), "{}_fps".format(patho),
+                "{}_tns".format(patho), "{}_fns".format(patho),
+                "{}_votes".format(patho),
+            ])
+        results_cols += ["model_idx", "prediction"]
+        self.results = pd.DataFrame([], columns=results_cols)
 
-    train_patient_data = df.query('patient not in {}'.format(patients_to_use))
-    test_patient_data = df.query('patient in {}'.format(patients_to_use))
-    return train_patient_data.index, test_patient_data.index
+    def get_cross_patient_train_test_idx(self):
+        unique_patients = self.data['patient'].unique()
+        mapping = {'ctrl': [], 'ards': [], 'copd': []}
+        for patient in list(unique_patients):
+            patient_rows = self.data[self.data.patient == patient]
+            type_ = PATHO[patient_rows.y.unique()[0]]
+            mapping[type_].append(patient)
 
-
-def get_cross_patient_kfold_idxs(df, folds):
-    idxs = []
-    unique_patients = df['patient'].unique()
-    mapping = {'ctrl': [], 'ards': [], 'copd': []}
-    for patient in list(unique_patients):
-        patient_rows = df[df.patient == patient]
-        type_ = PATHO[df.y.unique()[0]]
-        mapping[type_].append(patient)
-    total_test_patients = round(len(unique_patients) / folds)
-    for i in range(folds):
         patients_to_use = []
+        total_test_patients = round(len(unique_patients) * self.args.split_ratio)
         for k, v in mapping.items():
-            lower_bound = int(round(i * len(v) / folds))
-            upper_bound = int(round((i + 1) * len(v) / folds))
-            if upper_bound < 1:
+            num_patients = len(v)
+            proportion = float(num_patients) / len(unique_patients)
+            num_to_use = int(round(total_test_patients * proportion))
+            if num_to_use < 1:
                 raise Exception("You do not have enough patients for {} cohort".format(k))
-            patients = v[lower_bound:upper_bound]
+            patients = sample(v, num_to_use)
+            print("number {} patients in training: {}".format(k, num_patients - len(patients)))
+            print("number {} patients in test: {}".format(k, len(patients)))
             patients_to_use.extend(patients)
-        train_patient_data = df.query('patient not in {}'.format(patients_to_use))
-        test_patient_data = df.query('patient in {}'.format(patients_to_use))
-        idxs.append((train_patient_data.index, test_patient_data.index))
 
-    return idxs
+        train_patient_data = self.data.query('patient not in {}'.format(patients_to_use))
+        test_patient_data = self.data.query('patient in {}'.format(patients_to_use))
+        return train_patient_data.index, test_patient_data.index
 
+    def get_cross_patient_kfold_idxs(self):
+        idxs = []
+        unique_patients = self.data['patient'].unique()
+        mapping = {'ctrl': [], 'ards': [], 'copd': []}
+        for patient in unique_patients:
+            patient_rows = self.data[self.data.patient == patient]
+            type_ = PATHO[patient_rows.y.unique()[0]]
+            mapping[type_].append(patient)
+        total_test_patients = round(len(unique_patients) / self.args.folds)
+        for i in range(self.args.folds):
+            patients_to_use = []
+            for k, v in mapping.items():
+                lower_bound = int(round(i * len(v) / self.args.folds))
+                upper_bound = int(round((i + 1) * len(v) / self.args.folds))
+                if upper_bound < 1:
+                    raise Exception("You do not have enough patients for {} cohort".format(k))
+                patients = v[lower_bound:upper_bound]
+                patients_to_use.extend(patients)
+            train_patient_data = self.data.query('patient not in {}'.format(patients_to_use))
+            test_patient_data = self.data.query('patient in {}'.format(patients_to_use))
+            idxs.append((train_patient_data.index, test_patient_data.index))
 
-def train_test_split_by_patient(x, y, train_idx, test_idx):
-    x_train = x.loc[train_idx].dropna()
-    x_test = x.loc[test_idx].dropna()
-    y_train = y.loc[train_idx].dropna()
-    y_test = y.loc[test_idx].dropna()
-    return x_train, x_test, y_train, y_test
+        return idxs
 
+    def perform_data_splits(self):
+        if self.args.cross_patient_split:
+            idxs = self.get_cross_patient_train_test_idx()
+        elif self.args.cross_patient_kfold:
+            idxs = self.get_cross_patient_kfold_idxs()
 
-def preprocess_and_split_x_y(df, is_cross_patient_split, breaths_to_stack, is_cross_patient_kfold, folds):
-    def finalize_data(x_train, x_test):
-        x_train, scaling_factors = perform_initial_scaling(x_train, breaths_to_stack)
-        x_test = perform_subsequent_scaling(x_test, scaling_factors)
-        return x_train, x_test
+        y = self.data.y
+        x = self.data.drop(['y', 'patient', 'ventBN'], axis=1)
 
-    if is_cross_patient_split:
-        train_idx, test_idx = get_cross_patient_train_test_idx(df, split_ratio)
-    elif is_cross_patient_kfold:
-        idxs = get_cross_patient_kfold_idxs(df, folds)
-
-    y = df['y']
-    suppl_data = pd.DataFrame({'ventBN': df.ventBN.values, 'patient': df.patient.values}, index=df.index)
-    suppl_data['patient'] = suppl_data.patient.str.extract('(\d{4}RPI\d{10})')
-    suppl_data['patho'] = 'ctrl'
-    for i in range(3):
-        patho = PATHO[i]
-        suppl_data.loc[y[y == i].index, 'patho'] = patho
-    df = df.drop(['y', 'patient', 'ventBN'], axis=1)
-
-    x = pd.DataFrame(df)
-    y = pd.Series(y)
-
-    if is_cross_patient_split:
-        x_train, x_test, y_train, y_test = train_test_split_by_patient(
-            x, y, train_idx, test_idx
-        )
-        x_train, x_test = finalize_data(x_train, x_test)
-        yield (x_train, x_test, y_train, y_test, suppl_data)
-    elif is_cross_patient_kfold:
         for train_idx, test_idx in idxs:
-            x_train, x_test, y_train, y_test = train_test_split_by_patient(
-                x, y, train_idx, test_idx
-            )
-            x_train, x_test = finalize_data(x_train, x_test)
-            yield (x_train, x_test, y_train, y_test, suppl_data)
+            x_train = x.loc[train_idx].dropna()
+            x_test = x.loc[test_idx].dropna()
+            y_train = y.loc[train_idx].dropna()
+            y_test = y.loc[test_idx].dropna()
 
+            scaler = MinMaxScaler()
+            x_train = pd.DataFrame(scaler.fit_transform(x_train), index=y_train.index)
+            x_test = pd.DataFrame(scaler.transform(x_test), index=y_test.index)
+            yield (x_train, x_test, y_train, y_test)
 
-def perform_initial_scaling(df, stacked_breaths):
-    """
-    Since breaths are stacked we look at max and mins across multiple
-    stacked rows
-    """
-    max_mins = {}
-    for col in range(df.shape[1]):
-        modulo_idx = col % stacked_breaths
-        max_mins.setdefault(modulo_idx, {'max': 0, 'min': 0})
-        min = df.iloc[:, col].min()
-        if min < max_mins[modulo_idx]['max']:
-            max_mins[modulo_idx]['min'] = min
-        max = df.iloc[:, col].max()
-        if max > max_mins[modulo_idx]['min']:
-            max_mins[modulo_idx]['max'] = max
-    perform_subsequent_scaling(df, max_mins)
-    return df, max_mins
+    def train(self, x_train, y_train):
+        clf = RandomForestClassifier(random_state=1)
+        clf.fit(x_train, y_train)
+        self.models.append(clf)
 
+    def train_and_test(self):
+        """
+        Train models and then run testing afterwards.
+        """
+        for model_idx, (x_train, x_test, y_train, y_test) in enumerate(self.perform_data_splits()):
+            if self.args.pca:
+                pca = PCA(n_components=self.args.pca)
+                pca.fit(x_train, y_train)
+                x_train = pd.DataFrame(pca.transform(x_train), index=x_train.index)
+                x_test = pd.DataFrame(pca.transform(x_test), index=x_test.index)
 
-def perform_subsequent_scaling(df, max_mins):
-    for col in range(df.shape[1]):
-        breaths_to_stack = len(max_mins)
-        modulo_idx = col % breaths_to_stack
-        val = max_mins[modulo_idx]
-        df.iloc[:, col] = (df.iloc[:, col] - val['min']) / (val['max'] - val['min'])
-    return df
+            if self.args.grid_search:
+                self.perform_grid_search(x_train, y_train)
+            else:
+                self.train(x_train, y_train)
 
+            predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
+            results = self.aggregate_statistics(y_test, predictions, model_idx)
+            self.print_model_stats(y_test, predictions, model_idx)
+            print("-------------------")
 
-def make_predictions(clf, x_test, y_test, suppl_data):
-    predictions = clf.predict(x_test)
-    print("Accuracy: " + str(round(accuracy_score(y_test, predictions), 4)))
-    print("Precision: " + str(precision_score(y_test, predictions, average='macro')))
-    print("Recall: " + str(recall_score(y_test, predictions, average='macro')))
-    predictions = pd.Series(predictions, index=x_test.index)
-    print("Control recall: ", sensitivity(y_test, predictions, 0))
-    print("ARDS recall: ", sensitivity(y_test, predictions, 1))
-    print("COPD recall: ", sensitivity(y_test, predictions, 2))
-    print("Control specificity", specificity(y_test, predictions, 0))
-    print("ARDS specificity", specificity(y_test, predictions, 1))
-    print("COPD specificity", specificity(y_test, predictions, 2))
-    error = abs(y_test - predictions)
-    failure_idx = error[error != 0]
-    with open("failure.test", "w") as f:
-        writer = csv.writer(f)
-        writer.writerow(["patient", "ventBN", "real val"])
-        for idx in failure_idx.index:
-            pt_data = suppl_data.loc[idx].tolist()
-            actual = y_test.loc[idx]
-            writer.writerow(pt_data + [actual])
-    return predictions
+        self.print_aggregate_results()
 
+    def perform_grid_search(self, x_train, y_train):
+        params = {
+            "n_estimators": list(range(50, 90, 5)),
+            "max_features": list(range(23, 26)),
+            "criterion": ["entropy"],
+        }
+        clf = GridSearchCV(RandomForestClassifier(random_state=1), params)
+        clf.fit(x_train, y_train.values)
+        print("Params: ", clf.best_params_)
+        print("Best CV score: ", clf.best_score_)
+        self.models.append(clf)
 
-def perform_cross_validation(x_train, x_test, y_train, y_test, suppl_data):
-    params = {
-        "n_estimators": list(range(50, 90, 5)),
-        "max_features": list(range(23, 26)),
-        "criterion": ["entropy"],
-    }
-    clf = GridSearchCV(RandomForestClassifier(), params)
-    clf.fit(x_train, y_train.values)
-    print("Params: ", clf.best_params_)
-    print("Best CV score: ", clf.best_score_)
-    return make_predictions(clf, x_test, y_test, suppl_data)
+    def aggregate_statistics(self, y_test, predictions, model_idx):
+        x_test_expanded = self.data.loc[y_test.index]
+        for pt in x_test_expanded.patient.unique():
+            i = len(self.results)
+            pt_rows = x_test_expanded[x_test_expanded.patient == pt]
+            patho_n = pt_rows.y.unique()[0]
+            pt_actual = y_test.loc[pt_rows.index]
+            pt_pred = predictions.loc[pt_rows.index]
+            pt_results = [pt, patho_n]
+            for n, patho in PATHO.iteritems():
+                pt_results.extend([
+                    get_tps(pt_actual, pt_pred, n), get_fps(pt_actual, pt_pred, n),
+                    get_tns(pt_actual, pt_pred, n), get_fns(pt_actual, pt_pred, n),
+                    len(pt_pred[pt_pred == n]),
+                ])
+            pt_results.extend([model_idx, np.argmax([pt_results[6], pt_results[11], pt_results[16]])])
+            self.results.loc[i] = pt_results
 
+    def print_model_stats(self, y_test, predictions, model_idx):
+        """
+        Perform majority rules voting on what disease subtype that a patient has
+        """
+        model_results = self.results[self.results.model_idx == model_idx]
+        incorrect_pts = model_results[model_results.patho != model_results.prediction]
 
-def perform_learning(x_train, x_test, y_train, y_test, suppl_data):
-    clf = RandomForestClassifier()
-    clf.fit(x_train, y_train.values)
-    predictions = make_predictions(clf, x_test, y_test, suppl_data)
-    return predictions
+        print("Model accuracy: {}".format(accuracy_score(y_test, predictions)))
+        for n, patho in PATHO.iteritems():
+            print("{} recall: {}".format(patho, recall_score(y_test, predictions, labels=[n], average='macro')))
+            print("{} precision: {}".format(patho, precision_score(y_test, predictions, labels=[n], average='macro')))
 
+        for idx, row in incorrect_pts.iterrows():
+            print("Patient {}: Prediction: {}, Actual: {}. Voting:\n{}".format(
+                row.patient, row.prediction, row.patho, row[['ctrl_votes', 'ards_votes', 'copd_votes']]
+            ))
 
-def perform_voting(patient_results, predictions, suppl_data):
-    """
-    Perform majority rules voting on what disease subtype that a patient has
-    """
-    patient_results.setdefault("predicted", {})
-    patient_results.setdefault('actual', {})
-    voting = {}
-    ards_pred, ards_real = set(), set()
-    copd_pred, copd_real = set(), set()
-    control_pred, control_real = set(), set()
-    pred = {}
-    patients = {}
-    patient_idxs = {}
-    for idx in predictions.index:
-        cohort = suppl_data.loc[idx].patho
-        patient = suppl_data.loc[idx].patient
-        if patient not in patient_idxs:
-            patient_idxs[patient] = []
-        patients[patient] = {"ctrl": 0, "ards": 1, "copd": 2}[cohort]
-        voting.setdefault(patient, {0: 0, 1: 0, 2: 0})
-        voting[patient][predictions.loc[idx]] += 1
-        patient_idxs[patient].append(idx)
+    def print_aggregate_results(self):
+        # XXX for now just stick to analyzing aggregate over patients
 
-    actual = pd.Series(list(patients.values()), index=list(patients.keys()))
+        for n, patho in PATHO.iteritems():
+            tps = float(len(self.results[(self.results.patho == n) & (self.results.prediction == n)]))
+            tns = float(len(self.results[(self.results.patho != n) & (self.results.prediction != n)]))
+            fps = float(len(self.results[(self.results.patho != n) & (self.results.prediction == n)]))
+            fns = float(len(self.results[(self.results.patho == n) & (self.results.prediction != n)]))
 
-    for pt, vals in voting.items():
-        maxed = max(vals.items(), key=operator.itemgetter(1))[0]
-        pred[pt] = maxed
-        pt_predictions = pd.Series(list(pred.values()), index=list(pred.keys()))
-
-    print("")
-    for label in [0, 1, 2]:
-        sen = sensitivity(actual, pt_predictions, label)
-        spec = specificity(actual, pt_predictions, label)
-        # sensitivity is recall
-        print("Patient sensitivity for label {}: {}".format(label, sen))
-        print("Patient pecificity for label {}: {}".format(label, spec))
-
-    diff = (pt_predictions - actual)
-    incorrect_pts = diff[diff != 0].index.tolist()
-    correct_pts = diff[diff == 0].index.tolist()
-    for k, v in dict(actual).items():
-        patient_results['actual'][k] = v
-    for k, v in dict(pt_predictions).items():
-        patient_results['predicted'][k] = v
-
-    for i in incorrect_pts:
-        print("Patient {}: Prediction: {}, Actual: {}. Voting {}".format(
-            i, pt_predictions.loc[i], actual.loc[i], voting[i]
-        ))
-    return patient_results
-
-
-def calc_label(y_train, y_test, label):
-    train_samples = len(y_train[y_train == label])
-    test_samples = len(y_test[y_test == label])
-    print("{} train samples for label {}".format(train_samples, label))
-    print("{} test samples for label {}".format(test_samples, label))
+            print("{} patient accuracy: {}".format(patho, (tps+tns) / (tps+tns+fps+fns)))
+            print("{} patient sensitivity: {}".format(patho, tps / (tps+fns)))
+            print("{} patient specificity: {}".format(patho, tns / (tns+fps)))
+            print("{} patient precision: {}".format(patho, tps / (tps+fps)))
+            print("")
 
 
 def create_df(args):
@@ -269,84 +222,14 @@ def create_df(args):
     return df
 
 
-def print_results(results, patient_results, fold_copd):
-    actual_arr = []
-    pred_arr = []
-    for k, v in patient_results['actual'].items():
-        actual_arr.append(v)
-        pred_arr.append(patient_results['predicted'][k])
-
-    # sigh... this analysis is hack upon hack
-    if fold_copd:
-        for i, v in enumerate(actual_arr):
-            if v == 2:
-                actual_arr[i] = 0
-            if pred_arr[i] == 2:
-                pred_arr[i] = 0
-        print("AUC {}".format(roc_auc_score(actual_arr, pred_arr)))
-
-        for k, v in patient_results['actual'].items():
-            if v == 2:
-                patient_results['actual'][k] = 0
-        for k, v in patient_results['predicted'].items():
-            if v == 2:
-                patient_results['predicted'][k] = 0
-        max_range = 2
-    else:
-        max_range = 3
-
-    for i in range(0, max_range):
-        actual_pts = []
-        predicted_pts = []
-        for k, v in patient_results['actual'].items():
-            if v == i:
-                actual_pts.append(k)
-        for k, v in patient_results['predicted'].items():
-            if v == i:
-                predicted_pts.append(k)
-
-        patho = {0: 'ctrl', 1: 'ards', 2: 'copd'}[i]
-        # sensitivity (recall) = tps / (tps+fns)
-        # specificity =  tns / (tns+fps)
-        tps = results['{}_tps'.format(patho)].sum()
-        fns = results['{}_fns'.format(patho)].sum()
-        tns = results['{}_tns'.format(patho)].sum()
-        fps = results['{}_fps'.format(patho)].sum()
-        acc = round((tps+tns) / (tps+tns+fps+fns), 4)
-        sen = round(tps / (tps+fns), 4)
-        spec = round(tns / (tns+fps), 4)
-        prec = round(tps / (tps+fps), 4)
-        print("{} total accuracy: {}".format(patho, acc))
-        print("{} total sensitivity: {}".format(patho, sen))
-        print("{} total specificity: {}".format(patho, spec))
-        print("{} total precision: {}".format(patho, prec))
-        pt_tps = 0
-        pt_fps = 0
-        pt_tns = 0
-        pt_fns = 0
-        for patient in actual_pts:
-            if patient in predicted_pts:
-                pt_tps += 1
-            else:
-                pt_fns += 1
-        for patient in predicted_pts:
-            if patient not in actual_pts:
-                pt_fps += 1
-        pt_tns = len(patient_results['actual']) - pt_tps - pt_fns - pt_fps
-        print("{} patient accuracy: {}".format(patho, (pt_tps+pt_tns) / (pt_tps+pt_tns+pt_fps+pt_fns)))
-        print("{} patient sensitivity: {}".format(patho, pt_tps / (pt_tps+pt_fns)))
-        print("{} patient specificity: {}".format(patho, pt_tns / (pt_tns+pt_fps)))
-        print("{} patient precision: {}".format(patho, pt_tps / (pt_tps+pt_fps)))
-        print("")
-
-
-def main():
+def build_parser():
     parser = ArgumentParser()
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='path to cohort description file')
     parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "broad"])
     parser.add_argument('--load-intermediates', action='store_true', help='do best to load from intermediate data')
+    parser.add_argument('--split-ratio', type=float, default=.2)
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
-    parser.add_argument("--cross-validate", action="store_true")
+    parser.add_argument("--grid-search", action="store_true", help='perform grid search for model hyperparameters')
     parser.add_argument("--cross-patient-split", action="store_true")
     parser.add_argument("--cross-patient-kfold", action="store_true")
     parser.add_argument("--folds", type=int, default=5)
@@ -354,37 +237,15 @@ def main():
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
     parser.add_argument("--fold-copd", action="store_true")
-    args = parser.parse_args()
+    return parser
 
+
+def main():
+    args = build_parser().parse_args()
     df = create_df(args)
-    results = None
-    patient_results = {}
-    for x_train, x_test, y_train, y_test, suppl_data in preprocess_and_split_x_y(df, args.cross_patient_split, args.stacks, args.cross_patient_kfold, args.folds):
-        for i in range(0, 3):
-            patho = PATHO[i]
-            test_pts = suppl_data.loc[y_test[y_test == i].index].patient.unique()
-            print("{} cohort patients: {}".format(patho, ", ".join(test_pts)))
+    model = ARDSDetectionModel(args, df)
+    model.train_and_test()
 
-        calc_label(y_train, y_test, 0)
-        calc_label(y_train, y_test, 1)
-        calc_label(y_train, y_test, 2)
-        print("")
-
-        if args.pca:
-            pca = PCA(n_components=args.pca)
-            pca.fit(x_train, y_train)
-            x_train = pd.DataFrame(pca.transform(x_train), index=x_train.index)
-            x_test = pd.DataFrame(pca.transform(x_test), index=x_test.index)
-
-        if args.cross_validate:
-            predictions = perform_cross_validation(x_train, x_test, y_train, y_test, suppl_data)
-        else:
-            predictions = perform_learning(x_train, x_test, y_train, y_test, suppl_data)
-        results = aggregate_statistics(y_test, predictions, results)
-        patient_results = perform_voting(patient_results, predictions, suppl_data)
-        print("-------------------")
-
-    print_results(results, patient_results, args.fold_copd)
 
 if __name__ == "__main__":
     main()

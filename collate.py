@@ -10,6 +10,7 @@ import csv
 from datetime import datetime
 from glob import glob
 import os
+from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -91,6 +92,8 @@ class Dataset(object):
                 tmp = self.process_patient_data(patient, files, pt_start_time)
                 tmp['y'] = gt_label
                 df = df.append(tmp)
+
+        df.index = range(len(df))
         return df
 
     def load_breath_meta_file(self, filename):
@@ -139,11 +142,11 @@ class Dataset(object):
         if len(meta) != 0:
             meta = self.process_features(np.array(meta), start_time)
             meta = self.to_stacked_median(meta)
+            if len(meta) == 0:
+                warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
+
         cols = list(self.features.keys())
-        try:
-            df = pd.DataFrame(meta, columns=cols)
-        except:
-            raise Exception('Failed to capture any data for patient: {}'.format(patient_id))
+        df = pd.DataFrame(meta, columns=cols)
         df['patient'] = patient_id
         return df
 

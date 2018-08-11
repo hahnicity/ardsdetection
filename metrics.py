@@ -77,27 +77,3 @@ def sensitivity(actual, predictions, label):
     if tps == 0 and fns == 0:
         return nan
     return tps / (tps+fns)
-
-
-def aggregate_statistics(actual, predictions, results):
-    cols = []
-    tmp = []
-    for i in range(0, 3):
-        patho = {0: 'ctrl', 1: 'ards', 2: 'copd'}[i]
-        tmp.extend([
-            get_tps(actual, predictions, i),
-            get_fps(actual, predictions, i),
-            get_tns(actual, predictions, i),
-            get_fns(actual, predictions, i),
-        ])
-        cols.extend([
-            '{}_tps'.format(patho),
-            '{}_fps'.format(patho),
-            '{}_tns'.format(patho),
-            '{}_fns'.format(patho),
-        ])
-    if isinstance(results, type(None)):
-        results = pd.DataFrame([tmp], columns=cols)
-    else:
-        results = results.append(pd.Series(tmp, index=cols), ignore_index=True)
-    return results
