@@ -6,6 +6,7 @@ Create dataset of items we wish to use for the training/testing of our
 model.
 """
 from collections import OrderedDict
+import csv
 from glob import glob
 import os
 
@@ -29,21 +30,20 @@ class Dataset(object):
         ('epAUC', 19),
     ]
 
-    def __init__(self, cohort_description, feature_set, breaths_to_stack):
+    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates):
         """
         :param cohort_description: path to cohort description file
         :param feature_set: flow_time or broad
         :param breaths_to_stack: stack N breaths in the data
+        :param load_intermediates: Will do best to load intermediate preprocessed data from file
         """
         # XXX Currently just analyze experiment 1. In the future this will
         # be configurable tho.
-        # XXX Should also probably add something that preprocesses breath_meta
-        # files and saves them to a dir.
-        dir = 'data/experiment1/training/raw'
+        self.raw_dir = 'data/experiment1/training/raw'
         self.desc = pd.read_csv(cohort_description)
         self.file_map = {}
-        for patient in os.listdir(dir):
-            files = glob(os.path.join(dir, patient, "*.csv"))
+        for patient in os.listdir(self.raw_dir):
+            files = glob(os.path.join(self.raw_dir, patient, "*.csv"))
             # Don't include patients who have no data
             if len(files) > 0:
                 self.file_map[patient] = files
@@ -54,6 +54,7 @@ class Dataset(object):
             self.features = OrderedDict(self.broad_feature_set)
 
         self.breaths_to_stack = breaths_to_stack
+        self.load_intermediates = load_intermediates
 
     def get(self):
         # So what we do for this is go through patient by patient and extract
@@ -87,11 +88,44 @@ class Dataset(object):
                 df = df.append(tmp)
         return df
 
+    def load_breath_meta_file(self, filename):
+        """
+        Load breath metadata from a file. If we want to load intermediate
+        products then do that if we can. Otherwise load from raw data.
+        Save all breath metadata to an intermediate directory
+        """
+        base_filename = os.path.basename(filename)
+        intermediate_fname = "breath_meta_{}".format(base_filename)
+        meta_dir = os.path.dirname(filename).replace('raw', 'meta')
+        metadata_path = os.path.join(meta_dir, intermediate_fname)
+
+        if self.load_intermediates:
+            try:
+                with open(metadata_path) as f:
+                    lines = []
+                    reader = csv.reader(f)
+                    for l in lines:
+                        lines.append(l)
+            except FileNotFoundError:
+                pass
+
+        meta = get_file_experimental_breath_meta(filename)[1:]
+        try:
+            os.mkdir(meta_dir)
+        except OSError:  # dir likely exists
+            pass
+
+        with open(metadata_path, 'w') as f:
+            writer = csv.writer(f)
+            writer.writerows(meta)
+
+        return meta
+
     def process_patient_data(self, patient_id, pt_files, start_time):
         # Cut off the header with [1:]
-        meta = get_file_experimental_breath_meta(pt_files[0])[1:]
+        meta = self.load_breath_meta_file(pt_files[0])
         for f in pt_files:
-            meta.extend(get_file_experimental_breath_meta(f)[1:])
+            meta.extend(self.load_breath_meta_file(f))
             # XXX in future add filename as well. Especially if debugging necessary
         meta = self.process_features(np.array(meta), start_time)
         meta = self.to_stacked_median(meta)

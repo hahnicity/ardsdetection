@@ -269,7 +269,7 @@ def create_df(args):
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
 
-    df = Dataset(args.cohort_description, args.feature_set, args.stacks).get()
+    df = Dataset(args.cohort_description, args.feature_set, args.stacks, args.load_intermediates).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
     return df
@@ -350,6 +350,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='path to cohort description file')
     parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "broad"])
+    parser.add_argument('--load-intermediates', action='store_true', help='only load from intermediate data')
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
     parser.add_argument("--cross-validate", action="store_true")
     parser.add_argument("--cross-patient-split", action="store_true")
