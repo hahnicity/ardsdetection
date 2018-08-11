@@ -23,10 +23,11 @@ from collate import Dataset
 from metrics import *
 
 
-PATHO = {0: 'ctrl', 1: 'ards', 2: 'copd'}
 
 
 class ARDSDetectionModel(object):
+    pathos = {0: 'ctrl', 1: 'ards', 2: 'copd'}
+
     def __init__(self, args, data):
         """
         :param args: CLI args
@@ -34,11 +35,13 @@ class ARDSDetectionModel(object):
         """
         self.args = args
         self.data = data
+        if self.args.copd_to_ctrl:
+            self.data.loc[self.data[self.data.y == 2].index, 'y'] = 0
+            del self.pathos[2]
+
         self.models = []
         results_cols = ["patient", "patho"]
-        # XXX in future update so that we can merge COPD patients into OTHERS
-        # if desired
-        for n, patho in PATHO.iteritems():
+        for n, patho in self.pathos.iteritems():
             results_cols.extend([
                 "{}_tps".format(patho), "{}_fps".format(patho),
                 "{}_tns".format(patho), "{}_fns".format(patho),
@@ -49,10 +52,10 @@ class ARDSDetectionModel(object):
 
     def get_cross_patient_train_test_idx(self):
         unique_patients = self.data['patient'].unique()
-        mapping = {'ctrl': [], 'ards': [], 'copd': []}
+        mapping = {patho: [] for n, patho in self.pathos.iteritems()}
         for patient in list(unique_patients):
             patient_rows = self.data[self.data.patient == patient]
-            type_ = PATHO[patient_rows.y.unique()[0]]
+            type_ = self.pathos[patient_rows.y.unique()[0]]
             mapping[type_].append(patient)
 
         patients_to_use = []
@@ -75,10 +78,10 @@ class ARDSDetectionModel(object):
     def get_cross_patient_kfold_idxs(self):
         idxs = []
         unique_patients = self.data['patient'].unique()
-        mapping = {'ctrl': [], 'ards': [], 'copd': []}
+        mapping = {patho: [] for n, patho in self.pathos.iteritems()}
         for patient in unique_patients:
             patient_rows = self.data[self.data.patient == patient]
-            type_ = PATHO[patient_rows.y.unique()[0]]
+            type_ = self.pathos[patient_rows.y.unique()[0]]
             mapping[type_].append(patient)
         total_test_patients = round(len(unique_patients) / self.args.folds)
         for i in range(self.args.folds):
@@ -165,13 +168,15 @@ class ARDSDetectionModel(object):
             pt_actual = y_test.loc[pt_rows.index]
             pt_pred = predictions.loc[pt_rows.index]
             pt_results = [pt, patho_n]
-            for n, patho in PATHO.iteritems():
+            for n, patho in self.pathos.iteritems():
                 pt_results.extend([
                     get_tps(pt_actual, pt_pred, n), get_fps(pt_actual, pt_pred, n),
                     get_tns(pt_actual, pt_pred, n), get_fns(pt_actual, pt_pred, n),
                     len(pt_pred[pt_pred == n]),
                 ])
-            pt_results.extend([model_idx, np.argmax([pt_results[6], pt_results[11], pt_results[16]])])
+
+            patho_pred = np.argmax([pt_results[6 + 5*k] for k in range(len(self.pathos))])
+            pt_results.extend([model_idx, patho_pred])
             self.results.loc[i] = pt_results
 
     def print_model_stats(self, y_test, predictions, model_idx):
@@ -182,19 +187,20 @@ class ARDSDetectionModel(object):
         incorrect_pts = model_results[model_results.patho != model_results.prediction]
 
         print("Model accuracy: {}".format(accuracy_score(y_test, predictions)))
-        for n, patho in PATHO.iteritems():
+        for n, patho in self.pathos.iteritems():
             print("{} recall: {}".format(patho, recall_score(y_test, predictions, labels=[n], average='macro')))
             print("{} precision: {}".format(patho, precision_score(y_test, predictions, labels=[n], average='macro')))
 
+        patho_votes = ["{}_votes".format(k) for k in self.pathos.values()]
         for idx, row in incorrect_pts.iterrows():
             print("Patient {}: Prediction: {}, Actual: {}. Voting:\n{}".format(
-                row.patient, row.prediction, row.patho, row[['ctrl_votes', 'ards_votes', 'copd_votes']]
+                row.patient, row.prediction, row.patho, row[patho_votes]
             ))
 
     def print_aggregate_results(self):
         # XXX for now just stick to analyzing aggregate over patients
 
-        for n, patho in PATHO.iteritems():
+        for n, patho in self.pathos.iteritems():
             tps = float(len(self.results[(self.results.patho == n) & (self.results.prediction == n)]))
             tns = float(len(self.results[(self.results.patho != n) & (self.results.prediction != n)]))
             fps = float(len(self.results[(self.results.patho != n) & (self.results.prediction == n)]))
@@ -236,7 +242,7 @@ def build_parser():
     parser.add_argument("--stacks", default=20, type=int)
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
-    parser.add_argument("--fold-copd", action="store_true")
+    parser.add_argument("--copd-to-ctrl", action="store_true", help='Convert copd annotations to ctrl annotations')
     return parser
 
 
