@@ -20,8 +20,8 @@ from algorithms.breath_meta import get_file_experimental_breath_meta
 
 class Dataset(object):
     # Feature sets are mapped by (feature_name, breath_meta_feature_index)
-    neccessities = [('ventBN', 2)]
-    flow_time_feature_set = neccessities + [
+    necessities = [('ventBN', 2)]
+    flow_time_feature_set = necessities + [
         # minF_to_zero is just pef_to_zero
         ('mean_flow_from_pef', 37), ('inst_RR', 8), ('minF_to_zero', 36),
         ('pef_+0.16_to_zero', 37), ('iTime', 6), ('eTime', 7), ('I:E ratio', 5),
@@ -32,12 +32,13 @@ class Dataset(object):
         ('epAUC', 19),
     ]
 
-    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates):
+    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates, custom_features=None):
         """
         :param cohort_description: path to cohort description file
-        :param feature_set: flow_time or broad
+        :param feature_set: flow_time/broad/custom
         :param breaths_to_stack: stack N breaths in the data
         :param load_intermediates: Will do best to load intermediate preprocessed data from file
+        :param custom_features: If you set features manually you must specify which to use
         """
         # XXX Currently just analyze experiment 1. In the future this will
         # be configurable tho.
@@ -54,6 +55,8 @@ class Dataset(object):
             self.features = OrderedDict(self.flow_time_feature_set)
         elif feature_set == 'broad':
             self.features = OrderedDict(self.broad_feature_set)
+        elif feature_set == 'custom':
+            self.features = OrderedDict(custom_features)
 
         self.breaths_to_stack = breaths_to_stack
         self.load_intermediates = load_intermediates

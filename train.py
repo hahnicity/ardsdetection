@@ -23,10 +23,7 @@ from collate import Dataset
 from metrics import *
 
 
-
-
 class ARDSDetectionModel(object):
-    pathos = {0: 'ctrl', 1: 'ards', 2: 'copd'}
 
     def __init__(self, args, data):
         """
@@ -35,6 +32,7 @@ class ARDSDetectionModel(object):
         """
         self.args = args
         self.data = data
+        self.pathos = {0: 'ctrl', 1: 'ards', 2: 'copd'}
         if self.args.copd_to_ctrl:
             self.data.loc[self.data[self.data.y == 2].index, 'y'] = 0
             del self.pathos[2]
@@ -104,9 +102,14 @@ class ARDSDetectionModel(object):
             idxs = self.get_cross_patient_train_test_idx()
         elif self.args.cross_patient_kfold:
             idxs = self.get_cross_patient_kfold_idxs()
+        else:
+            raise Exception('you must specify which type of split you desire!')
 
         y = self.data.y
-        x = self.data.drop(['y', 'patient', 'ventBN'], axis=1)
+        try:
+            x = self.data.drop(['y', 'patient', 'ventBN'], axis=1)
+        except:  # maybe we didnt define ventBN
+            x = self.data.drop(['y', 'patient'], axis=1)
 
         for train_idx, test_idx in idxs:
             x_train = x.loc[train_idx].dropna()
@@ -142,10 +145,12 @@ class ARDSDetectionModel(object):
 
             predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
             results = self.aggregate_statistics(y_test, predictions, model_idx)
-            self.print_model_stats(y_test, predictions, model_idx)
-            print("-------------------")
+            if self.args.print_results:
+                self.print_model_stats(y_test, predictions, model_idx)
+                print("-------------------")
 
-        self.print_aggregate_results()
+        if self.args.print_results:
+            self.print_aggregate_results()
 
     def perform_grid_search(self, x_train, y_train):
         params = {
@@ -211,6 +216,8 @@ class ARDSDetectionModel(object):
             print("{} patient specificity: {}".format(patho, tns / (tns+fps)))
             print("{} patient precision: {}".format(patho, tps / (tps+fps)))
             print("")
+        if len(self.pathos) == 2:
+            print("Model AUC: {}".format(roc_auc_score(self.results.patho.tolist(), self.results.prediction.tolist())))
 
 
 def create_df(args):
@@ -221,7 +228,6 @@ def create_df(args):
     """
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
-
     df = Dataset(args.cohort_description, args.feature_set, args.stacks, args.load_intermediates).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
@@ -243,6 +249,7 @@ def build_parser():
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
     parser.add_argument("--copd-to-ctrl", action="store_true", help='Convert copd annotations to ctrl annotations')
+    parser.add_argument('--print-results', action='store_true', help='Print results of our model')
     return parser
 
 
