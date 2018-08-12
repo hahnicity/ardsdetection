@@ -71,45 +71,51 @@ class ARDSDetectionModel(object):
 
         train_patient_data = self.data.query('patient not in {}'.format(patients_to_use))
         test_patient_data = self.data.query('patient in {}'.format(patients_to_use))
-        return train_patient_data.index, test_patient_data.index
+        return [(train_patient_data.index, test_patient_data.index)]
 
-    def get_cross_patient_kfold_idxs(self):
+    def get_cross_patient_kfold_idxs(self, x, y, folds):
+        """
+        Get indexes to split dataset
+        """
         idxs = []
-        unique_patients = self.data['patient'].unique()
+        unique_patients = x.patient.unique()
         mapping = {patho: [] for n, patho in self.pathos.iteritems()}
+
         for patient in unique_patients:
-            patient_rows = self.data[self.data.patient == patient]
-            type_ = self.pathos[patient_rows.y.unique()[0]]
+            patient_rows = x[x.patient == patient]
+            type_ = self.pathos[y.loc[patient_rows.index].unique()[0]]
             mapping[type_].append(patient)
-        total_test_patients = round(len(unique_patients) / self.args.folds)
-        for i in range(self.args.folds):
+
+        total_test_patients = round(len(unique_patients) / float(folds))
+        for i in range(folds):
             patients_to_use = []
             for k, v in mapping.items():
-                lower_bound = int(round(i * len(v) / self.args.folds))
-                upper_bound = int(round((i + 1) * len(v) / self.args.folds))
+                lower_bound = int(round(i * len(v) / float(folds)))
+                upper_bound = int(round((i + 1) * len(v) / float(folds)))
                 if upper_bound < 1:
                     raise Exception("You do not have enough patients for {} cohort".format(k))
                 patients = v[lower_bound:upper_bound]
                 patients_to_use.extend(patients)
-            train_patient_data = self.data.query('patient not in {}'.format(patients_to_use))
-            test_patient_data = self.data.query('patient in {}'.format(patients_to_use))
+            train_patient_data = x.query('patient not in {}'.format(patients_to_use))
+            test_patient_data = x.query('patient in {}'.format(patients_to_use))
             idxs.append((train_patient_data.index, test_patient_data.index))
-
         return idxs
 
     def perform_data_splits(self):
+        y = self.data.y
+        x = self.data
+
         if self.args.cross_patient_split:
             idxs = self.get_cross_patient_train_test_idx()
         elif self.args.cross_patient_kfold:
-            idxs = self.get_cross_patient_kfold_idxs()
+            idxs = self.get_cross_patient_kfold_idxs(x, y, self.args.folds)
         else:
             raise Exception('you must specify which type of split you desire!')
 
-        y = self.data.y
         try:
-            x = self.data.drop(['y', 'patient', 'ventBN'], axis=1)
+            x = x.drop(['y', 'patient', 'ventBN'], axis=1)
         except:  # maybe we didnt define ventBN
-            x = self.data.drop(['y', 'patient'], axis=1)
+            x = x.drop(['y', 'patient'], axis=1)
 
         for train_idx, test_idx in idxs:
             x_train = x.loc[train_idx].dropna()
@@ -123,7 +129,7 @@ class ARDSDetectionModel(object):
             yield (x_train, x_test, y_train, y_test)
 
     def train(self, x_train, y_train):
-        clf = RandomForestClassifier(random_state=1)
+        clf = RandomForestClassifier(random_state=1, oob_score=True)
         clf.fit(x_train, y_train)
         self.models.append(clf)
 
@@ -152,13 +158,27 @@ class ARDSDetectionModel(object):
         if self.args.print_results:
             self.print_aggregate_results()
 
+    def convert_loc_to_iloc(self, df, loc_indices):
+        copied = df.copy()
+        copied['idx'] = range(len(df))
+        return [(copied.loc[train_loc, 'idx'].values, copied.loc[test_loc, 'idx'])
+                for train_loc, test_loc in loc_indices]
+
     def perform_grid_search(self, x_train, y_train):
         params = {
-            "n_estimators": list(range(50, 90, 5)),
-            "max_features": list(range(23, 26)),
-            "criterion": ["entropy"],
+            "n_estimators": range(10, 50, 5),
+            "max_features": ['auto', 'log2', None],
+            "criterion": ["entropy", 'gini'],
+            "max_depth": range(5, 30, 5) + [None],
+            "oob_score": [True, False],
+            "warm_start": [True, False],
+            "min_samples_split": [2, 5, 10, 15],
         }
-        clf = GridSearchCV(RandomForestClassifier(random_state=1), params)
+        x_train_expanded = self.data.loc[x_train.index]
+        cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, 10)
+        # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
+        cv = self.convert_loc_to_iloc(x_train, cv)
+        clf = GridSearchCV(RandomForestClassifier(random_state=1), params, cv=cv)
         clf.fit(x_train, y_train.values)
         print("Params: ", clf.best_params_)
         print("Best CV score: ", clf.best_score_)
@@ -216,6 +236,7 @@ class ARDSDetectionModel(object):
             print("{} patient specificity: {}".format(patho, tns / (tns+fps)))
             print("{} patient precision: {}".format(patho, tps / (tps+fps)))
             print("")
+
         if len(self.pathos) == 2:
             print("Model AUC: {}".format(roc_auc_score(self.results.patho.tolist(), self.results.prediction.tolist())))
 
@@ -228,7 +249,7 @@ def create_df(args):
     """
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
-    df = Dataset(args.cohort_description, args.feature_set, args.stacks, args.load_intermediates).get()
+    df = Dataset(args.cohort_description, args.feature_set, args.stacks, args.no_load_intermediates).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
     return df
@@ -237,8 +258,8 @@ def create_df(args):
 def build_parser():
     parser = ArgumentParser()
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='path to cohort description file')
-    parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "broad"])
-    parser.add_argument('--load-intermediates', action='store_true', help='do best to load from intermediate data')
+    parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "flow_time_opt", "broad"])
+    parser.add_argument('--no-load-intermediates', action='store_false', help='do not load from intermediate data')
     parser.add_argument('--split-ratio', type=float, default=.2)
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
     parser.add_argument("--grid-search", action="store_true", help='perform grid search for model hyperparameters')
