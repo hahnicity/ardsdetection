@@ -23,9 +23,12 @@ class Dataset(object):
     necessities = [('ventBN', 2)]
     flow_time_feature_set = necessities + [
         # minF_to_zero is just pef_to_zero
-        ('mean_flow_from_pef', 37), ('inst_RR', 8), ('minF_to_zero', 36),
+        ('mean_flow_from_pef', 38), ('inst_RR', 8), ('minF_to_zero', 36),
         ('pef_+0.16_to_zero', 37), ('iTime', 6), ('eTime', 7), ('I:E ratio', 5),
-        ('dyn_compliance', 38),
+        ('dyn_compliance', 39), ('TVratio', 11),
+    ]
+    flow_time_optimal = necessities + [
+        ('dyn_compliance', 39), ('TVratio', 11), ('eTime', 7), ('I:E ratio', 5)
     ]
     broad_feature_set = flow_time_feature_set + [
         ('TVi', 9), ('TVe', 10), ('Maw', 16), ('ipAUC', 18), ('PIP', 15), ('PEEP', 17),
@@ -35,7 +38,7 @@ class Dataset(object):
     def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates, custom_features=None):
         """
         :param cohort_description: path to cohort description file
-        :param feature_set: flow_time/broad/custom
+        :param feature_set: flow_time/flow_time_opt/broad/custom
         :param breaths_to_stack: stack N breaths in the data
         :param load_intermediates: Will do best to load intermediate preprocessed data from file
         :param custom_features: If you set features manually you must specify which to use
@@ -53,6 +56,8 @@ class Dataset(object):
 
         if feature_set == 'flow_time':
             self.features = OrderedDict(self.flow_time_feature_set)
+        elif feature_set == 'flow_time_opt':
+            self.features = OrderedDict(self.flow_time_optimal)
         elif feature_set == 'broad':
             self.features = OrderedDict(self.broad_feature_set)
         elif feature_set == 'custom':

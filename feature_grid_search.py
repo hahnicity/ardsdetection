@@ -40,6 +40,7 @@ def main():
     args = build_parser().parse_args()
     # change this to True so we can calc AUC
     args.copd_to_ctrl = True
+    args.cross_patient_kfold = True
 
     results = {}
     feature_combos = get_all_possible_features()
@@ -62,10 +63,13 @@ def main():
 
         results[i] = {i: dict() for i in possible_folds}
         for folds in possible_folds:
+            args.folds = folds
             model = ARDSDetectionModel(args, dataset)
             model.train_and_test()
             model_auc = roc_auc_score(model.results.patho.tolist(), model.results.prediction.tolist())
             results[i][folds] = {'features': features, 'auc': model_auc}
+            del model  # paranoia
+        del dataset  # paranoia
 
     best = max([(i, results[i][folds]['auc']) for i in results for folds in possible_folds], key=lambda x: x[1])
     print('Best AUC: {}'.format(best[1]))
