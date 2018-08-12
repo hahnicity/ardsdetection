@@ -110,6 +110,10 @@ class Dataset(object):
         products then do that if we can. Otherwise load from raw data.
         Save all breath metadata to an intermediate directory
         """
+        # We can change this to load from numpy objects, but this method is
+        # not where most time is being spent if we have an intermediate. This
+        # only takes up about 8% of the time in that case. It's the finding
+        # of median that takes up all the time.
         base_filename = os.path.basename(filename)
         intermediate_fname = "breath_meta_{}".format(base_filename)
         meta_dir = os.path.dirname(filename).replace('raw', 'meta')
