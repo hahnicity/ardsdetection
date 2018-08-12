@@ -1,4 +1,5 @@
 from itertools import compress, product
+import os
 
 import pandas as pd
 import pickle
@@ -6,6 +7,8 @@ from sklearn.metrics import roc_auc_score
 
 from collate import Dataset
 from train import ARDSDetectionModel, build_parser
+
+DF_DIR = 'data/experiment1/training/grid_search'
 
 
 def get_all_possible_features():
@@ -16,7 +19,7 @@ def get_all_possible_features():
         ('mean_flow_from_pef', 38), ('inst_RR', 8), ('minF_to_zero', 36),
         ('pef_+0.16_to_zero', 37), ('iTime', 6), ('eTime', 7), ('I:E ratio', 5),
         # XXX Add pressure itime eventually, altho it may only be useful for PC/PS pts.
-        ('dyn_compliance', 38), ('TVratio', 11)
+        ('dyn_compliance', 39), ('TVratio', 11)
     ]
     all_possibilities = all_possible_flow_time_features + [
         ('TVi', 9), ('TVe', 10), ('Maw', 16), ('ipAUC', 18), ('PIP', 15), ('PEEP', 17),
@@ -40,24 +43,33 @@ def main():
 
     results = {}
     feature_combos = get_all_possible_features()
-    if args.from_pickle:
-        ft_dataset = pd.read_pickle(args.from_pickle)
-    else:
         # XXX just work with flow_time for now
-        ft_dataset = Dataset(args.cohort_description, 'custom', args.stacks, True, custom_features=feature_combos['flow_time_features']).get()
     if args.to_pickle:
         ft_dataset.to_pickle(args.to_pickle)
 
+    possible_folds = [5, 10]
     for i, combo in enumerate(feature_combos['flow_time_gen']):
         if not combo:
             continue
         features = [k[0] for k in combo]
-        dataset = ft_dataset[list(features) + ['patient', 'y']]
-        model = ARDSDetectionModel(args, dataset)
-        model.train_and_test()
-        model_auc = roc_auc_score(model.results.patho.tolist(), model.results.prediction.tolist())
-        results[i] = {'features': features, 'auc': model_auc}
 
+        path = os.path.join(DF_DIR, 'dataset-{}.pkl'.format(i))
+        if os.path.exists(path):
+            dataset = pd.read_pickle(path)
+        else:
+            dataset = Dataset(args.cohort_description, 'custom', args.stacks, True, custom_features=combo).get()
+            dataset.to_pickle(path)
+
+        results[i] = {i: dict() for i in possible_folds}
+        for folds in possible_folds:
+            model = ARDSDetectionModel(args, dataset)
+            model.train_and_test()
+            model_auc = roc_auc_score(model.results.patho.tolist(), model.results.prediction.tolist())
+            results[i][folds] = {'features': features, 'auc': model_auc}
+
+    best = max([(i, results[i][folds]['auc']) for i in results for folds in possible_folds], key=lambda x: x[1])
+    print('Best AUC: {}'.format(best[1]))
+    print('Best features: {}'.format(results[best[0]]))
     dict_ = pickle.dumps(results)
     with open('grid_search_results.pkl', 'w') as f:
         f.write(dict_)
