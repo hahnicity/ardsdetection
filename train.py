@@ -32,7 +32,7 @@ class ARDSDetectionModel(object):
         """
         self.args = args
         self.data = data
-        self.pathos = {0: 'ctrl', 1: 'ards', 2: 'copd'}
+        self.pathos = {0: 'OTHER', 1: 'ARDS', 2: 'COPD'}
         if self.args.copd_to_ctrl:
             self.data.loc[self.data[self.data.y == 2].index, 'y'] = 0
             del self.pathos[2]
@@ -231,10 +231,10 @@ class ARDSDetectionModel(object):
             fps = float(len(self.results[(self.results.patho != n) & (self.results.prediction == n)]))
             fns = float(len(self.results[(self.results.patho == n) & (self.results.prediction != n)]))
 
-            print("{} patient accuracy: {}".format(patho, (tps+tns) / (tps+tns+fps+fns)))
-            print("{} patient sensitivity: {}".format(patho, tps / (tps+fns)))
-            print("{} patient specificity: {}".format(patho, tns / (tns+fps)))
-            print("{} patient precision: {}".format(patho, tps / (tps+fps)))
+            print("{} patient accuracy: {}".format(patho, round((tps+tns) / (tps+tns+fps+fns), 4)))
+            print("{} patient sensitivity: {}".format(patho, round(tps / (tps+fns), 4)))
+            print("{} patient specificity: {}".format(patho, round(tns / (tns+fps), 4)))
+            print("{} patient precision: {}".format(patho, round(tps / (tps+fps), 4)))
             print("")
 
         if len(self.pathos) == 2:
