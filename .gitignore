@@ -4,8 +4,7 @@ venv*
 __pycache__/
 *.out
 *.test
-twilio.config
-backups/
-ardscohort/
-copdcohort/
-controlcohort/
+dataset*.pkl
+*.csv
+*.npy
+*lock.*
