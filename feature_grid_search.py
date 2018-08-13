@@ -36,7 +36,6 @@ def get_all_possible_features():
     return {'flow_time_gen': all_ft_combos, 'broad_gen': all_combos}
 
 
-
 def run_model(model_args, combo, model_idx, possible_folds, out_dir):
     results = {folds: {'auc': 0} for folds in possible_folds}
     results['idx'] = model_idx
@@ -71,6 +70,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--feature-set', choices=['flow_time', 'broad'], default='flow_time')
     parser.add_argument('--experiment', choices=[1, 2], default=1, type=int)
+    parser.add_argument('--threads', type=int, default=multiprocessing.cpu_count(), help="Set number of threads to use, otherwise all cores will be occupied")
     main_args = parser.parse_args()
 
     # We're doing this because these args are not necessary, and we can just pass them
@@ -87,7 +87,7 @@ def main():
 
     input_gen = [(model_args, combo, idx, possible_folds, out_dir) for idx, combo in enumerate(feature_gen)]
 
-    pool = Pool(10)
+    pool = Pool(args.threads)
     results = pool.map(func_star, input_gen)
     pool.close()
     pool.join()
