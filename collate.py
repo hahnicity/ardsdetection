@@ -235,5 +235,5 @@ class Dataset(object):
         for low_idx in range(0, len(mat)-self.breaths_to_stack, self.breaths_to_stack):
             stack = mat[low_idx:low_idx+self.breaths_to_stack]
             # We still have ventBN in the matrix, and this essentially gives average BN
-            stacks.append(np.median(mat, axis=0))
+            stacks.append(np.median(stack, axis=0))
         return np.array(stacks)
