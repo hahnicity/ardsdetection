@@ -213,7 +213,10 @@ class Dataset(object):
         # index of abs bs is 29. So sort by BS time.
         mat = mat[mat[:, 29].argsort()]
         if start_time is not None:
-            dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+            try:
+                dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+            except ValueError:
+                dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
             mask = dt <= (start_time + np.timedelta64(1, 'D'))
             mat = mat[mask]
         row_idxs = list(self.features.values())

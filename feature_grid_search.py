@@ -1,6 +1,6 @@
 import argparse
 from itertools import compress, product
-from multiprocessing import Pool
+import multiprocessing
 import os
 
 import pandas as pd
@@ -85,9 +85,9 @@ def main():
     out_dir = DF_DIR.format(experiment_num=main_args.experiment, feature_set=main_args.feature_set)
     feature_gen = feature_combos['{}_gen'.format(main_args.feature_set)]
 
-    input_gen = [(model_args, combo, idx, possible_folds, out_dir, args.experiment) for idx, combo in enumerate(feature_gen)]
+    input_gen = [(model_args, combo, idx, possible_folds, out_dir, main_args.experiment) for idx, combo in enumerate(feature_gen)]
 
-    pool = Pool(args.threads)
+    pool = multiprocessing.Pool(main_args.threads)
     results = pool.map(func_star, input_gen)
     pool.close()
     pool.join()
