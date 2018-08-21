@@ -22,7 +22,7 @@ pattern = re.compile(
 )
 match = pattern.search(args.file)
 if not match:
-    raise Exception("no file-regex match")
+    raise Exception("no file-regex match for file: {}".format(args.file))
 
 dict_ = match.groupdict()
 dict_['millis'] = int(dict_['millis']) / 1000

@@ -249,7 +249,7 @@ def create_df(args):
     """
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
-    df = Dataset(args.cohort_description, args.feature_set, args.stacks, args.no_load_intermediates).get()
+    df = Dataset(args.cohort_description, args.feature_set, args.stacks, args.no_load_intermediates, args.experiment).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
     return df
@@ -258,7 +258,7 @@ def create_df(args):
 def build_parser():
     parser = ArgumentParser()
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='path to cohort description file')
-    parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "flow_time_opt", "broad"])
+    parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "flow_time_opt", "flow_time_orig", "broad", "broad_opt"])
     parser.add_argument('--no-load-intermediates', action='store_false', help='do not load from intermediate data')
     parser.add_argument('--split-ratio', type=float, default=.2)
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
@@ -269,6 +269,7 @@ def build_parser():
     parser.add_argument("--stacks", default=20, type=int)
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
+    parser.add_argument('-e', '--experiment', choices=['1', '2', '3', '1+3', '2+3', '1+2', '1+2+3'], help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3')
     parser.add_argument("--copd-to-ctrl", action="store_true", help='Convert copd annotations to ctrl annotations')
     parser.add_argument('--print-results', action='store_true', help='Print results of our model')
     return parser

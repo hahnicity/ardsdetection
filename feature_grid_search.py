@@ -36,7 +36,7 @@ def get_all_possible_features():
     return {'flow_time_gen': all_ft_combos, 'broad_gen': all_combos}
 
 
-def run_model(model_args, combo, model_idx, possible_folds, out_dir):
+def run_model(model_args, combo, model_idx, possible_folds, out_dir, experiment_num):
     results = {folds: {'auc': 0} for folds in possible_folds}
     results['idx'] = model_idx
     if not combo:
@@ -49,7 +49,7 @@ def run_model(model_args, combo, model_idx, possible_folds, out_dir):
     if os.path.exists(path):
         dataset = pd.read_pickle(path)
     else:
-        dataset = Dataset(model_args.cohort_description, 'custom', model_args.stacks, True, custom_features=combo).get()
+        dataset = Dataset(model_args.cohort_description, 'custom', model_args.stacks, True, experiment_num, custom_features=combo).get()
         dataset.to_pickle(path)
 
     for folds in possible_folds:
@@ -69,7 +69,7 @@ def func_star(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--feature-set', choices=['flow_time', 'broad'], default='flow_time')
-    parser.add_argument('--experiment', choices=[1, 2], default=1, type=int)
+    parser.add_argument('-e', '--experiment', choices=['1', '2', '3', '1+3', '2+3', '1+2', '1+2+3'], help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3')
     parser.add_argument('--threads', type=int, default=multiprocessing.cpu_count(), help="Set number of threads to use, otherwise all cores will be occupied")
     main_args = parser.parse_args()
 
@@ -85,7 +85,7 @@ def main():
     out_dir = DF_DIR.format(experiment_num=main_args.experiment, feature_set=main_args.feature_set)
     feature_gen = feature_combos['{}_gen'.format(main_args.feature_set)]
 
-    input_gen = [(model_args, combo, idx, possible_folds, out_dir) for idx, combo in enumerate(feature_gen)]
+    input_gen = [(model_args, combo, idx, possible_folds, out_dir, args.experiment) for idx, combo in enumerate(feature_gen)]
 
     pool = Pool(args.threads)
     results = pool.map(func_star, input_gen)

@@ -10,6 +10,7 @@ import csv
 from datetime import datetime
 from glob import glob
 import os
+import re
 from warnings import warn
 
 import numpy as np
@@ -27,6 +28,11 @@ class Dataset(object):
         ('pef_+0.16_to_zero', 37), ('iTime', 6), ('eTime', 7), ('I:E ratio', 5),
         ('dyn_compliance', 39), ('TVratio', 11),
     ]
+    flow_time_original = necessities + [
+        ('mean_flow_from_pef', 38), ('inst_RR', 8), ('minF_to_zero', 36),
+        ('pef_+0.16_to_zero', 37), ('iTime', 6), ('eTime', 7), ('I:E ratio', 5),
+        ('dyn_compliance', 39),
+    ]
     flow_time_optimal = necessities + [
         ('dyn_compliance', 39), ('TVratio', 11), ('eTime', 7), ('I:E ratio', 5)
     ]
@@ -34,32 +40,48 @@ class Dataset(object):
         ('TVi', 9), ('TVe', 10), ('Maw', 16), ('ipAUC', 18), ('PIP', 15), ('PEEP', 17),
         ('epAUC', 19),
     ]
+    broad_optimal = necessities + [
+        ('min_pressure', 35), ('dyn_compliance', 39), ('iTime', 6), ('I:E ratio', 5)
+    ]
 
-    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates, custom_features=None):
+    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates, experiment_num, custom_features=None):
         """
         :param cohort_description: path to cohort description file
-        :param feature_set: flow_time/flow_time_opt/broad/custom
+        :param feature_set: flow_time/flow_time_opt/flow_time_orig/broad/broad_opt/custom
         :param breaths_to_stack: stack N breaths in the data
         :param load_intermediates: Will do best to load intermediate preprocessed data from file
+        :param experiment_num: The experiment we wish to run
         :param custom_features: If you set features manually you must specify which to use
         """
-        # XXX Currently just analyze experiment 1. In the future this will
-        # be configurable tho.
-        self.raw_dir = 'data/experiment1/training/raw'
+        raw_dirs = []
+        for i in experiment_num.split('+'):
+            raw_dirs.append('data/experiment{num}/training/raw'.format(num=i))
         self.desc = pd.read_csv(cohort_description)
         self.file_map = {}
-        for patient in os.listdir(self.raw_dir):
-            files = glob(os.path.join(self.raw_dir, patient, "*.csv"))
-            # Don't include patients who have no data
-            if len(files) > 0:
+        for dir_ in raw_dirs:
+            for patient in os.listdir(dir_):
+                files = glob(os.path.join(dir_, patient, "*.csv"))
+                # Don't include patients who have no data
+                if len(files) == 0:
+                    continue
+                # Ensure there are only duplicate files for same patient. This is
+                # bascially a sanity check.
+                if patient in self.file_map:
+                    prev_fs = [os.path.basename(f) for f in self.file_map[patient]]
+                    cur_fs = [os.path.basename(f) for f in files]
+                    assert sorted(prev_fs) == sorted(cur_fs), patient
                 self.file_map[patient] = files
 
         if feature_set == 'flow_time':
             self.features = OrderedDict(self.flow_time_feature_set)
+        if feature_set == 'flow_time_orig':
+            self.features = OrderedDict(self.flow_time_original)
         elif feature_set == 'flow_time_opt':
             self.features = OrderedDict(self.flow_time_optimal)
         elif feature_set == 'broad':
             self.features = OrderedDict(self.broad_feature_set)
+        elif feature_set == 'broad_opt':
+            self.features = OrderedDict(self.broad_optimal)
         elif feature_set == 'custom':
             self.features = OrderedDict(custom_features)
 
@@ -72,13 +94,31 @@ class Dataset(object):
         df = None
         for patient in self.file_map:
             pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient]
-            if len(pt_row) > 1:
-                raise Exception('Found more than 1 row for patient: {}'.format(patient))
-            elif len(pt_row) == 0:
+            # Trust the cohort descriptor file that all patients are respresented
+            # equally in different experiments. This is my current philosophy. But will
+            # this idea change? In which case I will need to segment by experiment number
+            # and then do a check for patients with similar and dissimilar experimental
+            # setups. I can't imagine that this will actually happen in the project and
+            # it would be a major design decision that would affect the paper.
+            #
+            # XXX If you ever change this policy be sure to change code
+            if len(pt_row) == 0:
                 raise Exception('Found more than no rows for patient: {}'.format(patient))
             pt_row = pt_row.iloc[0]
             patho = pt_row['Pathophysiology'].strip()
             files = self.file_map[patient]
+
+            if int(patient[:4]) <= 50:
+                date_fmt = r'(\d{4}-\d{2}-\d{2}__\d{2}:\d{2})'
+                strp_fmt = '%Y-%m-%d__%H:%M'
+            else:
+                date_fmt = r'(\d{4}-\d{2}-\d{2}-\d{2}-\d{2})'
+                strp_fmt = '%Y-%m-%d-%H-%M'
+
+            if 'ARDS' not in patho:
+                first_file = sorted(files)[0]
+                date_str = re.search(date_fmt, first_file).groups()[0]
+                pt_start_time = np.datetime64(datetime.strptime(date_str, strp_fmt))
 
             # Handle COPD+ARDS as just ARDS wrt to the model for now. We can be
             # more granular later
@@ -86,13 +126,15 @@ class Dataset(object):
                 gt_label = 1
                 pt_start_time = pt_row['Date when Berlin criteria first met (m/dd/yyy)']
                 pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M"))
+            # For now we only get first day of recorded data. Maybe in future we will want
+            # first day of vent data.
             elif 'COPD' in patho:
                 gt_label = 2
-                pt_start_time = None
             else:
                 gt_label = 0
-                pt_start_time = None
 
+            # XXX If you want to make this faster you can always run this operation in
+            # parallel and just concat whatever you get from the pooling.
             if df is None:
                 df = self.process_patient_data(patient, files, pt_start_time)
                 df['y'] = gt_label
@@ -132,7 +174,7 @@ class Dataset(object):
                 pass
 
         if load_from_raw:
-            meta = get_file_experimental_breath_meta(filename)[1:]
+            meta = get_file_experimental_breath_meta(filename, ignore_missing_bes=False)[1:]
             try:
                 os.mkdir(meta_dir)
             except OSError:  # dir likely exists
@@ -147,9 +189,8 @@ class Dataset(object):
     def process_patient_data(self, patient_id, pt_files, start_time):
         # Cut off the header with [1:]
         meta = self.load_breath_meta_file(pt_files[0])
-        for f in pt_files:
+        for f in pt_files[1:]:
             meta.extend(self.load_breath_meta_file(f))
-            # XXX in future add filename as well. Especially if debugging necessary
 
         if len(meta) != 0:
             meta = self.process_features(np.array(meta), start_time)
@@ -169,11 +210,11 @@ class Dataset(object):
         :param mat: matrix of data to process
         :param start_time: time we wish to start using data from patient
         """
+        # index of abs bs is 29. So sort by BS time.
         mat = mat[mat[:, 29].argsort()]
         if start_time is not None:
-            # index of abs bs is 29
             dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
-            mask = dt >= start_time
+            mask = dt <= (start_time + np.timedelta64(1, 'D'))
             mat = mat[mask]
         row_idxs = list(self.features.values())
         mat = mat[:, row_idxs]
