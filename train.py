@@ -38,6 +38,9 @@ class ARDSDetectionModel(object):
             del self.pathos[2]
 
         self.models = []
+        if self.args.load_model:
+            self.models.append(pd.read_pickle(self.args.load_model))
+
         results_cols = ["patient", "patho"]
         for n, patho in self.pathos.iteritems():
             results_cols.extend([
@@ -101,20 +104,42 @@ class ARDSDetectionModel(object):
             idxs.append((train_patient_data.index, test_patient_data.index))
         return idxs
 
+    def get_and_fit_scaler(self, x_train):
+        """
+        Get the scaler we wish to use and fit it to train data.
+
+        :param x_train: Training set we wish to fit to
+        """
+        if not self.args.load_scaler:
+            scaler = MinMaxScaler()
+            # XXX raise err if no train samples
+            scaler.fit(x_train)
+        else:
+            scaler = pd.read_pickle(self.args.load_scaler)
+
+        if self.args.save_model_to and self.args.split_type == 'kfold':
+            raise Exception('Saving a model/scaler while in kfold is not supported!')
+        elif self.args.save_model_to:
+            pd.to_pickle(scaler, "scaler-" + self.args.save_model_to)
+
+        return scaler
+
     def perform_data_splits(self):
         y = self.data.y
         x = self.data
 
-        if self.args.cross_patient_split:
+        if self.args.split_type == "simple":
             idxs = self.get_cross_patient_train_test_idx()
-        elif self.args.cross_patient_kfold:
+        elif self.args.split_type == 'kfold':
             idxs = self.get_cross_patient_kfold_idxs(x, y, self.args.folds)
-        else:
-            raise Exception('you must specify which type of split you desire!')
+        elif self.args.split_type == 'train_all':
+            idxs = [(x.index, [])]
+        elif self.args.split_type == 'test_all':
+            idxs = [([], x.index)]
 
         try:
             x = x.drop(['y', 'patient', 'ventBN'], axis=1)
-        except:  # maybe we didnt define ventBN
+        except:  # maybe we didnt define ventBN, its not that important anyhow.
             x = x.drop(['y', 'patient'], axis=1)
 
         for train_idx, test_idx in idxs:
@@ -123,9 +148,11 @@ class ARDSDetectionModel(object):
             y_train = y.loc[train_idx].dropna()
             y_test = y.loc[test_idx].dropna()
 
-            scaler = MinMaxScaler()
-            x_train = pd.DataFrame(scaler.fit_transform(x_train), index=y_train.index)
-            x_test = pd.DataFrame(scaler.transform(x_test), index=y_test.index)
+            scaler = self.get_and_fit_scaler(x_train)
+            if len(x_train) != 0:
+                x_train = pd.DataFrame(scaler.transform(x_train), index=x_train.index)
+            if len(x_test) != 0:
+                x_test = pd.DataFrame(scaler.transform(x_test), index=x_test.index)
             yield (x_train, x_test, y_train, y_test)
 
     def train(self, x_train, y_train):
@@ -146,8 +173,13 @@ class ARDSDetectionModel(object):
 
             if self.args.grid_search:
                 self.perform_grid_search(x_train, y_train)
-            else:
+            elif not self.args.load_model:
                 self.train(x_train, y_train)
+
+            if self.args.save_model_to and self.args.split_type == 'kfold':
+                raise Exception('Saving a model/scaler while in kfold is not supported!')
+            elif self.args.save_model_to:
+                pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
 
             predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
             results = self.aggregate_statistics(y_test, predictions, model_idx)
@@ -263,8 +295,10 @@ def build_parser():
     parser.add_argument('--split-ratio', type=float, default=.2)
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
     parser.add_argument("--grid-search", action="store_true", help='perform grid search for model hyperparameters')
-    parser.add_argument("--cross-patient-split", action="store_true")
-    parser.add_argument("--cross-patient-kfold", action="store_true")
+    parser.add_argument('--split-type', choices=['simple', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap')
+    parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
+    parser.add_argument('--load-model')
+    parser.add_argument('--load-scaler')
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--stacks", default=20, type=int)
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
