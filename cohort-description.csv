@@ -144,5 +144,5 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0108RPI0120160101,Y,3,OTHERS,,,,,,,,
 0115RPI1720160104,Y,3,OTHERS,,,,,,,,
 0134RPI0320160201,Y,3,OTHERS,,,,,,,,
-0251RPI1820160609,Y,3,OTHERS,,,,,,,,
-0253RPI1220160606,Y,3,OTHERS,,,,,,,,
+0251RPI1820160609,N,3,OTHERS,,,,,,,,Actually misclassified here. Is ARDS in experiment 1. Will exclude from experiment 3 analysis
+0253RPI1220160606,N,3,OTHERS,,,,,,,,Actually misclassified here. Is ARDS in experiment 1. Will exclude from experiment 3 analysis
