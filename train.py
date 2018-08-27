@@ -33,7 +33,7 @@ class ARDSDetectionModel(object):
         self.args = args
         self.data = data
         self.pathos = {0: 'OTHER', 1: 'ARDS', 2: 'COPD'}
-        if self.args.copd_to_ctrl:
+        if not self.args.no_copd_to_ctrl:
             self.data.loc[self.data[self.data.y == 2].index, 'y'] = 0
             del self.pathos[2]
 
@@ -183,11 +183,11 @@ class ARDSDetectionModel(object):
 
             predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
             results = self.aggregate_statistics(y_test, predictions, model_idx)
-            if self.args.print_results:
+            if not self.args.no_print_results:
                 self.print_model_stats(y_test, predictions, model_idx)
                 print("-------------------")
 
-        if self.args.print_results:
+        if not self.args.no_print_results:
             self.print_aggregate_results()
 
     def convert_loc_to_iloc(self, df, loc_indices):
@@ -281,7 +281,7 @@ def create_df(args):
     """
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
-    df = Dataset(args.cohort_description, args.feature_set, args.stacks, args.no_load_intermediates, args.experiment).get()
+    df = Dataset(args.cohort_description, args.feature_set, args.stacks, args.no_load_intermediates, args.experiment, args.post_hour).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
     return df
@@ -299,13 +299,14 @@ def build_parser():
     parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
     parser.add_argument('--load-model')
     parser.add_argument('--load-scaler')
-    parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument("--folds", type=int, default=10)
     parser.add_argument("--stacks", default=20, type=int)
+    parser.add_argument('-sp', '--post-hour', default=24, type=int)
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
-    parser.add_argument('-e', '--experiment', choices=['1', '2', '3', '1+3', '2+3', '1+2', '1+2+3'], help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3')
-    parser.add_argument("--copd-to-ctrl", action="store_true", help='Convert copd annotations to ctrl annotations')
-    parser.add_argument('--print-results', action='store_true', help='Print results of our model')
+    parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3')
+    parser.add_argument("--no-copd-to-ctrl", action="store_true", help='Dont convert copd annotations to ctrl annotations')
+    parser.add_argument('--no-print-results', action='store_true', help='Dont print results of our model')
     return parser
 
 

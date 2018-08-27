@@ -24,33 +24,57 @@ class Dataset(object):
     necessities = [('ventBN', 2)]
     flow_time_feature_set = necessities + [
         # minF_to_zero is just pef_to_zero
-        ('mean_flow_from_pef', 38), ('inst_RR', 8), ('minF_to_zero', 36),
-        ('pef_+0.16_to_zero', 37), ('iTime', 6), ('eTime', 7), ('I:E ratio', 5),
-        ('dyn_compliance', 39), ('TVratio', 11),
+        ('mean_flow_from_pef', 38),
+        ('inst_RR', 8),
+        ('minF_to_zero', 36),
+        ('pef_+0.16_to_zero', 37),
+        ('iTime', 6),
+        ('eTime', 7),
+        ('I:E ratio', 5),
+        ('dyn_compliance', 39),
+        ('TVratio', 11),
     ]
     flow_time_original = necessities + [
-        ('mean_flow_from_pef', 38), ('inst_RR', 8), ('minF_to_zero', 36),
-        ('pef_+0.16_to_zero', 37), ('iTime', 6), ('eTime', 7), ('I:E ratio', 5),
+        ('mean_flow_from_pef', 38),
+        ('inst_RR', 8),
+        ('minF_to_zero', 36),
+        ('pef_+0.16_to_zero', 37),
+        ('iTime', 6),
+        ('eTime', 7),
+        ('I:E ratio', 5),
         ('dyn_compliance', 39),
     ]
     flow_time_optimal = necessities + [
-        ('dyn_compliance', 39), ('TVratio', 11), ('eTime', 7), ('I:E ratio', 5)
+        ('pef_+0.16_to_zero', 37),
+        ('TVratio', 11),
+        ('eTime', 7)
     ]
     broad_feature_set = flow_time_feature_set + [
-        ('TVi', 9), ('TVe', 10), ('Maw', 16), ('ipAUC', 18), ('PIP', 15), ('PEEP', 17),
+        ('TVi', 9),
+        ('TVe', 10),
+        ('Maw', 16),
+        ('ipAUC', 18),
+        ('PIP', 15),
+        ('PEEP', 17),
         ('epAUC', 19),
     ]
     broad_optimal = necessities + [
-        ('min_pressure', 35), ('dyn_compliance', 39), ('iTime', 6), ('I:E ratio', 5)
+        ('PEEP', 17),
+        ('I:E Ratio', 5),
+        ('inst_RR', 8),
+        ('TVi', 9),
+        ('PIP', 15),
+        ('iTime', 6),
     ]
 
-    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates, experiment_num, custom_features=None):
+    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates, experiment_num, post_hour, custom_features=None):
         """
         :param cohort_description: path to cohort description file
         :param feature_set: flow_time/flow_time_opt/flow_time_orig/broad/broad_opt/custom
         :param breaths_to_stack: stack N breaths in the data
         :param load_intermediates: Will do best to load intermediate preprocessed data from file
         :param experiment_num: The experiment we wish to run
+        :param post_hour: The number of hours post ARDS diagnosis we wish to examine
         :param custom_features: If you set features manually you must specify which to use
         """
         raw_dirs = []
@@ -87,6 +111,7 @@ class Dataset(object):
 
         self.breaths_to_stack = breaths_to_stack
         self.load_intermediates = load_intermediates
+        self.post_hour = post_hour
 
     def get(self):
         # So what we do for this is go through patient by patient and extract
@@ -198,6 +223,9 @@ class Dataset(object):
             if len(meta) == 0:
                 warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
 
+        # If all data was filtered by our starting time criteria
+        if len(meta) == 0:
+            meta = []
         cols = list(self.features.keys())
         df = pd.DataFrame(meta, columns=cols)
         df['patient'] = patient_id
@@ -217,7 +245,7 @@ class Dataset(object):
                 dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
             except ValueError:
                 dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
-            mask = dt <= (start_time + np.timedelta64(1, 'D'))
+            mask = dt <= (start_time + np.timedelta64(self.post_hour, 'h'))
             mat = mat[mask]
         row_idxs = list(self.features.values())
         mat = mat[:, row_idxs]
