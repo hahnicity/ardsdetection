@@ -98,7 +98,7 @@ def main():
     print('Best AUC: {}'.format(best[1]))
     print('Best features: {}'.format(results[best[0]]))
     dict_ = pickle.dumps(results)
-    with open('experiment{}_{}_grid_search_results.pkl'.format(main_args.experiment, main_args.feature_set), 'w') as f:
+    with open('experiment{}_{}_sp{}_grid_search_results.pkl'.format(main_args.experiment, main_args.feature_set, main_args.post_hour), 'w') as f:
         f.write(dict_)
 
 
