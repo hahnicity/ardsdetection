@@ -10,7 +10,7 @@ from sklearn.metrics import roc_auc_score
 from collate import Dataset
 from train import ARDSDetectionModel, build_parser
 
-DF_DIR = 'data/experiment{experiment_num}/training/grid_search/{feature_set}'
+DF_DIR = 'data/experiment{experiment_num}/training/grid_search/{feature_set}/{sp}'
 
 
 def get_all_possible_features():
@@ -84,7 +84,7 @@ def main():
     results = {}
     feature_combos = get_all_possible_features()
     possible_folds = [5, 10]
-    out_dir = DF_DIR.format(experiment_num=main_args.experiment, feature_set=main_args.feature_set)
+    out_dir = DF_DIR.format(experiment_num=main_args.experiment, feature_set=main_args.feature_set, sp=main_args.post_hour)
     feature_gen = feature_combos['{}_gen'.format(main_args.feature_set)]
 
     input_gen = [(model_args, combo, idx, possible_folds, out_dir, main_args.experiment, main_args.post_hour) for idx, combo in enumerate(feature_gen)]
