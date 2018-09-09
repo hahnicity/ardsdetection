@@ -67,7 +67,7 @@ class Dataset(object):
         ('iTime', 6),
     ]
 
-    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates, experiment_num, post_hour, custom_features=None):
+    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates, experiment_num, post_hour, start_hour_delta, custom_features=None):
         """
         :param cohort_description: path to cohort description file
         :param feature_set: flow_time/flow_time_opt/flow_time_orig/broad/broad_opt/custom
@@ -75,7 +75,8 @@ class Dataset(object):
         :param load_intermediates: Will do best to load intermediate preprocessed data from file
         :param experiment_num: The experiment we wish to run
         :param post_hour: The number of hours post ARDS diagnosis we wish to examine
-        :param custom_features: If you set features manually you must specify which to use
+        :param start_hour_delta: The hour delta that we want to start looking at data for
+        :param custom_features: If you set features manually you must specify which to use in format (feature name, index)
         """
         raw_dirs = []
         for i in experiment_num.split('+'):
@@ -112,6 +113,7 @@ class Dataset(object):
         self.breaths_to_stack = breaths_to_stack
         self.load_intermediates = load_intermediates
         self.post_hour = post_hour
+        self.start_hour_delta = start_hour_delta
 
     def get(self):
         # So what we do for this is go through patient by patient and extract
@@ -143,14 +145,14 @@ class Dataset(object):
             if 'ARDS' not in patho:
                 first_file = sorted(files)[0]
                 date_str = re.search(date_fmt, first_file).groups()[0]
-                pt_start_time = np.datetime64(datetime.strptime(date_str, strp_fmt))
+                pt_start_time = np.datetime64(datetime.strptime(date_str, strp_fmt)) + np.timedelta64(self.start_hour_delta, 'h')
 
             # Handle COPD+ARDS as just ARDS wrt to the model for now. We can be
             # more granular later
             if 'ARDS' in patho:
                 gt_label = 1
                 pt_start_time = pt_row['Date when Berlin criteria first met (m/dd/yyy)']
-                pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M"))
+                pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M")) + np.timedelta64(self.start_hour_delta, 'h')
             # For now we only get first day of recorded data. Maybe in future we will want
             # first day of vent data.
             elif 'COPD' in patho:

@@ -281,7 +281,15 @@ def create_df(args):
     """
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
-    df = Dataset(args.cohort_description, args.feature_set, args.stacks, args.no_load_intermediates, args.experiment, args.post_hour).get()
+    df = Dataset(
+        args.cohort_description,
+        args.feature_set,
+        args.stacks,
+        args.no_load_intermediates,
+        args.experiment,
+        args.post_hour,
+        args.start_hour_delta
+    ).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
     return df
@@ -301,10 +309,11 @@ def build_parser():
     parser.add_argument('--load-scaler')
     parser.add_argument("--folds", type=int, default=10)
     parser.add_argument("--stacks", default=20, type=int)
+    parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
-    parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3')
+    parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1')
     parser.add_argument("--no-copd-to-ctrl", action="store_true", help='Dont convert copd annotations to ctrl annotations')
     parser.add_argument('--no-print-results', action='store_true', help='Dont print results of our model')
     return parser
