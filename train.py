@@ -284,11 +284,12 @@ def create_df(args):
     df = Dataset(
         args.cohort_description,
         args.feature_set,
-        args.stacks,
+        args.frame_size,
         args.no_load_intermediates,
         args.experiment,
         args.post_hour,
-        args.start_hour_delta
+        args.start_hour_delta,
+        args.frame_func,
     ).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
@@ -308,7 +309,8 @@ def build_parser():
     parser.add_argument('--load-model')
     parser.add_argument('--load-scaler')
     parser.add_argument("--folds", type=int, default=10)
-    parser.add_argument("--stacks", default=20, type=int)
+    parser.add_argument('-fs', "--frame-size", default=20, type=int)
+    parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var'], default='median')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")

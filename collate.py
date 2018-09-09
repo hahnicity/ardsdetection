@@ -67,15 +67,16 @@ class Dataset(object):
         ('iTime', 6),
     ]
 
-    def __init__(self, cohort_description, feature_set, breaths_to_stack, load_intermediates, experiment_num, post_hour, start_hour_delta, custom_features=None):
+    def __init__(self, cohort_description, feature_set, frame_size, load_intermediates, experiment_num, post_hour, start_hour_delta, frame_func, custom_features=None):
         """
         :param cohort_description: path to cohort description file
         :param feature_set: flow_time/flow_time_opt/flow_time_orig/broad/broad_opt/custom
-        :param breaths_to_stack: stack N breaths in the data
+        :param frame_size: stack N breaths in the data
         :param load_intermediates: Will do best to load intermediate preprocessed data from file
         :param experiment_num: The experiment we wish to run
         :param post_hour: The number of hours post ARDS diagnosis we wish to examine
         :param start_hour_delta: The hour delta that we want to start looking at data for
+        :param frame_func: Function to apply on breath frames. choices: median, mean, var
         :param custom_features: If you set features manually you must specify which to use in format (feature name, index)
         """
         raw_dirs = []
@@ -110,7 +111,16 @@ class Dataset(object):
         elif feature_set == 'custom':
             self.features = OrderedDict(custom_features)
 
-        self.breaths_to_stack = breaths_to_stack
+        if frame_func == 'median':
+            self.frame_func = np.median
+        elif frame_func == 'mean':
+            self.frame_func = np.mean
+        elif frame_func == 'var':
+            self.frame_func = np.var
+        else:
+            raise Exception('Chosen frame function: {} is not currently supported!'.format(frame_func))
+
+        self.frame_size = frame_size
         self.load_intermediates = load_intermediates
         self.post_hour = post_hour
         self.start_hour_delta = start_hour_delta
@@ -221,7 +231,7 @@ class Dataset(object):
 
         if len(meta) != 0:
             meta = self.process_features(np.array(meta), start_time)
-            meta = self.to_stacked_median(meta)
+            meta = self.create_frames(meta)
             if len(meta) == 0:
                 warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
 
@@ -255,15 +265,15 @@ class Dataset(object):
         mask = np.any(np.isnan(mat) | np.isinf(mat), axis=1)
         return mat[~mask]
 
-    def to_stacked_median(self, mat):
+    def create_frames(self, mat):
         """
         Find median of stacks of breaths on a matrix
 
         :param mat: Matrix to perform rolling average on.
         """
         stacks = []
-        for low_idx in range(0, len(mat)-self.breaths_to_stack, self.breaths_to_stack):
-            stack = mat[low_idx:low_idx+self.breaths_to_stack]
+        for low_idx in range(0, len(mat)-self.frame_size, self.frame_size):
+            stack = mat[low_idx:low_idx+self.frame_size]
             # We still have ventBN in the matrix, and this essentially gives average BN
-            stacks.append(np.median(stack, axis=0))
+            stacks.append(self.frame_func(stack, axis=0))
         return np.array(stacks)
