@@ -49,7 +49,17 @@ def run_model(model_args, combo, model_idx, possible_folds, out_dir, experiment_
     if os.path.exists(path):
         dataset = pd.read_pickle(path)
     else:
-        dataset = Dataset(model_args.cohort_description, 'custom', model_args.frame_size, True, experiment_num, post_hour, start_hour_delta, frame_func, custom_features=combo).get()
+        dataset = Dataset(
+            model_args.cohort_description,
+            'custom',
+            frame_size,
+            True,
+            experiment_num,
+            post_hour,
+            start_hour_delta,
+            frame_func,
+            custom_features=combo
+        ).get()
         dataset.to_pickle(path)
 
     for folds in possible_folds:
@@ -89,7 +99,7 @@ def main():
     possible_folds = [5, 10]
     out_dir = DF_DIR.format(experiment_num=main_args.experiment, feature_set=main_args.feature_set, sp=main_args.post_hour, sd=main_args.start_hour_delta, fs=main_args.frame_size, ff=main_args.frame_func)
     if not os.path.exists(out_dir):
-        os.mkdir(out_dir)
+        os.makedirs(out_dir)
     feature_gen = feature_combos['{}_gen'.format(main_args.feature_set)]
 
     input_gen = [(model_args, combo, idx, possible_folds, out_dir, main_args.experiment, main_args.start_hour_delta, main_args.post_hour, main_args.frame_size, main_args.frame_func) for idx, combo in enumerate(feature_gen)]
