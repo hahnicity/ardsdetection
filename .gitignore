@@ -7,7 +7,7 @@ dataset*.pkl
 results/
 model-*
 scaler-*
-*grid_search_results*
+*grid_search_results.pkl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -200,6 +200,7 @@ class ARDSDetectionModel(object):
                 self.print_model_stats(y_test, predictions, model_idx)
                 print("-------------------")
 
+        self.aggregate_results()
         if not self.args.no_print_results:
             self.print_aggregate_results()
 
@@ -230,6 +231,10 @@ class ARDSDetectionModel(object):
         self.models.append(clf)
 
     def aggregate_statistics(self, y_test, predictions, model_idx):
+        """
+        After a group of patients is run through the model, record all necessary stats
+        such as true positives, false positives, etc.
+        """
         x_test_expanded = self.data.loc[y_test.index]
         for pt in x_test_expanded.patient.unique():
             i = len(self.results)
@@ -267,23 +272,41 @@ class ARDSDetectionModel(object):
                 row.patient, row.prediction, row.patho, row[patho_votes]
             ))
 
-    def print_aggregate_results(self):
-        # XXX for now just stick to analyzing aggregate over patients
-
+    def aggregate_results(self):
+        """
+        Aggregate final results for all patients into a friendly data frame
+        """
+        aggregate_results = []
         for n, patho in self.pathos.iteritems():
             tps = float(len(self.results[(self.results.patho == n) & (self.results.prediction == n)]))
             tns = float(len(self.results[(self.results.patho != n) & (self.results.prediction != n)]))
             fps = float(len(self.results[(self.results.patho != n) & (self.results.prediction == n)]))
             fns = float(len(self.results[(self.results.patho == n) & (self.results.prediction != n)]))
+            accuracy = round((tps+tns) / (tps+tns+fps+fns), 4)
+            sensitivity = round(tps / (tps+fns), 4)
+            specificity = round(tns / (tns+fps), 4)
+            precision = round(tps / (tps+fps), 4)
+            if len(self.pathos) > 2:
+                auc = np.nan
+            elif len(self.pathos) == 2:
+                auc = round(roc_auc_score(self.results.patho.tolist(), self.results.prediction.tolist()), 4)
+            aggregate_results.append([patho, tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc])
 
-            print("{} patient accuracy: {}".format(patho, round((tps+tns) / (tps+tns+fps+fns), 4)))
-            print("{} patient sensitivity: {}".format(patho, round(tps / (tps+fns), 4)))
-            print("{} patient specificity: {}".format(patho, round(tns / (tns+fps), 4)))
-            print("{} patient precision: {}".format(patho, round(tps / (tps+fps), 4)))
+        self.aggregate_results = pd.DataFrame(
+            aggregate_results,
+            columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc']
+        )
+
+    def print_aggregate_results(self):
+        for n, patho in self.pathos.iteritems():
+            row = self.aggregate_results[self.aggregate_results.patho == patho].iloc[0]
+            print("{} patient accuracy: {}".format(patho, row.accuracy))
+            print("{} patient sensitivity: {}".format(patho, row.sensitivity))
+            print("{} patient specificity: {}".format(patho, row.specificity))
+            print("{} patient precision: {}".format(patho, row.precision))
             print("")
 
-        if len(self.pathos) == 2:
-            print("Model AUC: {}".format(roc_auc_score(self.results.patho.tolist(), self.results.prediction.tolist())))
+        print("Model AUC: {}".format(row.auc))
 
 
 def create_df(args):
