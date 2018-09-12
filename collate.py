@@ -67,8 +67,25 @@ class Dataset(object):
         ('iTime', 6),
     ]
 
-    def __init__(self, cohort_description, feature_set, frame_size, load_intermediates, experiment_num, post_hour, start_hour_delta, frame_func, custom_features=None):
+    def __init__(self,
+                 cohort_description,
+                 feature_set,
+                 frame_size,
+                 load_intermediates,
+                 experiment_num,
+                 post_hour,
+                 start_hour_delta,
+                 frame_func,
+                 test_frame_size=None,
+                 test_post_hour=None,
+                 test_start_hour_delta=None,
+                 custom_features=None):
         """
+        Define a dataset for use in training an ARDS detection algorithm. If we desire we can
+        have separate parameterization for train and test sets. This causes a completely new
+        testing set to be created after the training set with differing parameterization for
+        all patients
+
         :param cohort_description: path to cohort description file
         :param feature_set: flow_time/flow_time_opt/flow_time_orig/broad/broad_opt/custom
         :param frame_size: stack N breaths in the data
@@ -77,6 +94,9 @@ class Dataset(object):
         :param post_hour: The number of hours post ARDS diagnosis we wish to examine
         :param start_hour_delta: The hour delta that we want to start looking at data for
         :param frame_func: Function to apply on breath frames. choices: median, mean, var
+        :param test_frame_size: frame size to set only for testing set
+        :param test_post_hour: post_hour to set only for testing set
+        :param test_start_hour_delta: start delta to set only for testing set
         :param custom_features: If you set features manually you must specify which to use in format (feature name, index)
         """
         raw_dirs = []
@@ -124,61 +144,75 @@ class Dataset(object):
         self.load_intermediates = load_intermediates
         self.post_hour = post_hour
         self.start_hour_delta = start_hour_delta
+        self.test_frame_size = test_frame_size if isinstance(test_frame_size, int) else frame_size
+        self.test_post_hour = test_post_hour if isinstance(test_post_hour, int) else post_hour
+        self.test_start_hour_delta = test_start_hour_delta if isinstance(test_start_hour_delta, int) else start_hour_delta
 
     def get(self):
-        # So what we do for this is go through patient by patient and extract
-        # their metadata in a way the rpi will enjoy
         df = None
-        for patient in self.file_map:
-            pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient]
-            # Trust the cohort descriptor file that all patients are respresented
-            # equally in different experiments. This is my current philosophy. But will
-            # this idea change? In which case I will need to segment by experiment number
-            # and then do a check for patients with similar and dissimilar experimental
-            # setups. I can't imagine that this will actually happen in the project and
-            # it would be a major design decision that would affect the paper.
-            #
-            # XXX If you ever change this policy be sure to change code
-            if len(pt_row) == 0:
-                raise Exception('Found more than no rows for patient: {}'.format(patient))
-            pt_row = pt_row.iloc[0]
-            patho = pt_row['Pathophysiology'].strip()
-            files = self.file_map[patient]
+        # We are using separate parameterization for both train and test
+        if self.test_post_hour or self.test_start_hour_delta or self.test_frame_size:
+            cohorts = {
+                'train': {'sd': self.start_hour_delta, 'sp': self.post_hour, 'frame_size': self.frame_size},
+                'test': {'sd': self.test_start_hour_delta, 'sp': self.test_post_hour, 'frame_size': self.test_frame_size},
+            }
+        else:
+            cohorts = {'train_test': {'sd': self.start_hour_delta, 'sp': self.post_hour, 'frame_size': self.frame_size}}
 
-            if int(patient[:4]) <= 50:
-                date_fmt = r'(\d{4}-\d{2}-\d{2}__\d{2}:\d{2})'
-                strp_fmt = '%Y-%m-%d__%H:%M'
-            else:
-                date_fmt = r'(\d{4}-\d{2}-\d{2}-\d{2}-\d{2})'
-                strp_fmt = '%Y-%m-%d-%H-%M'
+        for cohort, params in cohorts.items():
+            start_hour_delta = params['sd']
+            post_hour = params['sp']
+            frame_size = params['frame_size']
 
-            if 'ARDS' not in patho:
-                first_file = sorted(files)[0]
-                date_str = re.search(date_fmt, first_file).groups()[0]
-                pt_start_time = np.datetime64(datetime.strptime(date_str, strp_fmt)) + np.timedelta64(self.start_hour_delta, 'h')
+            for patient in self.file_map:
+                pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient]
+                # Trust the cohort descriptor file that all patients are respresented
+                # equally in different experiments. This is my current philosophy. But will
+                # this idea change? In which case I will need to segment by experiment number
+                # and then do a check for patients with similar and dissimilar experimental
+                # setups. I can't imagine that this will actually happen in the project and
+                # it would be a major design decision that would affect the paper.
+                #
+                # XXX If you ever change this policy be sure to change code
+                if len(pt_row) == 0:
+                    raise Exception('Found more than no rows for patient: {}'.format(patient))
+                pt_row = pt_row.iloc[0]
+                patho = pt_row['Pathophysiology'].strip()
+                files = self.file_map[patient]
 
-            # Handle COPD+ARDS as just ARDS wrt to the model for now. We can be
-            # more granular later
-            if 'ARDS' in patho:
-                gt_label = 1
-                pt_start_time = pt_row['Date when Berlin criteria first met (m/dd/yyy)']
-                pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M")) + np.timedelta64(self.start_hour_delta, 'h')
-            # For now we only get first day of recorded data. Maybe in future we will want
-            # first day of vent data.
-            elif 'COPD' in patho:
-                gt_label = 2
-            else:
-                gt_label = 0
+                if int(patient[:4]) <= 50:
+                    date_fmt = r'(\d{4}-\d{2}-\d{2}__\d{2}:\d{2})'
+                    strp_fmt = '%Y-%m-%d__%H:%M'
+                else:
+                    date_fmt = r'(\d{4}-\d{2}-\d{2}-\d{2}-\d{2})'
+                    strp_fmt = '%Y-%m-%d-%H-%M'
 
-            # XXX If you want to make this faster you can always run this operation in
-            # parallel and just concat whatever you get from the pooling.
-            if df is None:
-                df = self.process_patient_data(patient, files, pt_start_time)
-                df['y'] = gt_label
-            else:
-                tmp = self.process_patient_data(patient, files, pt_start_time)
+                if 'ARDS' not in patho:
+                    first_file = sorted(files)[0]
+                    date_str = re.search(date_fmt, first_file).groups()[0]
+                    pt_start_time = np.datetime64(datetime.strptime(date_str, strp_fmt)) + np.timedelta64(start_hour_delta, 'h')
+
+                # Handle COPD+ARDS as just ARDS wrt to the model for now. We can be
+                # more granular later
+                if 'ARDS' in patho:
+                    gt_label = 1
+                    pt_start_time = pt_row['Date when Berlin criteria first met (m/dd/yyy)']
+                    pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M")) + np.timedelta64(start_hour_delta, 'h')
+                # For now we only get first day of recorded data. Maybe in future we will want
+                # first day of vent data.
+                elif 'COPD' in patho:
+                    gt_label = 2
+                else:
+                    gt_label = 0
+
+                tmp = self.process_patient_data(patient, files, pt_start_time, post_hour, frame_size)
                 tmp['y'] = gt_label
-                df = df.append(tmp)
+                tmp['set_type'] = cohort
+
+                if df is None:
+                    df = tmp
+                else:
+                    df = df.append(tmp)
 
         df.index = range(len(df))
         return df
@@ -223,15 +257,24 @@ class Dataset(object):
 
         return meta
 
-    def process_patient_data(self, patient_id, pt_files, start_time):
+    def process_patient_data(self, patient_id, pt_files, start_time, post_hour, frame_size):
+        """
+        Process all patient data
+
+        :param patient_id: patient pseudo-id
+        :param pt_files: abspath to all patient vent files
+        :param start_time: numpy datetime that we want to start analysis on
+        :param post_hour: numpy datetime that we want to end analysis
+        :param frame_size: size of frames to use
+        """
         # Cut off the header with [1:]
         meta = self.load_breath_meta_file(pt_files[0])
         for f in pt_files[1:]:
             meta.extend(self.load_breath_meta_file(f))
 
         if len(meta) != 0:
-            meta = self.process_features(np.array(meta), start_time)
-            meta = self.create_frames(meta)
+            meta = self.process_features(np.array(meta), start_time, post_hour)
+            meta = self.create_frames(meta, frame_size)
             if len(meta) == 0:
                 warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
 
@@ -243,12 +286,13 @@ class Dataset(object):
         df['patient'] = patient_id
         return df
 
-    def process_features(self, mat, start_time):
+    def process_features(self, mat, start_time, post_hour):
         """
         Preprocess all breath_meta information
 
         :param mat: matrix of data to process
         :param start_time: time we wish to start using data from patient
+        :param post_hour: time to stop analyzing data relative to start of ventilation of berlin match
         """
         # index of abs bs is 29. So sort by BS time.
         mat = mat[mat[:, 29].argsort()]
@@ -257,7 +301,7 @@ class Dataset(object):
                 dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
             except ValueError:
                 dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
-            mask = dt <= (start_time + np.timedelta64(self.post_hour, 'h'))
+            mask = dt <= (start_time + np.timedelta64(post_hour, 'h'))
             mat = mat[mask]
         row_idxs = list(self.features.values())
         mat = mat[:, row_idxs]
@@ -265,15 +309,18 @@ class Dataset(object):
         mask = np.any(np.isnan(mat) | np.isinf(mat), axis=1)
         return mat[~mask]
 
-    def create_frames(self, mat):
+    def create_frames(self, mat, frame_size):
         """
         Find median of stacks of breaths on a matrix
 
         :param mat: Matrix to perform rolling average on.
+        :param frame_size: number of breaths in stack
         """
         stacks = []
-        for low_idx in range(0, len(mat)-self.frame_size, self.frame_size):
-            stack = mat[low_idx:low_idx+self.frame_size]
+        # make sure we capture the last frame even if it's not as complete as we
+        # might like it to be
+        for low_idx in range(0, len(mat), frame_size):
+            stack = mat[low_idx:low_idx+frame_size]
             # We still have ventBN in the matrix, and this essentially gives average BN
             stacks.append(self.frame_func(stack, axis=0))
         return np.array(stacks)

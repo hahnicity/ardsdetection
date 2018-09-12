@@ -10,7 +10,7 @@ from sklearn.metrics import roc_auc_score
 from collate import Dataset
 from train import ARDSDetectionModel, build_parser
 
-DF_DIR = 'data/experiment{experiment_num}/training/grid_search/{feature_set}/{sd}-{sp}/{fs}/{ff}'
+DF_DIR = 'data/experiment{experiment_num}/training/grid_search/{feature_set}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}'
 
 
 def get_all_possible_features():
@@ -36,7 +36,8 @@ def get_all_possible_features():
     return {'flow_time_gen': all_ft_combos, 'broad_gen': all_combos}
 
 
-def run_model(model_args, combo, model_idx, possible_folds, out_dir, experiment_num, start_hour_delta, post_hour, frame_size, frame_func):
+def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
+
     results = {folds: {'auc': 0} for folds in possible_folds}
     results['idx'] = model_idx
     if not combo:
@@ -52,12 +53,15 @@ def run_model(model_args, combo, model_idx, possible_folds, out_dir, experiment_
         dataset = Dataset(
             model_args.cohort_description,
             'custom',
-            frame_size,
+            main_args.frame_size,
             True,
-            experiment_num,
-            post_hour,
-            start_hour_delta,
-            frame_func,
+            main_args.experiment,
+            main_args.post_hour,
+            main_args.start_hour_delta,
+            main_args.frame_func,
+            main_args.test_frame_size,
+            main_args.test_post_hour,
+            main_args.test_start_hour_delta,
             custom_features=combo
         ).get()
         dataset.to_pickle(path)
@@ -84,6 +88,9 @@ def main():
     parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3')
     parser.add_argument("--frame-size", default=20, type=int)
     parser.add_argument('--frame-func', choices=['median', 'mean', 'var'], default='median')
+    parser.add_argument('-tfs', "--test-frame-size", default=None, type=int)
+    parser.add_argument('-tsd', '--test-start-hour-delta', default=None, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data. Only for usage in testing set')
+    parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)
     parser.add_argument('--threads', type=int, default=multiprocessing.cpu_count(), help="Set number of threads to use, otherwise all cores will be occupied")
     main_args = parser.parse_args()
 
@@ -97,12 +104,12 @@ def main():
     results = {}
     feature_combos = get_all_possible_features()
     possible_folds = [5, 10]
-    out_dir = DF_DIR.format(experiment_num=main_args.experiment, feature_set=main_args.feature_set, sp=main_args.post_hour, sd=main_args.start_hour_delta, fs=main_args.frame_size, ff=main_args.frame_func)
+    out_dir = DF_DIR.format(experiment_num=main_args.experiment, feature_set=main_args.feature_set, sp=main_args.post_hour, sd=main_args.start_hour_delta, fs=main_args.frame_size, ff=main_args.frame_func, tfs=main_args.test_frame_size, tsd=main_args.test_start_hour_delta, tsp=main_args.test_post_hour)
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     feature_gen = feature_combos['{}_gen'.format(main_args.feature_set)]
 
-    input_gen = [(model_args, combo, idx, possible_folds, out_dir, main_args.experiment, main_args.start_hour_delta, main_args.post_hour, main_args.frame_size, main_args.frame_func) for idx, combo in enumerate(feature_gen)]
+    input_gen = [(model_args, main_args, combo, idx, possible_folds, out_dir) for idx, combo in enumerate(feature_gen)]
 
     pool = multiprocessing.Pool(main_args.threads)
     results = pool.map(func_star, input_gen)
@@ -113,7 +120,7 @@ def main():
     print('Best AUC: {}'.format(best[1]))
     print('Best features: {}'.format(results[best[0]]))
     dict_ = pickle.dumps(results)
-    with open('experiment{}_{}_fs{}_ff{}_sd{}_sp{}_grid_search_results.pkl'.format(main_args.experiment, main_args.feature_set, main_args.frame_size, main_args.frame_func, main_args.start_hour_delta, main_args.post_hour), 'w') as f:
+    with open('experiment{}_{}_fs{}_ff{}_sd{}_sp{}_tfs{}_tsd{}_tsp{}_grid_search_results.pkl'.format(main_args.experiment, main_args.feature_set, main_args.frame_size, main_args.frame_func, main_args.start_hour_delta, main_args.post_hour, main_args.test_frame_size, main_args.test_start_hour_delta, main_args.test_post_hour), 'w') as f:
         f.write(dict_)
 
 

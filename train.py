@@ -52,6 +52,8 @@ class ARDSDetectionModel(object):
         self.results = pd.DataFrame([], columns=results_cols)
 
     def get_cross_patient_train_test_idx(self):
+        """
+        """
         unique_patients = self.data['patient'].unique()
         mapping = {patho: [] for n, patho in self.pathos.iteritems()}
         for patient in list(unique_patients):
@@ -86,8 +88,17 @@ class ARDSDetectionModel(object):
 
         for patient in unique_patients:
             patient_rows = x[x.patient == patient]
+            # XXX I can simpify this line, especially because y is still
+            # attached to x at this point
             type_ = self.pathos[y.loc[patient_rows.index].unique()[0]]
             mapping[type_].append(patient)
+
+        if len(x['set_type'].unique()) == 1:
+            train_cohort = 'train_test'
+            test_cohort = 'train_test'
+        elif len(x['set_type'].unique()) == 2:
+            train_cohort = 'train'
+            test_cohort = 'test'
 
         total_test_patients = round(len(unique_patients) / float(folds))
         for i in range(folds):
@@ -99,9 +110,10 @@ class ARDSDetectionModel(object):
                     raise Exception("You do not have enough patients for {} cohort".format(k))
                 patients = v[lower_bound:upper_bound]
                 patients_to_use.extend(patients)
-            train_patient_data = x.query('patient not in {}'.format(patients_to_use))
-            test_patient_data = x.query('patient in {}'.format(patients_to_use))
-            idxs.append((train_patient_data.index, test_patient_data.index))
+
+            train_pt_data = x[(x.set_type == train_cohort) & (~x.patient.isin(patients_to_use))]
+            test_pt_data = x[(x.set_type == test_cohort) & (x.patient.isin(patients_to_use))]
+            idxs.append((train_pt_data.index, test_pt_data.index))
         return idxs
 
     def get_and_fit_scaler(self, x_train):
@@ -112,7 +124,6 @@ class ARDSDetectionModel(object):
         """
         if not self.args.load_scaler:
             scaler = MinMaxScaler()
-            # XXX raise err if no train samples
             scaler.fit(x_train)
         else:
             scaler = pd.read_pickle(self.args.load_scaler)
@@ -128,19 +139,21 @@ class ARDSDetectionModel(object):
         y = self.data.y
         x = self.data
 
+        # XXX this split function will be broken with addition of new test params
         if self.args.split_type == "simple":
             idxs = self.get_cross_patient_train_test_idx()
         elif self.args.split_type == 'kfold':
             idxs = self.get_cross_patient_kfold_idxs(x, y, self.args.folds)
+        # XXX these two if/elseif will be broken with addition of new test params
         elif self.args.split_type == 'train_all':
             idxs = [(x.index, [])]
         elif self.args.split_type == 'test_all':
             idxs = [([], x.index)]
 
         try:
-            x = x.drop(['y', 'patient', 'ventBN'], axis=1)
+            x = x.drop(['y', 'patient', 'ventBN', 'set_type'], axis=1)
         except:  # maybe we didnt define ventBN, its not that important anyhow.
-            x = x.drop(['y', 'patient'], axis=1)
+            x = x.drop(['y', 'patient', 'set_type'], axis=1)
 
         for train_idx, test_idx in idxs:
             x_train = x.loc[train_idx].dropna()
@@ -290,9 +303,13 @@ def create_df(args):
         args.post_hour,
         args.start_hour_delta,
         args.frame_func,
+        args.test_frame_size,
+        args.test_post_hour,
+        args.test_start_hour_delta,
     ).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
+
     return df
 
 
@@ -313,6 +330,9 @@ def build_parser():
     parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var'], default='median')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
+    parser.add_argument('-tfs', "--test-frame-size", default=None, type=int)
+    parser.add_argument('-tsd', '--test-start-hour-delta', default=None, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data. Only for usage in testing set')
+    parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
     parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1')
