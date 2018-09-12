@@ -57,6 +57,7 @@ def main():
                     if run[folds]['auc'] > top_auc:
                         top_idx = idx
                         top_folds = folds
+                        top_auc = run[folds]['auc']
             best = results[top_idx]
             match_items = re.search(file_pat, f).groupdict()
             dataset_dir = dir_struct.format(**match_items)
