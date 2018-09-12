@@ -37,7 +37,6 @@ def get_all_possible_features():
 
 
 def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
-
     results = {folds: {'auc': 0} for folds in possible_folds}
     results['idx'] = model_idx
     if not combo:
@@ -45,10 +44,12 @@ def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
         return results
     features = [k[0] for k in combo]
     results['features'] = features
-
     path = os.path.join(out_dir, 'dataset-{}.pkl'.format(model_idx))
+
     if os.path.exists(path):
         dataset = pd.read_pickle(path)
+        if 'set_type' not in dataset.columns:
+            dataset['set_type'] = 'train_test'
     else:
         dataset = Dataset(
             model_args.cohort_description,
@@ -64,15 +65,21 @@ def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
             main_args.test_start_hour_delta,
             custom_features=combo
         ).get()
-        dataset.to_pickle(path)
 
+    top_auc = 0
     for folds in possible_folds:
         model_args.folds = folds
         model = ARDSDetectionModel(model_args, dataset)
         model.train_and_test()
-        model_auc = roc_auc_score(model.results.patho.tolist(), model.results.prediction.tolist())
-        results[folds]['auc'] = model_auc
+        auc = roc_auc_score(model.results.patho.tolist(), model.results.prediction.tolist())
+        results[folds]['auc'] = auc
+        if auc > top_auc:
+            top_auc = auc
         del model  # paranoia
+
+    if top_auc > main_args.auc_thresh:
+        dataset.to_pickle(path)
+
     return results
 
 
@@ -92,6 +99,7 @@ def main():
     parser.add_argument('-tsd', '--test-start-hour-delta', default=None, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data. Only for usage in testing set')
     parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)
     parser.add_argument('--threads', type=int, default=multiprocessing.cpu_count(), help="Set number of threads to use, otherwise all cores will be occupied")
+    parser.add_argument('--auc-thresh', type=float, help='save datasets to file if they have an auc above this', default=.8)
     main_args = parser.parse_args()
 
     # We're doing this because these args are not necessary, and we can just pass them
