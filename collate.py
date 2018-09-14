@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from algorithms.breath_meta import get_file_experimental_breath_meta
+from algorithms.constants import EXPERIMENTAL_META_HEADER
 
 
 class Dataset(object):
@@ -149,15 +150,43 @@ class Dataset(object):
         self.test_start_hour_delta = test_start_hour_delta if isinstance(test_start_hour_delta, int) else start_hour_delta
 
     def get(self):
+        """
+        Get dataset with framed data that we will use for our
+        generic learning algorithms
+        """
+        return self._get_dataset('framed')
+
+    def get_unframed_dataset(self):
+        """
+        Get dataset with unframed data. This is normally used for debugging
+        purposes
+        """
+        return self._get_dataset('unframed')
+
+    def _get_dataset(self, type_):
         df = None
         # We are using separate parameterization for both train and test
         if self.test_post_hour or self.test_start_hour_delta or self.test_frame_size:
             cohorts = {
-                'train': {'sd': self.start_hour_delta, 'sp': self.post_hour, 'frame_size': self.frame_size},
-                'test': {'sd': self.test_start_hour_delta, 'sp': self.test_post_hour, 'frame_size': self.test_frame_size},
+                'train': {
+                    'sd': self.start_hour_delta,
+                    'sp': self.post_hour,
+                    'frame_size': self.frame_size
+                },
+                'test': {
+                    'sd': self.test_start_hour_delta,
+                    'sp': self.test_post_hour,
+                    'frame_size': self.test_frame_size
+                },
             }
         else:
-            cohorts = {'train_test': {'sd': self.start_hour_delta, 'sp': self.post_hour, 'frame_size': self.frame_size}}
+            cohorts = {
+                'train_test': {
+                    'sd': self.start_hour_delta,
+                    'sp': self.post_hour,
+                    'frame_size': self.frame_size
+                }
+            }
 
         for cohort, params in cohorts.items():
             start_hour_delta = params['sd']
@@ -166,14 +195,6 @@ class Dataset(object):
 
             for patient in self.file_map:
                 pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient]
-                # Trust the cohort descriptor file that all patients are respresented
-                # equally in different experiments. This is my current philosophy. But will
-                # this idea change? In which case I will need to segment by experiment number
-                # and then do a check for patients with similar and dissimilar experimental
-                # setups. I can't imagine that this will actually happen in the project and
-                # it would be a major design decision that would affect the paper.
-                #
-                # XXX If you ever change this policy be sure to change code
                 if len(pt_row) == 0:
                     raise Exception('Found more than no rows for patient: {}'.format(patient))
                 pt_row = pt_row.iloc[0]
@@ -205,7 +226,10 @@ class Dataset(object):
                 else:
                     gt_label = 0
 
-                tmp = self.process_patient_data(patient, files, pt_start_time, post_hour, frame_size)
+                if type_ == 'unframed':
+                    tmp = self.process_unframed_patient_data(patient, files, pt_start_time, post_hour)
+                elif type_ == 'framed':
+                    tmp = self.process_patient_data(patient, files, pt_start_time, post_hour, frame_size)
                 tmp['y'] = gt_label
                 tmp['set_type'] = cohort
 
@@ -259,7 +283,7 @@ class Dataset(object):
 
     def process_patient_data(self, patient_id, pt_files, start_time, post_hour, frame_size):
         """
-        Process all patient data
+        Process all patient data for use in our learning algorithms
 
         :param patient_id: patient pseudo-id
         :param pt_files: abspath to all patient vent files
@@ -283,6 +307,33 @@ class Dataset(object):
             meta = []
         cols = list(self.features.keys())
         df = pd.DataFrame(meta, columns=cols)
+        df['patient'] = patient_id
+        return df
+
+    def process_unframed_patient_data(self, patient_id, pt_files, start_time, post_hour):
+        """
+        Process all patient data so that we can gather a comprehensive inventory of all their
+        data occurring at their given times
+        """
+        meta = self.load_breath_meta_file(pt_files[0])
+        for f in pt_files[1:]:
+            meta.extend(self.load_breath_meta_file(f))
+
+        if len(meta) != 0:
+            meta = np.array(meta)
+            meta = meta[meta[:, 29].argsort()]
+            if start_time is not None:
+                try:
+                    dt = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+                except ValueError:
+                    dt = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+                mask = dt <= (start_time + np.timedelta64(post_hour, 'h'))
+                meta = meta[mask]
+
+        # If all data was filtered by our starting time criteria
+        if len(meta) == 0:
+            meta = []
+        df = pd.DataFrame(meta, columns=EXPERIMENTAL_META_HEADER)
         df['patient'] = patient_id
         return df
 
