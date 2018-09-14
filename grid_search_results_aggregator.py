@@ -18,8 +18,8 @@ from sklearn.metrics import roc_auc_score
 from train import ARDSDetectionModel, build_parser
 
 # XXX for now only handle flow time data
-file_pat = r'(?P<exp>experiment[\d\+]+)_flow_time_fs(?P<fs>\d+)_ff(?P<ff>\w+)_sd(?P<sd>\d+)_sp(?P<sp>\d+)'
-dir_struct = "data/{exp}/training/grid_search/flow_time/{sd}-{sp}/{fs}/{ff}/None/None-None"
+file_pat = r'(?P<exp>experiment[\d\+]+)_flow_time_fs(?P<fs>\d+)_ff(?P<ff>\w+)_sd(?P<sd>\d+)_sp(?P<sp>\d+)_tfs(?P<tfs>\w+)_tsd(?P<tsd>\w+)_tsp(?P<tsp>\w+)_grid_search'
+dir_struct = "data/{exp}/training/grid_search/flow_time/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}/"
 
 
 def run_dataset(dataset, folds):
@@ -40,7 +40,7 @@ def main():
     args = parser.parse_args()
 
     table = PrettyTable()
-    field_names = ['experiment', 'start_delta', 'status_post', 'frame_size', 'frame_func', 'patho', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc']
+    field_names = ['experiment', 'start_delta', 'status_post', 'frame_size', 'frame_func', 'test_start_delta', 'test_status_post', 'test_frame_size', 'patho', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc']
     table.field_names = field_names
 
     with open(args.output_file, 'w') as out:
@@ -63,7 +63,7 @@ def main():
             dataset_dir = dir_struct.format(**match_items)
             dataset_path = os.path.join(dataset_dir, "dataset-{}.pkl".format(best['idx']))
             dataset = pd.read_pickle(dataset_path)
-            results = run_dataset(dataset, folds)
+            results = run_dataset(dataset, top_folds)
             for idx, patho_results in results.iterrows():
                 row = [
                     match_items['exp'],
@@ -71,6 +71,9 @@ def main():
                     match_items['sp'],
                     match_items['fs'],
                     match_items['ff'],
+                    match_items['tsd'],
+                    match_items['tsp'],
+                    match_items['tfs'],
                     patho_results.patho,
                     patho_results.accuracy,
                     patho_results.sensitivity,

@@ -92,7 +92,7 @@ def main():
     parser.add_argument('--feature-set', choices=['flow_time', 'broad'], default='flow_time')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
-    parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3')
+    parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1+4')
     parser.add_argument("--frame-size", default=20, type=int)
     parser.add_argument('--frame-func', choices=['median', 'mean', 'var'], default='median')
     parser.add_argument('-tfs', "--test-frame-size", default=None, type=int)

@@ -93,7 +93,11 @@ class ARDSDetectionModel(object):
             type_ = self.pathos[y.loc[patient_rows.index].unique()[0]]
             mapping[type_].append(patient)
 
-        if len(x['set_type'].unique()) == 1:
+        if 'set_type' not in x.columns:
+            x['set_type'] = 'train_test'
+            train_cohort = 'train_test'
+            test_cohort = 'train_test'
+        elif len(x['set_type'].unique()) == 1:
             train_cohort = 'train_test'
             test_cohort = 'train_test'
         elif len(x['set_type'].unique()) == 2:
@@ -358,7 +362,7 @@ def build_parser():
     parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)
     parser.add_argument("--to-pickle", help="name of file the data frame will be pickled in")
     parser.add_argument("-p", "--from-pickle", help="name of file to retrieve pickled data from")
-    parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1')
+    parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1+4')
     parser.add_argument("--no-copd-to-ctrl", action="store_true", help='Dont convert copd annotations to ctrl annotations')
     parser.add_argument('--no-print-results', action='store_true', help='Dont print results of our model')
     return parser
