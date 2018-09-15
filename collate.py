@@ -334,6 +334,22 @@ class Dataset(object):
         if len(meta) == 0:
             meta = []
         df = pd.DataFrame(meta, columns=EXPERIMENTAL_META_HEADER)
+        # setup standard datatypes, remove things that are not helpful
+        to_drop = [' ', 'BS.1', 'x01', 'tvi1', 'tve1', 'x02', 'tvi2', 'tve2']
+        dtypes = {name: "float32" for name in EXPERIMENTAL_META_HEADER if name not in to_drop}
+        # exemptions
+        exemptions = {
+            "BN": 'int16', 'ventBN': 'int16', 'BS': 'float16','x0_index': 'int16',
+            'abs_time_at_BS': 'object', 'abs_time_at_x0': 'object',
+            'abs_time_at_BE': 'object'
+        }
+        dtypes.update(exemptions)
+        df = df.astype(dtype=dtypes)
+        try:
+            df['abs_time_at_BS'] = pd.to_datetime(df['abs_time_at_BS'], format="%Y-%m-%d %H-%M-%S.%f")
+        except ValueError:
+            df['abs_time_at_BS'] = pd.to_datetime(df['abs_time_at_BS'], format="%Y-%m-%d %H:%M:%S.%f")
+        df = df.drop(to_drop, axis=1)
         df['patient'] = patient_id
         return df
 
