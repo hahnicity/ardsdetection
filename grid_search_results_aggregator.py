@@ -36,7 +36,7 @@ def run_dataset(dataset, folds):
 def main():
     parser = ArgumentParser()
     parser.add_argument('files', nargs='+')
-    parser.add_argument('output_file')
+    parser.add_argument('-o', '--output-file', required=True)
     args = parser.parse_args()
 
     table = PrettyTable()
