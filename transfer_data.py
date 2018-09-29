@@ -71,11 +71,12 @@ def copy_non_ards_patient(row, experiment_num):
     proc = subprocess.Popen(['ssh', SERVER_NAME, first_file_cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = proc.communicate()
     stdout = stdout.strip()
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode('utf-8')
+
     if stdout == '':
         print('No files found for patient: {}'.format(patient_id))
         return
-    if isinstance(stdout, bytes):
-        stdout = stdout.decode()
 
     if int(patient_id[:4]) <= 50:
         date_fmt = r'(\d{4}-\d{2}-\d{2}__\d{2}:\d{2})'
@@ -96,7 +97,7 @@ def copy_non_ards_patient(row, experiment_num):
 def main():
     parser = ArgumentParser()
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
-    parser.add_argument('--experiment', default=1, choices=[1, 2, 3, 4], type=int)
+    parser.add_argument('-e', '--experiment', default=1, choices=[1, 2, 3, 4], type=int)
     parser.add_argument('-p', '--only-patient', help='Only gather data for specific patient id')
     args = parser.parse_args()
 

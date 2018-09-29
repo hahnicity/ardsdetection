@@ -105,6 +105,7 @@ class Dataset(object):
             raw_dirs.append('data/experiment{num}/training/raw'.format(num=i))
         self.desc = pd.read_csv(cohort_description)
         self.file_map = {}
+        self.experiment_num = experiment_num
         for dir_ in raw_dirs:
             for patient in os.listdir(dir_):
                 files = glob(os.path.join(dir_, patient, "*.csv"))
@@ -197,8 +198,14 @@ class Dataset(object):
                 pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient]
                 if len(pt_row) == 0:
                     raise Exception('Found more than no rows for patient: {}'.format(patient))
-                pt_row = pt_row.iloc[0]
+                pt_row = pt_row[(pt_row.experiment_group.isin([int(i) for i in self.experiment_num.split('+')])) & (pt_row['Potential Enrollment'] == 'Y')]
+                if len(pt_row) == 0:
+                    raise Exception("patient {} is not supposed to be in the cohort!".format(patient))
+                else:
+                    pt_row = pt_row.iloc[0]
+
                 patho = pt_row['Pathophysiology'].strip()
+                # Sanity check
                 files = self.file_map[patient]
 
                 if int(patient[:4]) <= 50:
@@ -221,7 +228,7 @@ class Dataset(object):
                     pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M")) + np.timedelta64(start_hour_delta, 'h')
                 # For now we only get first day of recorded data. Maybe in future we will want
                 # first day of vent data.
-                elif 'COPD' in patho:
+                elif 'COPD' in patho or 'ASTHMA' in patho:
                     gt_label = 2
                 else:
                     gt_label = 0
