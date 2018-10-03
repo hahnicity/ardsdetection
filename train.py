@@ -10,6 +10,7 @@ import operator
 from random import randint, sample
 import time
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.cross_validation import KFold, train_test_split
@@ -42,7 +43,7 @@ class ARDSDetectionModel(object):
             self.models.append(pd.read_pickle(self.args.load_model))
 
         results_cols = ["patient", "patho"]
-        for n, patho in self.pathos.iteritems():
+        for n, patho in self.pathos.items():
             results_cols.extend([
                 "{}_tps".format(patho), "{}_fps".format(patho),
                 "{}_tns".format(patho), "{}_fns".format(patho),
@@ -50,12 +51,15 @@ class ARDSDetectionModel(object):
             ])
         results_cols += ["model_idx", "prediction"]
         self.results = pd.DataFrame([], columns=results_cols)
+        self.patient_results = pd.DataFrame(
+            [], columns=['patient'] + ["{}_votes".format(patho) for _, patho in self.pathos.items()]
+        )
 
     def get_cross_patient_train_test_idx(self):
         """
         """
         unique_patients = self.data['patient'].unique()
-        mapping = {patho: [] for n, patho in self.pathos.iteritems()}
+        mapping = {patho: [] for n, patho in self.pathos.items()}
         for patient in list(unique_patients):
             patient_rows = self.data[self.data.patient == patient]
             type_ = self.pathos[patient_rows.y.unique()[0]]
@@ -84,7 +88,7 @@ class ARDSDetectionModel(object):
         """
         idxs = []
         unique_patients = x.patient.unique()
-        mapping = {patho: [] for n, patho in self.pathos.iteritems()}
+        mapping = {patho: [] for n, patho in self.pathos.items()}
 
         for patient in unique_patients:
             patient_rows = x[x.patient == patient]
@@ -207,6 +211,8 @@ class ARDSDetectionModel(object):
         self.aggregate_results()
         if not self.args.no_print_results:
             self.print_aggregate_results()
+        if self.args.plot_predictions:
+            self.plot_predictions()
 
     def convert_loc_to_iloc(self, df, loc_indices):
         copied = df.copy()
@@ -239,15 +245,19 @@ class ARDSDetectionModel(object):
         After a group of patients is run through the model, record all necessary stats
         such as true positives, false positives, etc.
         """
-        x_test_expanded = self.data.loc[y_test.index]
-        for pt in x_test_expanded.patient.unique():
-            i = len(self.results)
-            pt_rows = x_test_expanded[x_test_expanded.patient == pt]
+        x_test = self.data.loc[y_test.index]
+        for pt in x_test.patient.unique():
+            pt_idx = len(self.patient_results)
+            pt_rows = x_test[x_test.patient == pt]
             patho_n = pt_rows.y.unique()[0]
             pt_actual = y_test.loc[pt_rows.index]
             pt_pred = predictions.loc[pt_rows.index]
+
+            self.patient_results.loc[pt_idx] = [pt] + [len(pt_pred[pt_pred == n]) for n in self.pathos]
+
+            i = len(self.results)
             pt_results = [pt, patho_n]
-            for n, patho in self.pathos.iteritems():
+            for n, patho in self.pathos.items():
                 pt_results.extend([
                     get_tps(pt_actual, pt_pred, n), get_fps(pt_actual, pt_pred, n),
                     get_tns(pt_actual, pt_pred, n), get_fns(pt_actual, pt_pred, n),
@@ -266,7 +276,7 @@ class ARDSDetectionModel(object):
         incorrect_pts = model_results[model_results.patho != model_results.prediction]
 
         print("Model accuracy: {}".format(accuracy_score(y_test, predictions)))
-        for n, patho in self.pathos.iteritems():
+        for n, patho in self.pathos.items():
             print("{} recall: {}".format(patho, recall_score(y_test, predictions, labels=[n], average='macro')))
             print("{} precision: {}".format(patho, precision_score(y_test, predictions, labels=[n], average='macro')))
 
@@ -276,12 +286,31 @@ class ARDSDetectionModel(object):
                 row.patient, row.prediction, row.patho, row[patho_votes]
             ))
 
+    def plot_predictions(self):
+        """
+        Plot votes on specific class was predicted for each patient.
+        """
+        step_size = 10
+        for i in range(0, len(self.patient_results), step_size):
+            slice = self.patient_results.loc[i:i+step_size]
+            ind = np.arange(len(slice))
+            plots = []
+            for n, patho in self.pathos.items():
+                plots.append(plt.bar(ind, slice['{}_votes'.format(patho)].values))
+            plt.xticks(ind, slice.patient.str[:4].values, rotation=65)
+            plt.ylabel('# votes')
+            plt.legend([p[0] for p in plots], [patho for _, patho in self.pathos.items()])
+            plt.subplots_adjust(bottom=0.15)
+            plt.show()
+
+        # XXX Jason also wants 24 hr plots on a per patient basis
+
     def aggregate_results(self):
         """
         Aggregate final results for all patients into a friendly data frame
         """
         aggregate_results = []
-        for n, patho in self.pathos.iteritems():
+        for n, patho in self.pathos.items():
             tps = float(len(self.results[(self.results.patho == n) & (self.results.prediction == n)]))
             tns = float(len(self.results[(self.results.patho != n) & (self.results.prediction != n)]))
             fps = float(len(self.results[(self.results.patho != n) & (self.results.prediction == n)]))
@@ -302,7 +331,7 @@ class ARDSDetectionModel(object):
         )
 
     def print_aggregate_results(self):
-        for n, patho in self.pathos.iteritems():
+        for n, patho in self.pathos.items():
             row = self.aggregate_results[self.aggregate_results.patho == patho].iloc[0]
             print("{} patient accuracy: {}".format(patho, row.accuracy))
             print("{} patient sensitivity: {}".format(patho, row.sensitivity))
@@ -365,6 +394,7 @@ def build_parser():
     parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1+4')
     parser.add_argument("--no-copd-to-ctrl", action="store_true", help='Dont convert copd annotations to ctrl annotations')
     parser.add_argument('--no-print-results', action='store_true', help='Dont print results of our model')
+    parser.add_argument('--plot-predictions', action='store_true', help='Plot prediction bars')
     return parser
 
 
