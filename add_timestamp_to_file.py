@@ -1,10 +1,3 @@
-"""
-timestamp_on_file
-~~~~~~~~~~~~~~~~~
-
-Basic script for placing a new-style timestamp on a vent file collected before patient
-50 or so. This enables compatibility with current analytics code.
-"""
 import argparse
 import os
 import re
@@ -22,7 +15,7 @@ pattern = re.compile(
 )
 match = pattern.search(args.file)
 if not match:
-    raise Exception("no file-regex match for file: {}".format(args.file))
+    raise Exception("no file-regex match")
 
 dict_ = match.groupdict()
 dict_['millis'] = int(dict_['millis']) / 1000
