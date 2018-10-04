@@ -54,6 +54,7 @@ class ARDSDetectionModel(object):
         self.patient_results = pd.DataFrame(
             [], columns=['patient'] + ["{}_votes".format(patho) for _, patho in self.pathos.items()]
         )
+        self.patient_predictions = {}
 
     def get_cross_patient_train_test_idx(self):
         """
@@ -159,9 +160,9 @@ class ARDSDetectionModel(object):
             idxs = [([], x.index)]
 
         try:
-            x = x.drop(['y', 'patient', 'ventBN', 'set_type'], axis=1)
+            x = x.drop(['y', 'patient', 'ventBN', 'set_type', 'hour'], axis=1)
         except:  # maybe we didnt define ventBN, its not that important anyhow.
-            x = x.drop(['y', 'patient', 'set_type'], axis=1)
+            x = x.drop(['y', 'patient', 'set_type', 'hour'], axis=1)
 
         for train_idx, test_idx in idxs:
             x_train = x.loc[train_idx].dropna()
@@ -252,6 +253,7 @@ class ARDSDetectionModel(object):
             patho_n = pt_rows.y.unique()[0]
             pt_actual = y_test.loc[pt_rows.index]
             pt_pred = predictions.loc[pt_rows.index]
+            self.patient_predictions[pt] = (pt_rows, pt_pred)
 
             self.patient_results.loc[pt_idx] = [pt] + [len(pt_pred[pt_pred == n]) for n in self.pathos]
 
@@ -290,20 +292,50 @@ class ARDSDetectionModel(object):
         """
         Plot votes on specific class was predicted for each patient.
         """
+        # plot fraction of votes for all patients
         step_size = 10
         for i in range(0, len(self.patient_results), step_size):
             slice = self.patient_results.loc[i:i+step_size]
             ind = np.arange(len(slice))
+            bottom = np.zeros(len(ind))
             plots = []
+            totals = [0] * len(ind)
+            vote_cols = ['{}_votes'.format(patho) for _, patho in self.pathos.items()]
+            # get sum of votes across all patients
+            total_votes = slice[vote_cols].sum(axis=1).values
             for n, patho in self.pathos.items():
-                plots.append(plt.bar(ind, slice['{}_votes'.format(patho)].values))
+                plots.append(plt.bar(ind, slice['{}_votes'.format(patho)].values / total_votes, bottom=bottom))
+                bottom = bottom + (slice['{}_votes'.format(patho)].values / total_votes)
             plt.xticks(ind, slice.patient.str[:4].values, rotation=65)
-            plt.ylabel('# votes')
+            plt.ylabel('frac votes')
             plt.legend([p[0] for p in plots], [patho for _, patho in self.pathos.items()])
             plt.subplots_adjust(bottom=0.15)
             plt.show()
 
-        # XXX Jason also wants 24 hr plots on a per patient basis
+        # Plot fraction of votes for a single patient over 24 hrs.
+        for pt, (pt_rows, pt_preds) in self.patient_predictions.items():
+            pt_rows['pred'] = pt_preds
+            hour_preds = pt_rows[['hour', 'pred']]
+            bar_data = [[0] * len(self.pathos) for _ in range(24)]
+            for hour in range(0, 24):
+                hour_frame = hour_preds[hour_preds.hour == hour]
+                counts = hour_frame.pred.value_counts()
+                for n in self.pathos:
+                    try:
+                        bar_data[hour][n] = counts[n] / float(counts.sum())
+                    except (IndexError, KeyError):
+                        continue
+            plots = []
+            bottom = np.zeros(24)
+            for n in self.pathos:
+                bar_fracs = np.array([bar_data[hour][n] for hour in range(0, 24)])
+                plots.append(plt.bar(range(0, 24), bar_fracs, bottom=bottom))
+                bottom = bottom + bar_fracs
+            plt.title(pt)
+            plt.ylabel('frac predicted')
+            plt.xlabel('hour')
+            plt.legend([p[0] for p in plots], [patho for _, patho in self.pathos.items()])
+            plt.show()
 
     def aggregate_results(self):
         """

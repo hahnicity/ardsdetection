@@ -22,7 +22,7 @@ from algorithms.constants import EXPERIMENTAL_META_HEADER
 
 class Dataset(object):
     # Feature sets are mapped by (feature_name, breath_meta_feature_index)
-    necessities = [('ventBN', 2)]
+    necessities = [('ventBN', 2), ('hour', -1)]
     flow_time_feature_set = necessities + [
         # minF_to_zero is just pef_to_zero
         ('mean_flow_from_pef', 38),
@@ -377,7 +377,20 @@ class Dataset(object):
                 dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
             mask = dt <= (start_time + np.timedelta64(post_hour, 'h'))
             mat = mat[mask]
+
+        hour_row = np.zeros((len(mat), 1))
+        try:
+            dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+        except ValueError:
+            dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+        for hour in range(0, 24):
+            mask = np.logical_and(
+                (start_time + np.timedelta64(hour, 'h')) <= dt,
+                (start_time + np.timedelta64(hour+1, 'h')) > dt
+            )
+            hour_row[mask] = hour
         row_idxs = list(self.features.values())
+        mat = np.append(mat, hour_row, axis=1)
         mat = mat[:, row_idxs]
         mat = mat.astype(np.float32)
         mask = np.any(np.isnan(mat) | np.isinf(mat), axis=1)
