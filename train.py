@@ -37,6 +37,12 @@ class ARDSDetectionModel(object):
         if not self.args.no_copd_to_ctrl:
             self.data.loc[self.data[self.data.y == 2].index, 'y'] = 0
             del self.pathos[2]
+            # XXX For now just stick to 50/50 split. But later this code should be
+            # removed
+            patients = []
+            for i in [0, 1]:
+                patients.extend(list(self.data[self.data.y == i].patient.unique()[:50]))
+            self.data = self.data[self.data.patient.isin(patients)]
 
         self.models = []
         if self.args.load_model:

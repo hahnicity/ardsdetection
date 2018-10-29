@@ -328,6 +328,8 @@ class Dataset(object):
 
         if len(meta) != 0:
             meta = np.array(meta)
+            if isinstance(meta[0], list):
+                raise Exception('Rows inside metadata are a list for patient: {}. Something went wrong. Try deleting metadata files and re-run'.format(patient_id))
             meta = meta[meta[:, 29].argsort()]
             if start_time is not None:
                 try:
