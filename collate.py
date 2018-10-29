@@ -197,7 +197,7 @@ class Dataset(object):
             for patient in self.file_map:
                 pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient]
                 if len(pt_row) == 0:
-                    raise Exception('Found more than no rows for patient: {}'.format(patient))
+                    raise Exception('Found no information in patient mapping for patient: {}'.format(patient))
                 pt_row = pt_row[(pt_row.experiment_group.isin([int(i) for i in self.experiment_num.split('+')])) & (pt_row['Potential Enrollment'] == 'Y')]
                 if len(pt_row) == 0:
                     raise Exception("patient {} is not supposed to be in the cohort!".format(patient))
