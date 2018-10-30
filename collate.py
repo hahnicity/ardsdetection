@@ -46,9 +46,11 @@ class Dataset(object):
         ('dyn_compliance', 39),
     ]
     flow_time_optimal = necessities + [
-        ('pef_+0.16_to_zero', 37),
+        ('dyn_compliance', 39),
         ('TVratio', 11),
-        ('eTime', 7)
+        ('mean_flow_from_pef', 38),
+        ('eTime', 7),
+        ('I:E ratio', 5),
     ]
     broad_feature_set = flow_time_feature_set + [
         ('TVi', 9),

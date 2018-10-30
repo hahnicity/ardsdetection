@@ -13,6 +13,7 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from sklearn.cross_validation import KFold, train_test_split
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import RandomForestClassifier
@@ -22,6 +23,10 @@ from sklearn.preprocessing import MinMaxScaler
 
 from collate import Dataset
 from metrics import *
+
+sns.set()
+sns.set_style('ticks')
+sns.set_context('paper')
 
 
 class ARDSDetectionModel(object):
@@ -222,7 +227,7 @@ class ARDSDetectionModel(object):
         self.aggregate_results()
         if not self.args.no_print_results:
             self.print_aggregate_results()
-        if self.args.plot_predictions:
+        if self.args.plot_predictions or self.args.plot_disease_evolution:
             self.plot_predictions()
 
     def convert_loc_to_iloc(self, df, loc_indices):
@@ -302,50 +307,64 @@ class ARDSDetectionModel(object):
         """
         Plot votes on specific class was predicted for each patient.
         """
-        # plot fraction of votes for all patients
-        step_size = 10
-        for i in range(0, len(self.patient_results), step_size):
-            slice = self.patient_results.loc[i:i+step_size]
-            ind = np.arange(len(slice))
-            bottom = np.zeros(len(ind))
-            plots = []
-            totals = [0] * len(ind)
-            vote_cols = ['{}_votes'.format(patho) for _, patho in self.pathos.items()]
-            # get sum of votes across all patients
-            total_votes = slice[vote_cols].sum(axis=1).values
-            for n, patho in self.pathos.items():
-                plots.append(plt.bar(ind, slice['{}_votes'.format(patho)].values / total_votes, bottom=bottom))
-                bottom = bottom + (slice['{}_votes'.format(patho)].values / total_votes)
-            plt.xticks(ind, slice.patient.str[:4].values, rotation=65)
-            plt.ylabel('frac votes')
-            plt.legend([p[0] for p in plots], [patho for _, patho in self.pathos.items()])
-            plt.subplots_adjust(bottom=0.15)
-            plt.show()
+        colors = ['viridian', 'pumpkin orange', 'eggplant']
+        #fontname = 'Osaka'
+        cmap = sns.color_palette(sns.xkcd_palette(colors))
+        plt.rcParams['font.family'] = 'Osaka'
+        plt.rcParams['legend.loc'] = 'upper right'
+        if self.args.plot_predictions:
+            # plot fraction of votes for all patients
+            step_size = 10
+            for i in range(0, len(self.patient_results), step_size):
+                slice = self.patient_results.loc[i:i+step_size]
+                ind = np.arange(len(slice))
+                bottom = np.zeros(len(ind))
+                plots = []
+                totals = [0] * len(ind)
+                vote_cols = ['{}_votes'.format(patho) for _, patho in self.pathos.items()]
+                # get sum of votes across all patients
+                total_votes = slice[vote_cols].sum(axis=1).values
+                for n, patho in self.pathos.items():
+                    plots.append(plt.bar(ind, slice['{}_votes'.format(patho)].values / total_votes, bottom=bottom, color=cmap[n]))
+                    bottom = bottom + (slice['{}_votes'.format(patho)].values / total_votes)
+                plt.xticks(ind, slice.patient.str[:4].values, rotation=65)
+                plt.ylabel('frac votes')
+                plt.legend([p[0] for p in plots], [patho for _, patho in self.pathos.items()])
+                plt.subplots_adjust(bottom=0.15)
+                plt.show()
 
-        # Plot fraction of votes for a single patient over 24 hrs.
-        for pt, (pt_rows, pt_preds) in self.patient_predictions.items():
-            pt_rows['pred'] = pt_preds
-            hour_preds = pt_rows[['hour', 'pred']]
-            bar_data = [[0] * len(self.pathos) for _ in range(24)]
-            for hour in range(0, 24):
-                hour_frame = hour_preds[hour_preds.hour == hour]
-                counts = hour_frame.pred.value_counts()
+        if self.args.plot_disease_evolution:
+            # Plot fraction of votes for a single patient over 24 hrs.
+            for pt, (pt_rows, pt_preds) in self.patient_predictions.items():
+                pt_rows['pred'] = pt_preds
+                hour_preds = pt_rows[['hour', 'pred']]
+                bar_data = [[0] * len(self.pathos) for _ in range(24)]
+                for hour in range(0, 24):
+                    hour_frame = hour_preds[hour_preds.hour == hour]
+                    counts = hour_frame.pred.value_counts()
+                    for n in self.pathos:
+                        try:
+                            bar_data[hour][n] = counts[n] / float(counts.sum())
+                        except (IndexError, KeyError):
+                            continue
+                plots = []
+                bottom = np.zeros(24)
                 for n in self.pathos:
-                    try:
-                        bar_data[hour][n] = counts[n] / float(counts.sum())
-                    except (IndexError, KeyError):
-                        continue
-            plots = []
-            bottom = np.zeros(24)
-            for n in self.pathos:
-                bar_fracs = np.array([bar_data[hour][n] for hour in range(0, 24)])
-                plots.append(plt.bar(range(0, 24), bar_fracs, bottom=bottom))
-                bottom = bottom + bar_fracs
-            plt.title(pt)
-            plt.ylabel('frac predicted')
-            plt.xlabel('hour')
-            plt.legend([p[0] for p in plots], [patho for _, patho in self.pathos.items()])
-            plt.show()
+                    bar_fracs = np.array([bar_data[hour][n] for hour in range(0, 24)])
+                    plots.append(plt.bar(range(0, 24), bar_fracs, bottom=bottom, color=cmap[n]))
+                    bottom = bottom + bar_fracs
+
+                plt.title(pt, fontsize=11)
+                plt.ylabel('Fraction Predicted')
+                plt.xlabel('Hour')
+                plt.xlim(-.8, 23.8)
+                plt.legend([
+                    "{}: {}%".format(patho, round(len(pt_preds[pt_preds == n]) / float(len(pt_preds)), 3)*100)
+                    for n, patho in self.pathos.items()
+                ], fontsize=11)
+                plt.yticks(np.arange(0, 1.01, .1))
+                plt.xticks([0, 5, 11, 17, 23], [1, 6, 12, 18, 24])
+                plt.show()
 
     def aggregate_results(self):
         """
@@ -436,6 +455,7 @@ def build_parser():
     parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1+4')
     parser.add_argument("--no-copd-to-ctrl", action="store_true", help='Dont convert copd annotations to ctrl annotations')
     parser.add_argument('--no-print-results', action='store_true', help='Dont print results of our model')
+    parser.add_argument('--plot-disease-evolution', action='store_true', help='Plot evolution of disease over time')
     parser.add_argument('--plot-predictions', action='store_true', help='Plot prediction bars')
     return parser
 
