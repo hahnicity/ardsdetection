@@ -63,7 +63,7 @@ class ARDSDetectionModel(object):
         results_cols += ["model_idx", "prediction"]
         self.results = pd.DataFrame([], columns=results_cols)
         self.patient_results = pd.DataFrame(
-            [], columns=['patient'] + ["{}_votes".format(patho) for _, patho in self.pathos.items()]
+            [], columns=['patient'] + ["{}_votes".format(patho) for _, patho in self.pathos.items()] + ['actual']
         )
         self.patient_predictions = {}
 
@@ -270,7 +270,7 @@ class ARDSDetectionModel(object):
             pt_pred = predictions.loc[pt_rows.index]
             self.patient_predictions[pt] = (pt_rows, pt_pred)
 
-            self.patient_results.loc[pt_idx] = [pt] + [len(pt_pred[pt_pred == n]) for n in self.pathos]
+            self.patient_results.loc[pt_idx] = [pt] + [len(pt_pred[pt_pred == n]) for n in self.pathos] + [pt_actual.unique()[0]]
 
             i = len(self.results)
             pt_results = [pt, patho_n]
@@ -316,7 +316,7 @@ class ARDSDetectionModel(object):
             # plot fraction of votes for all patients
             step_size = 10
             for i in range(0, len(self.patient_results), step_size):
-                slice = self.patient_results.loc[i:i+step_size]
+                slice = self.patient_results.loc[i:i+step_size-1]
                 ind = np.arange(len(slice))
                 bottom = np.zeros(len(ind))
                 plots = []
@@ -327,9 +327,11 @@ class ARDSDetectionModel(object):
                 for n, patho in self.pathos.items():
                     plots.append(plt.bar(ind, slice['{}_votes'.format(patho)].values / total_votes, bottom=bottom, color=cmap[n]))
                     bottom = bottom + (slice['{}_votes'.format(patho)].values / total_votes)
-                plt.xticks(ind, slice.patient.str[:4].values, rotation=65)
-                plt.ylabel('frac votes')
-                plt.legend([p[0] for p in plots], [patho for _, patho in self.pathos.items()])
+                plt.xticks(ind, slice.patient.str[:4].values, rotation=45)
+                plt.ylabel('Fraction Votes')
+                plt.xlabel('Patient Token ID')
+                plt.legend([p[0] for p in plots], [patho for _, patho in self.pathos.items()], fontsize=11)
+                plt.yticks(np.arange(0, 1.01, .1))
                 plt.subplots_adjust(bottom=0.15)
                 plt.show()
 
