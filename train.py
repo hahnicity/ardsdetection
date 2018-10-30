@@ -166,9 +166,13 @@ class ARDSDetectionModel(object):
             idxs = [([], x.index)]
 
         try:
-            x = x.drop(['y', 'patient', 'ventBN', 'set_type', 'hour'], axis=1)
+            x = x.drop(['hour'], axis=1)
+        except:
+            pass
+        try:
+            x = x.drop(['y', 'patient', 'ventBN', 'set_type'], axis=1)
         except:  # maybe we didnt define ventBN, its not that important anyhow.
-            x = x.drop(['y', 'patient', 'set_type', 'hour'], axis=1)
+            x = x.drop(['y', 'patient', 'set_type'], axis=1)
 
         for train_idx, test_idx in idxs:
             x_train = x.loc[train_idx].dropna()
