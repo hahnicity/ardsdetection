@@ -3,12 +3,13 @@ from datetime import datetime, timedelta
 import os
 import re
 import subprocess
+from warnings import warn
 
 import pandas as pd
 
 SERVER_NAME = 'b2c-compute'
 SERVER_DIRNAME = '/x1/data/results/backups'
-# XXX change in future to be generalizable
+# XXX change in future to be generalizable to testing cohorts
 DATA_PATH = 'data/experiment{num}/training/raw'
 
 
@@ -63,35 +64,36 @@ def copy_ards_patient(row, experiment_num):
 
 
 def copy_non_ards_patient(row, experiment_num):
-    # XXX Currently we do not know when patient was first intubated, so for
-    # now it might be best to just gather first 24 hrs of data. But in future
-    # we will need to gather first 24 exclusively
     patient_id = row['Patient Unique Identifier']
-    first_file_cmd = "ls {} | head -n 1".format(os.path.join(SERVER_DIRNAME, patient_id, '*.csv'))
-    proc = subprocess.Popen(['ssh', SERVER_NAME, first_file_cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-    stdout = stdout.strip()
-    if isinstance(stdout, bytes):
-        stdout = stdout.decode('utf-8')
-
-    if stdout == '':
-        print('No files found for patient: {}'.format(patient_id))
-        return
-
-    if int(patient_id[:4]) <= 50:
-        date_fmt = r'(\d{4}-\d{2}-\d{2}__\d{2}:\d{2})'
-        strp_fmt = '%Y-%m-%d__%H:%M'
-    else:
-        date_fmt = r'(\d{4}-\d{2}-\d{2}-\d{2}-\d{2})'
-        strp_fmt = '%Y-%m-%d-%H-%M'
-
-    date_str = re.search(date_fmt, stdout).groups()[0]
     try:
-        init_dt = datetime.strptime(date_str, strp_fmt)
+        dt = datetime.strptime(row['vent_start_time'], '%m/%d/%y %H:%M')
     except ValueError:
-        print('Was unable to get first file for patient: {}'.format(patient_id))
-        return
-    get_first_days_data(patient_id, init_dt, experiment_num)
+        warn('Unable to find a vent start time for patient: {}. Now looking for first file collected. However in future this may not be permissive.'.format(patient_id))
+        first_file_cmd = "ls {} | head -n 1".format(os.path.join(SERVER_DIRNAME, patient_id, '*.csv'))
+        proc = subprocess.Popen(['ssh', SERVER_NAME, first_file_cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+        stdout = stdout.strip()
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode('utf-8')
+
+        if stdout == '':
+            print('No files found for patient: {}'.format(patient_id))
+            return
+
+        if int(patient_id[:4]) <= 50:
+            date_fmt = r'(\d{4}-\d{2}-\d{2}__\d{2}:\d{2})'
+            strp_fmt = '%Y-%m-%d__%H:%M'
+        else:
+            date_fmt = r'(\d{4}-\d{2}-\d{2}-\d{2}-\d{2})'
+            strp_fmt = '%Y-%m-%d-%H-%M'
+
+        date_str = re.search(date_fmt, stdout).groups()[0]
+        try:
+            dt = datetime.strptime(date_str, strp_fmt)
+        except ValueError:
+            print('Was unable to get first file for patient: {}'.format(patient_id))
+            return
+    get_first_days_data(patient_id, dt, experiment_num)
 
 
 def main():
