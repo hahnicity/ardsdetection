@@ -67,7 +67,7 @@ def copy_non_ards_patient(row, experiment_num):
     patient_id = row['Patient Unique Identifier']
     try:
         dt = datetime.strptime(row['vent_start_time'], '%m/%d/%y %H:%M')
-    except ValueError:
+    except TypeError:
         warn('Unable to find a vent start time for patient: {}. Now looking for first file collected. However in future this may not be permissive.'.format(patient_id))
         first_file_cmd = "ls {} | head -n 1".format(os.path.join(SERVER_DIRNAME, patient_id, '*.csv'))
         proc = subprocess.Popen(['ssh', SERVER_NAME, first_file_cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
