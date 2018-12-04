@@ -218,9 +218,15 @@ class Dataset(object):
                     strp_fmt = '%Y-%m-%d-%H-%M'
 
                 if 'ARDS' not in patho:
-                    first_file = sorted(files)[0]
-                    date_str = re.search(date_fmt, first_file).groups()[0]
-                    pt_start_time = np.datetime64(datetime.strptime(date_str, strp_fmt)) + np.timedelta64(start_hour_delta, 'h')
+                    pt_start_time = pt_row['vent_start_time']
+                    # XXX in future change this behavior if we don't want to use patients
+                    # without a vent start time
+                    if pt_start_time is np.nan:
+                        first_file = sorted(files)[0]
+                        date_str = re.search(date_fmt, first_file).groups()[0]
+                        pt_start_time = np.datetime64(datetime.strptime(date_str, strp_fmt)) + np.timedelta64(start_hour_delta, 'h')
+                    else:
+                        pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M")) + np.timedelta64(start_hour_delta, 'h')
 
                 # Handle COPD+ARDS as just ARDS wrt to the model for now. We can be
                 # more granular later
