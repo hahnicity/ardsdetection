@@ -19,18 +19,20 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--from-pickle')
     parser.add_argument('-t', '--to-pickle')
+    parser.add_argument('-d', '--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
+    parser.add_argument('-e', '--experiment', default='1')
     args = parser.parse_args()
 
     if args.from_pickle:
         df = pd.read_pickle(args.from_pickle)
     else:
-        cls = Dataset('cohort-description.csv', 'flow_time', 20, True, '1+4', 24, 0, 'median')
+        cls = Dataset(args.cohort_description, 'flow_time', 20, True, args.experiment, 24, 0, 'mean')
         df = cls.get_unframed_dataset()
 
     if args.to_pickle:
         pd.to_pickle(df, args.to_pickle)
 
-    desc = pd.read_csv('cohort-description.csv')
+    desc = pd.read_csv(args.cohort_description)
     hour_bins = {}
     for patient in df.patient.unique():
         hour_bins[patient] = {i: 0 for i in range(24)}

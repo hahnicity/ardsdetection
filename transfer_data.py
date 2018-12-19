@@ -98,8 +98,8 @@ def copy_non_ards_patient(row, experiment_num):
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument('--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
-    parser.add_argument('-e', '--experiment', default=1, choices=[1, 2, 3, 4], type=int)
+    parser.add_argument('-d', '--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
+    parser.add_argument('-e', '--experiment', default=1, choices=[1, 2, 3, 4, 5], type=int)
     parser.add_argument('-p', '--only-patient', help='Only gather data for specific patient id')
 
     args = parser.parse_args()
