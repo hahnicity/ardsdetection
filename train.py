@@ -6,6 +6,7 @@ Performs learning for our classifier
 """
 from argparse import ArgumentParser
 import csv
+from math import sqrt, ceil
 import operator
 from random import randint, sample
 import time
@@ -337,36 +338,55 @@ class ARDSDetectionModel(object):
 
         if self.args.plot_disease_evolution:
             # Plot fraction of votes for a single patient over 24 hrs.
-            for pt, (pt_rows, pt_preds) in self.patient_predictions.items():
-                pt_rows['pred'] = pt_preds
-                hour_preds = pt_rows[['hour', 'pred']]
-                bar_data = [[0] * len(self.pathos) for _ in range(24)]
-                for hour in range(0, 24):
-                    hour_frame = hour_preds[hour_preds.hour == hour]
-                    counts = hour_frame.pred.value_counts()
-                    for n in self.pathos:
-                        try:
-                            bar_data[hour][n] = counts[n] / float(counts.sum())
-                        except (IndexError, KeyError):
-                            continue
-                plots = []
-                bottom = np.zeros(24)
-                for n in self.pathos:
-                    bar_fracs = np.array([bar_data[hour][n] for hour in range(0, 24)])
-                    plots.append(plt.bar(range(0, 24), bar_fracs, bottom=bottom, color=cmap[n]))
-                    bottom = bottom + bar_fracs
-
-                plt.title(pt, fontsize=11)
-                plt.ylabel('Fraction Predicted')
-                plt.xlabel('Hour')
-                plt.xlim(-.8, 23.8)
-                plt.legend([
-                    "{}: {}%".format(patho, round(len(pt_preds[pt_preds == n]) / float(len(pt_preds)), 3)*100)
-                    for n, patho in self.pathos.items()
-                ], fontsize=11)
-                plt.yticks(np.arange(0, 1.01, .1))
-                plt.xticks([0, 5, 11, 17, 23], [1, 6, 12, 18, 24])
+            if not self.args.tiled_disease_evol:
+                for pt, (pt_rows, pt_preds) in self.patient_predictions.items():
+                    self.plot_disease_evolution(pt, pt_rows, pt_preds, cmap)
+                    plt.show()
+            else:
+                # just focus on ARDS for now.
+                #
+                # want to have true ARDS, false pos ARDS, false neg ARDS, and true neg ARDS
+                true_pos = self.results[(self.results.patho == 1) & (self.results.prediction == 1)].patient
+                true_neg = self.results[(self.results.patho != 1) & (self.results.prediction != 1)].patient
+                false_pos = self.results[(self.results.patho != 1) & (self.results.prediction == 1)].patient
+                false_neg = self.results[(self.results.patho == 1) & (self.results.prediction != 1)].patient
+                tp_layout = int(ceil(sqrt(len(true_pos))))
+                for idx, pt in enumerate(true_pos):
+                    pt_rows, pt_preds = self.patient_predictions[pt]
+                    plt.subplot(tp_layout, tp_layout, idx+1)
+                    self.plot_disease_evolution(pt, pt_rows, pt_preds, cmap, legend=False, fontsize=3)
                 plt.show()
+
+    def plot_disease_evolution(self, pt, pt_rows, pt_preds, cmap, legend=True, fontsize=11):
+        pt_rows['pred'] = pt_preds
+        hour_preds = pt_rows[['hour', 'pred']]
+        bar_data = [[0] * len(self.pathos) for _ in range(24)]
+        for hour in range(0, 24):
+            hour_frame = hour_preds[hour_preds.hour == hour]
+            counts = hour_frame.pred.value_counts()
+            for n in self.pathos:
+                try:
+                    bar_data[hour][n] = counts[n] / float(counts.sum())
+                except (IndexError, KeyError):
+                    continue
+        plots = []
+        bottom = np.zeros(24)
+        for n in self.pathos:
+            bar_fracs = np.array([bar_data[hour][n] for hour in range(0, 24)])
+            plots.append(plt.bar(range(0, 24), bar_fracs, bottom=bottom, color=cmap[n]))
+            bottom = bottom + bar_fracs
+
+        plt.title(pt, fontsize=fontsize)
+        plt.ylabel('Fraction Predicted', fontsize=fontsize)
+        plt.xlabel('Hour', fontsize=fontsize)
+        plt.xlim(-.8, 23.8)
+        if legend:
+            plt.legend([
+                "{}: {}%".format(patho, round(len(pt_preds[pt_preds == n]) / float(len(pt_preds)), 3)*100)
+                for n, patho in self.pathos.items()
+            ], fontsize=fontsize)
+        plt.yticks(np.arange(0, 1.01, .1))
+        plt.xticks([0, 5, 11, 17, 23], [1, 6, 12, 18, 24])
 
     def aggregate_results(self):
         """
@@ -459,6 +479,7 @@ def build_parser():
     parser.add_argument('--no-print-results', action='store_true', help='Dont print results of our model')
     parser.add_argument('--plot-disease-evolution', action='store_true', help='Plot evolution of disease over time')
     parser.add_argument('--plot-predictions', action='store_true', help='Plot prediction bars')
+    parser.add_argument('--tiled-disease-evol', action='store_true', help='Plot disease evolution in tiled manner')
     return parser
 
 
