@@ -350,14 +350,21 @@ class ARDSDetectionModel(object):
                 true_neg = self.results[(self.results.patho != 1) & (self.results.prediction != 1)].patient
                 false_pos = self.results[(self.results.patho != 1) & (self.results.prediction == 1)].patient
                 false_neg = self.results[(self.results.patho == 1) & (self.results.prediction != 1)].patient
-                tp_layout = int(ceil(sqrt(len(true_pos))))
-                for idx, pt in enumerate(true_pos):
-                    pt_rows, pt_preds = self.patient_predictions[pt]
-                    plt.subplot(tp_layout, tp_layout, idx+1)
-                    self.plot_disease_evolution(pt, pt_rows, pt_preds, cmap, legend=False, fontsize=3)
-                plt.show()
+                for arr, title in [
+                    (true_pos, 'ARDS True Pos'),
+                    (true_neg, 'ARDS True Neg'),
+                    (false_pos, 'ARDS False Pos'),
+                    (false_neg, 'ARDS False Neg'),
+                ]:
+                    for idx, pt in enumerate(arr):
+                        layout = int(ceil(sqrt(len(arr))))
+                        plt.suptitle(title)
+                        pt_rows, pt_preds = self.patient_predictions[pt]
+                        plt.subplot(layout, layout, idx+1)
+                        self.plot_disease_evolution(pt, pt_rows, pt_preds, cmap, legend=False, fontsize=6, xylabel=False, xy_visible=False)
+                    plt.show()
 
-    def plot_disease_evolution(self, pt, pt_rows, pt_preds, cmap, legend=True, fontsize=11):
+    def plot_disease_evolution(self, pt, pt_rows, pt_preds, cmap, legend=True, fontsize=11, xylabel=True, xy_visible=True):
         pt_rows['pred'] = pt_preds
         hour_preds = pt_rows[['hour', 'pred']]
         bar_data = [[0] * len(self.pathos) for _ in range(24)]
@@ -376,17 +383,22 @@ class ARDSDetectionModel(object):
             plots.append(plt.bar(range(0, 24), bar_fracs, bottom=bottom, color=cmap[n]))
             bottom = bottom + bar_fracs
 
-        plt.title(pt, fontsize=fontsize)
-        plt.ylabel('Fraction Predicted', fontsize=fontsize)
-        plt.xlabel('Hour', fontsize=fontsize)
+        plt.title(pt, fontsize=fontsize, pad=1)
+        if xylabel:
+            plt.ylabel('Fraction Predicted', fontsize=fontsize)
+            plt.xlabel('Hour', fontsize=fontsize)
         plt.xlim(-.8, 23.8)
         if legend:
             plt.legend([
                 "{}: {}%".format(patho, round(len(pt_preds[pt_preds == n]) / float(len(pt_preds)), 3)*100)
                 for n, patho in self.pathos.items()
             ], fontsize=fontsize)
-        plt.yticks(np.arange(0, 1.01, .1))
-        plt.xticks([0, 5, 11, 17, 23], [1, 6, 12, 18, 24])
+        if not xy_visible:
+            plt.yticks([])
+            plt.xticks([])
+        else:
+            plt.yticks(np.arange(0, 1.01, .1))
+            plt.xticks([0, 5, 11, 17, 23], [1, 6, 12, 18, 24])
 
     def aggregate_results(self):
         """
