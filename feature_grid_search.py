@@ -94,7 +94,7 @@ def main():
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
     parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1+4')
     parser.add_argument("-fs", "--frame-size", default=20, type=int)
-    parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var'], default='median')
+    parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var', 'std', 'mean+var', 'mean+std', 'median+var', 'median+std'], default='median')
     parser.add_argument('-tfs', "--test-frame-size", default=None, type=int)
     parser.add_argument('-tsd', '--test-start-hour-delta', default=None, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data. Only for usage in testing set')
     parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)

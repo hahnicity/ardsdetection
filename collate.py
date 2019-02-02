@@ -96,7 +96,7 @@ class Dataset(object):
         :param experiment_num: The experiment we wish to run
         :param post_hour: The number of hours post ARDS diagnosis we wish to examine
         :param start_hour_delta: The hour delta that we want to start looking at data for
-        :param frame_func: Function to apply on breath frames. choices: median, mean, var
+        :param frame_func: Function to apply on breath frames. choices: median, mean, var, mean+var, median+var, mean+std, median+std
         :param test_frame_size: frame size to set only for testing set
         :param test_post_hour: post_hour to set only for testing set
         :param test_start_hour_delta: start delta to set only for testing set
@@ -135,14 +135,19 @@ class Dataset(object):
         elif feature_set == 'custom':
             self.features = OrderedDict(custom_features)
 
-        if frame_func == 'median':
-            self.frame_func = np.median
-        elif frame_func == 'mean':
-            self.frame_func = np.mean
-        elif frame_func == 'var':
-            self.frame_func = np.var
-        else:
-            raise Exception('Chosen frame function: {} is not currently supported!'.format(frame_func))
+        frame_funcs = frame_func.split('+')
+        self.frame_funcs = []
+        for func in frame_funcs:
+            if func == 'median':
+                self.frame_funcs.append(np.median)
+            elif func == 'mean':
+                self.frame_funcs.append(np.mean)
+            elif func == 'var':
+                self.frame_funcs.append(np.var)
+            elif func == 'std':
+                self.frame_funcs.append(np.std)
+            else:
+                raise Exception('Chosen frame function: {} is not currently supported!'.format(frame_func))
 
         self.frame_size = frame_size
         self.load_intermediates = load_intermediates
@@ -320,8 +325,22 @@ class Dataset(object):
         # If all data was filtered by our starting time criteria
         if len(meta) == 0:
             meta = []
-        cols = list(self.features.keys())
+
+        cols = []
+        for idx, func in enumerate(self.frame_funcs):
+            cols.extend(["{}_{}".format(func.__name__, feature) for feature in self.features.keys()])
+            # perform a bit of cleanup on hour and ventBN cols
+            if idx == 0:
+                hour_colname = 'hour'
+                ventbn_colname = 'ventBN'
+            elif idx > 0:
+                hour_colname = 'dropme'
+                ventbn_colname = 'dropme'
+            cols[cols.index('{}_hour'.format(func.__name__))] = hour_colname
+            cols[cols.index('{}_ventBN'.format(func.__name__))] = ventbn_colname
+
         df = pd.DataFrame(meta, columns=cols)
+        df = df.drop(['dropme'], axis=1)
         df['patient'] = patient_id
         return df
 
@@ -417,7 +436,15 @@ class Dataset(object):
         # make sure we capture the last frame even if it's not as complete as we
         # might like it to be
         for low_idx in range(0, len(mat), frame_size):
+            row = None
             stack = mat[low_idx:low_idx+frame_size]
             # We still have ventBN in the matrix, and this essentially gives average BN
-            stacks.append(self.frame_func(stack, axis=0))
+            #
+            # axis=0 takes function across a column
+            for func in self.frame_funcs:
+                if row is None:
+                    row = func(stack, axis=0)
+                else:
+                    row = np.append(row, func(stack, axis=0))
+            stacks.append(row)
         return np.array(stacks)

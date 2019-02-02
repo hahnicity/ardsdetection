@@ -478,7 +478,7 @@ def build_parser():
     parser.add_argument('--load-scaler')
     parser.add_argument("--folds", type=int, default=10)
     parser.add_argument('-fs', "--frame-size", default=20, type=int)
-    parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var'], default='median')
+    parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var', 'std', 'mean+var', 'mean+std', 'median+var', 'median+std'], default='median')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
     parser.add_argument('-tfs', "--test-frame-size", default=None, type=int)
