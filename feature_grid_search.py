@@ -64,7 +64,7 @@ def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
             main_args.test_frame_size,
             main_args.test_post_hour,
             main_args.test_start_hour_delta,
-            custom_features=combo
+            custom_vent_features=combo,
         ).get()
 
     top_auc = 0

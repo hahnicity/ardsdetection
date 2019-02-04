@@ -19,6 +19,8 @@ import pandas as pd
 from algorithms.breath_meta import get_file_experimental_breath_meta
 from algorithms.constants import EXPERIMENTAL_META_HEADER
 
+EHR_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv')
+
 
 class Dataset(object):
     # Feature sets are mapped by (feature_name, breath_meta_feature_index)
@@ -69,6 +71,28 @@ class Dataset(object):
         ('PIP', 15),
         ('iTime', 6),
     ]
+    ehr_features = [
+        "TEMPERATURE_F",
+        "WBC",
+        # For now just focus on arterial vars, we can figure out what to do
+        # with venous information later
+        #
+        # also: pco2 doesn't correlate well with abg and vbg, which may diminish utility
+        "ABG_P_F_RATIO",
+        "ABG_PH_ARTERIAL",
+        "PCO2_ARTERIAL",
+        #
+        # XXX Vent ratio?? = (min vent * pco2) / (pbw * 100 * 37.5)
+        # supposed to correspond well with dead space
+        # https://www.atsjournals.org/doi/pdf/10.1164/rccm.201804-0692OC
+    ]
+    demographic_features = [
+        "age",
+        "sex",
+        "height",
+        'pbw',  # predicted body weight
+        'mbw',  # measured body weight
+    ]
 
     def __init__(self,
                  cohort_description,
@@ -82,7 +106,9 @@ class Dataset(object):
                  test_frame_size=None,
                  test_post_hour=None,
                  test_start_hour_delta=None,
-                 custom_features=None):
+                 custom_vent_features=None,
+                 use_ehr_features=True,
+                 use_demographic_features=True):
         """
         Define a dataset for use in training an ARDS detection algorithm. If we desire we can
         have separate parameterization for train and test sets. This causes a completely new
@@ -100,7 +126,9 @@ class Dataset(object):
         :param test_frame_size: frame size to set only for testing set
         :param test_post_hour: post_hour to set only for testing set
         :param test_start_hour_delta: start delta to set only for testing set
-        :param custom_features: If you set features manually you must specify which to use in format (feature name, index)
+        :param custom_vent_features: If you set features manually you must specify which to use in format (feature name, index)
+        :param use_ehr_features: Should we use EHR derived features?
+        :param use_demographic_features: Should we use demographic features?
         """
         raw_dirs = []
         for i in experiment_num.split('+'):
@@ -133,7 +161,7 @@ class Dataset(object):
         elif feature_set == 'broad_opt':
             self.features = OrderedDict(self.broad_optimal)
         elif feature_set == 'custom':
-            self.features = OrderedDict(custom_features)
+            self.features = OrderedDict(custom_vent_features)
 
         frame_funcs = frame_func.split('+')
         self.frame_funcs = []
@@ -156,6 +184,9 @@ class Dataset(object):
         self.test_frame_size = test_frame_size if isinstance(test_frame_size, int) else frame_size
         self.test_post_hour = test_post_hour if isinstance(test_post_hour, int) else post_hour
         self.test_start_hour_delta = test_start_hour_delta if isinstance(test_start_hour_delta, int) else start_hour_delta
+        # XXX Add use_vent_features
+        self.use_ehr_features = use_ehr_features
+        self.use_demographic_features = use_demographic_features
 
     def get(self):
         """
@@ -311,14 +342,16 @@ class Dataset(object):
         :param post_hour: numpy datetime that we want to end analysis
         :param frame_size: size of frames to use
         """
+        # PROCESS ALL VENTILATOR DATA
+        #
         # Cut off the header with [1:]
         meta = self.load_breath_meta_file(pt_files[0])
         for f in pt_files[1:]:
             meta.extend(self.load_breath_meta_file(f))
 
         if len(meta) != 0:
-            meta = self.process_features(np.array(meta), start_time, post_hour)
-            meta = self.create_frames(meta, frame_size)
+            meta, bs_times = self.process_breath_features(np.array(meta), start_time, post_hour)
+            meta, stack_times = self.create_breath_frames(meta, frame_size, bs_times)
             if len(meta) == 0:
                 warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
 
@@ -339,6 +372,14 @@ class Dataset(object):
             cols[cols.index('{}_hour'.format(func.__name__))] = hour_colname
             cols[cols.index('{}_ventBN'.format(func.__name__))] = ventbn_colname
 
+        # PROCESS EHR DATA
+        if self.use_ehr_features:
+            ehr_data = pd.read_csv(EHR_DATA_PATH)
+            necessary_ehr_cols = ['PATIENT_ID', 'DATA_TIME']
+            ehr_data = ehr_data[necessary_ehr_cols + self.ehr_features]
+            # XXX link ehr data to vent data
+
+        # PROCESS DEMOGRAPHIC DATA
         df = pd.DataFrame(meta, columns=cols)
         try:
             df = df.drop(['dropme'], axis=1)
@@ -349,8 +390,10 @@ class Dataset(object):
 
     def process_unframed_patient_data(self, patient_id, pt_files, start_time, post_hour):
         """
-        Process all patient data so that we can gather a comprehensive inventory of all their
-        data occurring at their given times
+        Process all patient data so that we can gather a comprehensive inventory of all
+        patient data occurring at a given time. This is useful for categorizing how
+        many breaths we have from a patient, when the breaths occurred, and how
+        many patients we have in aggregate
         """
         meta = self.load_breath_meta_file(pt_files[0])
         for f in pt_files[1:]:
@@ -363,10 +406,10 @@ class Dataset(object):
             meta = meta[meta[:, 29].argsort()]
             if start_time is not None:
                 try:
-                    dt = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+                    bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
                 except ValueError:
-                    dt = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
-                mask = dt <= (start_time + np.timedelta64(post_hour, 'h'))
+                    bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+                mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
                 meta = meta[mask]
 
         # If all data was filtered by our starting time criteria
@@ -392,9 +435,11 @@ class Dataset(object):
         df['patient'] = patient_id
         return df
 
-    def process_features(self, mat, start_time, post_hour):
+    def process_breath_features(self, mat, start_time, post_hour):
         """
-        Preprocess all breath_meta information
+        Preprocess all breath_meta information. This mainly involves cutting the
+        data off when it doesn't correspond to the 24 hr window we're interested in
+        examining
 
         :param mat: matrix of data to process
         :param start_time: time we wish to start using data from patient
@@ -404,43 +449,48 @@ class Dataset(object):
         mat = mat[mat[:, 29].argsort()]
         if start_time is not None:
             try:
-                dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+                bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
             except ValueError:
-                dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
-            mask = dt <= (start_time + np.timedelta64(post_hour, 'h'))
+                bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+            mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
             mat = mat[mask]
 
         hour_row = np.zeros((len(mat), 1))
         try:
-            dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+            bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
         except ValueError:
-            dt = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+            bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
         for hour in range(0, 24):
             mask = np.logical_and(
-                (start_time + np.timedelta64(hour, 'h')) <= dt,
-                (start_time + np.timedelta64(hour+1, 'h')) > dt
+                (start_time + np.timedelta64(hour, 'h')) <= bs_times,
+                (start_time + np.timedelta64(hour+1, 'h')) > bs_times
             )
             hour_row[mask] = hour
         row_idxs = list(self.features.values())
         mat = np.append(mat, hour_row, axis=1)
+        # XXX make sure that we don't drop bs information. We will need to use it
+        # for linking to EHR data.
         mat = mat[:, row_idxs]
         mat = mat.astype(np.float32)
         mask = np.any(np.isnan(mat) | np.isinf(mat), axis=1)
-        return mat[~mask]
+        return mat[~mask], bs_times[~mask]
 
-    def create_frames(self, mat, frame_size):
+    def create_breath_frames(self, mat, frame_size, bs_times):
         """
-        Find median of stacks of breaths on a matrix
+        Calculate our desired statistics on stacks of breaths.
 
         :param mat: Matrix to perform rolling average on.
         :param frame_size: number of breaths in stack
+        :param bs_times: breath start times for each breath in the matrix
         """
         stacks = []
+        stack_times = []
         # make sure we capture the last frame even if it's not as complete as we
         # might like it to be
         for low_idx in range(0, len(mat), frame_size):
             row = None
             stack = mat[low_idx:low_idx+frame_size]
+            stack_times.append(bs_times[low_idx:low_idx+frame_size][0])
             # We still have ventBN in the matrix, and this essentially gives average BN
             #
             # axis=0 takes function across a column
@@ -450,4 +500,4 @@ class Dataset(object):
                 else:
                     row = np.append(row, func(stack, axis=0))
             stacks.append(row)
-        return np.array(stacks)
+        return np.array(stacks), np.array(stack_times)
