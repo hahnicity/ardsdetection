@@ -51,6 +51,7 @@ def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
         if 'set_type' not in dataset.columns:
             dataset['set_type'] = 'train_test'
     else:
+        combo = list(combo) + [('ventBN', 2), ('hour', -1)]
         dataset = Dataset(
             model_args.cohort_description,
             'custom',
@@ -100,6 +101,7 @@ def main():
     parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)
     parser.add_argument('--threads', type=int, default=multiprocessing.cpu_count(), help="Set number of threads to use, otherwise all cores will be occupied")
     parser.add_argument('--auc-thresh', type=float, help='save datasets to file if they have an auc above this', default=.8)
+    parser.add_argument('--debug', action='store_true', help='debug whats going wrong with the script without implementing multiprocessing')
     main_args = parser.parse_args()
 
     # We're doing this because these args are not necessary, and we can just pass them
@@ -119,10 +121,14 @@ def main():
 
     input_gen = [(model_args, main_args, combo, idx, possible_folds, out_dir) for idx, combo in enumerate(feature_gen)]
 
-    pool = multiprocessing.Pool(main_args.threads)
-    results = pool.map(func_star, input_gen)
-    pool.close()
-    pool.join()
+    if not main_args.debug:
+        pool = multiprocessing.Pool(main_args.threads)
+        results = pool.map(func_star, input_gen)
+        pool.close()
+        pool.join()
+    else:
+        for args in input_gen:
+            run_model(*args)
 
     best = max([(features_run['idx'], features_run[folds]['auc']) for features_run in results for folds in possible_folds], key=lambda x: x[1])
     print('Best AUC: {}'.format(best[1]))

@@ -340,7 +340,10 @@ class Dataset(object):
             cols[cols.index('{}_ventBN'.format(func.__name__))] = ventbn_colname
 
         df = pd.DataFrame(meta, columns=cols)
-        df = df.drop(['dropme'], axis=1)
+        try:
+            df = df.drop(['dropme'], axis=1)
+        except KeyError:  # its possible we only have 1 feature type to use
+            pass
         df['patient'] = patient_id
         return df
 
