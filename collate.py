@@ -84,7 +84,6 @@ class Dataset(object):
         "ABG_P_F_RATIO",
         "ABG_PH_ARTERIAL",
         "PCO2_ARTERIAL",
-        #
         # XXX Vent ratio?? = (min vent * pco2) / (pbw * 100 * 37.5)
         # supposed to correspond well with dead space
         # https://www.atsjournals.org/doi/pdf/10.1164/rccm.201804-0692OC
@@ -201,6 +200,8 @@ class Dataset(object):
         self.use_demographic_features = use_demographic_features
         if use_demographic_features:
             self.demographic_data = pd.read_csv(DEMOGRAPHIC_DATA_PATH)
+            self.demographic_data.loc[self.demographic_data.SEX == 'M', 'SEX'] = 0
+            self.demographic_data.loc[self.demographic_data.SEX == 'F', 'SEX'] = 1
 
     def get(self):
         """
@@ -511,8 +512,6 @@ class Dataset(object):
             hour_row[mask] = hour
         row_idxs = list(self.features.values())
         mat = np.append(mat, hour_row, axis=1)
-        # XXX make sure that we don't drop bs information. We will need to use it
-        # for linking to EHR data.
         mat = mat[:, row_idxs]
         mat = mat.astype(np.float32)
         mask = np.any(np.isnan(mat) | np.isinf(mat), axis=1)
