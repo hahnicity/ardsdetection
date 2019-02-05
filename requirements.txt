@@ -1,10 +1,6 @@
-flask
+coloredlogs
 pandas
 numpy
 ipython
 scikit-learn
 scipy
-spark-sklearn
-flintrock
-twilio
-py4j

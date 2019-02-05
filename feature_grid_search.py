@@ -10,7 +10,7 @@ from sklearn.metrics import roc_auc_score
 from collate import Dataset
 from train import ARDSDetectionModel, build_parser
 
-DF_DIR = 'data/experiment{experiment_num}/training/grid_search/{feature_set}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}'
+DF_DIR = 'data/experiment{experiment_num}/training/grid_search/{feature_set}/ehr_{ehr_features}/demo_{demo_features}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}'
 
 
 def get_all_possible_features():
@@ -65,6 +65,8 @@ def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
             main_args.test_post_hour,
             main_args.test_start_hour_delta,
             custom_vent_features=combo,
+            use_ehr_features=main_args.use_ehr_features,
+            use_demographic_features=main_args.use_demographic_features,
         ).get()
 
     top_auc = 0
@@ -102,6 +104,8 @@ def main():
     parser.add_argument('--threads', type=int, default=multiprocessing.cpu_count(), help="Set number of threads to use, otherwise all cores will be occupied")
     parser.add_argument('--auc-thresh', type=float, help='save datasets to file if they have an auc above this', default=.8)
     parser.add_argument('--debug', action='store_true', help='debug whats going wrong with the script without implementing multiprocessing')
+    parser.add_argument('--use-ehr-features', action='store_true')
+    parser.add_argument('--use-demographic-features', action='store_true')
     main_args = parser.parse_args()
 
     # We're doing this because these args are not necessary, and we can just pass them
@@ -114,7 +118,19 @@ def main():
     results = {}
     feature_combos = get_all_possible_features()
     possible_folds = [5, 10]
-    out_dir = DF_DIR.format(experiment_num=main_args.experiment, feature_set=main_args.feature_set, sp=main_args.post_hour, sd=main_args.start_hour_delta, fs=main_args.frame_size, ff=main_args.frame_func, tfs=main_args.test_frame_size, tsd=main_args.test_start_hour_delta, tsp=main_args.test_post_hour)
+    out_dir = DF_DIR.format(
+        experiment_num=main_args.experiment,
+        feature_set=main_args.feature_set,
+        ehr_features='on' if main_args.use_ehr_features else 'off',
+        demo_features='on' if main_args.use_demographic_features else 'off',
+        sp=main_args.post_hour,
+        sd=main_args.start_hour_delta,
+        fs=main_args.frame_size,
+        ff=main_args.frame_func,
+        tfs=main_args.test_frame_size,
+        tsd=main_args.test_start_hour_delta,
+        tsp=main_args.test_post_hour
+    )
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     feature_gen = feature_combos['{}_gen'.format(main_args.feature_set)]
@@ -127,14 +143,28 @@ def main():
         pool.close()
         pool.join()
     else:
-        for args in input_gen:
-            run_model(*args)
+        results = []
+        for args in input_gen[:2]:
+            results.append(run_model(*args))
 
     best = max([(features_run['idx'], features_run[folds]['auc']) for features_run in results for folds in possible_folds], key=lambda x: x[1])
     print('Best AUC: {}'.format(best[1]))
     print('Best features: {}'.format(results[best[0]]))
     dict_ = pickle.dumps(results)
-    with open('experiment{}_{}_fs{}_ff{}_sd{}_sp{}_tfs{}_tsd{}_tsp{}_grid_search_results.pkl'.format(main_args.experiment, main_args.feature_set, main_args.frame_size, main_args.frame_func, main_args.start_hour_delta, main_args.post_hour, main_args.test_frame_size, main_args.test_start_hour_delta, main_args.test_post_hour), 'w') as f:
+    results_file = 'experiment{}_{}_ehr-{}_demo-{}_fs{}_ff{}_sd{}_sp{}_tfs{}_tsd{}_tsp{}_grid_search_results.pkl'.format(
+        main_args.experiment,
+        main_args.feature_set,
+        'on' if main_args.use_ehr_features else 'off',
+        'on' if main_args.use_demographic_features else 'off',
+        main_args.frame_size,
+        main_args.frame_func,
+        main_args.start_hour_delta,
+        main_args.post_hour,
+        main_args.test_frame_size,
+        main_args.test_start_hour_delta,
+        main_args.test_post_hour
+    )
+    with open(results_file, 'w') as f:
         f.write(dict_)
 
 
