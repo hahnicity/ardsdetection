@@ -9,16 +9,18 @@ from collections import OrderedDict
 import csv
 from datetime import datetime
 from glob import glob
+import logging
 import os
 import re
-from warnings import warn
 
+import coloredlogs
 import numpy as np
 import pandas as pd
 
 from algorithms.breath_meta import get_file_experimental_breath_meta
 from algorithms.constants import EXPERIMENTAL_META_HEADER
 
+coloredlogs.install()
 EHR_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv')
 
 
@@ -181,11 +183,19 @@ class Dataset(object):
         self.load_intermediates = load_intermediates
         self.post_hour = post_hour
         self.start_hour_delta = start_hour_delta
-        self.test_frame_size = test_frame_size if isinstance(test_frame_size, int) else frame_size
-        self.test_post_hour = test_post_hour if isinstance(test_post_hour, int) else post_hour
-        self.test_start_hour_delta = test_start_hour_delta if isinstance(test_start_hour_delta, int) else start_hour_delta
+        if test_frame_size or test_post_hour or test_start_hour_delta:
+            self.test_frame_size = test_frame_size if isinstance(test_frame_size, int) else frame_size
+            self.test_post_hour = test_post_hour if isinstance(test_post_hour, int) else post_hour
+            self.test_start_hour_delta = test_start_hour_delta if isinstance(test_start_hour_delta, int) else start_hour_delta
+        else:
+            self.test_frame_size = test_frame_size
+            self.test_post_hour = test_post_hour
+            self.test_start_hour_delta = test_start_hour_delta
         # XXX Add use_vent_features
         self.use_ehr_features = use_ehr_features
+        if use_ehr_features:
+            self.ehr_data = pd.read_csv(EHR_DATA_PATH)
+            self.ehr_data['DATA_TIME'] = pd.to_datetime(self.ehr_data.DATA_TIME, format="%m/%d/%y %H:%M")
         self.use_demographic_features = use_demographic_features
 
     def get(self):
@@ -353,7 +363,7 @@ class Dataset(object):
             meta, bs_times = self.process_breath_features(np.array(meta), start_time, post_hour)
             meta, stack_times = self.create_breath_frames(meta, frame_size, bs_times)
             if len(meta) == 0:
-                warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
+                logging.warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
 
         # If all data was filtered by our starting time criteria
         if len(meta) == 0:
@@ -373,13 +383,30 @@ class Dataset(object):
             cols[cols.index('{}_ventBN'.format(func.__name__))] = ventbn_colname
 
         # PROCESS EHR DATA
-        if self.use_ehr_features:
-            ehr_data = pd.read_csv(EHR_DATA_PATH)
-            necessary_ehr_cols = ['PATIENT_ID', 'DATA_TIME']
-            ehr_data = ehr_data[necessary_ehr_cols + self.ehr_features]
-            # XXX link ehr data to vent data
+        if self.use_ehr_features and len(meta) > 0:
+            pt_data = self.ehr_data[self.ehr_data.PATIENT_ID == patient_id]
+            if len(pt_data) == 0:
+                stripped_id = patient_id[:4]
+                patients_in_data = self.ehr_data.PATIENT_ID.str[:4].unique()
+                if stripped_id in patients_in_data:
+                    logging.error('unable to find ehr data for {}. The linkage is bad'.format(patient_id))
+                else:
+                    logging.warn('unable to find ehr data for {}. We were unable to find the patient'.format(patient_id))
+                ehr_obs = np.empty((len(meta), len(self.ehr_features)))
+                ehr_obs[:] = np.nan
+            else:
+                ehr_obs = self.link_breath_and_ehr_features(pt_data, stack_times)
+
+            meta = np.append(meta, ehr_obs, axis=1)
+            cols = cols + self.ehr_features
+        elif self.use_ehr_features:
+            cols = cols + self.ehr_features
 
         # PROCESS DEMOGRAPHIC DATA
+        if self.use_demographic_features:
+            # XXX
+            pass
+
         df = pd.DataFrame(meta, columns=cols)
         try:
             df = df.drop(['dropme'], axis=1)
@@ -501,3 +528,38 @@ class Dataset(object):
                     row = np.append(row, func(stack, axis=0))
             stacks.append(row)
         return np.array(stacks), np.array(stack_times)
+
+    def link_breath_and_ehr_features(self, ehr_data, stack_times):
+        """
+        Link breath data to EHR data.
+
+        :param ehr_data: EHR data for a specific patient we want to link
+        :param stack_times: Times our breath frames are occurring
+        """
+        ehr_obs = []
+        for time_start in stack_times:
+            # This uses a feed-forward mechanism of data linkage from ehr where
+            # the last recorded observation is fed forward into the future.
+            # Another possibility is to link points in time together and then
+            # impute the value from the trend line. For now feedforward is simpler.
+            slice = ehr_data[ehr_data.DATA_TIME <= time_start]
+            row = []
+            for feature in self.ehr_features:
+                vals = slice[feature].dropna()
+                if len(vals) == 0:
+                    # what to do? just put a NaN?
+                    row.append(np.nan)
+                else:
+                    val = vals.iloc[-1]
+                    # this is in case of left or right censoring. But I need to figure
+                    # out what to do with this.
+                    #
+                    # For now we can just input extreme values and hope the ML classifier
+                    # learns whats happening
+                    if isinstance(val, str) and '<0.2' in val:
+                        val = 0
+                    elif isinstance(val, str) and '<6.87' in val:
+                        val = 6
+                    row.append(val)
+            ehr_obs.append(row)
+        return np.array(ehr_obs).astype(np.float32)

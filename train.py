@@ -183,8 +183,8 @@ class ARDSDetectionModel(object):
         for train_idx, test_idx in idxs:
             x_train = x.loc[train_idx].dropna()
             x_test = x.loc[test_idx].dropna()
-            y_train = y.loc[train_idx].dropna()
-            y_test = y.loc[test_idx].dropna()
+            y_train = y.loc[x_train.index]
+            y_test = y.loc[x_test.index]
 
             scaler = self.get_and_fit_scaler(x_train)
             if len(x_train) != 0:
