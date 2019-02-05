@@ -4,3 +4,4 @@ numpy
 ipython
 scikit-learn
 scipy
+seaborn

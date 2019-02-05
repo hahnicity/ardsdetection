@@ -62,10 +62,28 @@ class ARDSDetectionModel(object):
                 "{}_votes".format(patho),
             ])
         results_cols += ["model_idx", "prediction"]
+        # self.results is meant to be a high level dataframe of aggregated statistics
+        # from our model.
+        #
+        # self.patient_results is redundant with self.results. We should probably find
+        # a way to consolidate the two
         self.results = pd.DataFrame([], columns=results_cols)
         self.patient_results = pd.DataFrame(
             [], columns=['patient'] + ["{}_votes".format(patho) for _, patho in self.pathos.items()] + ['actual']
         )
+        # self.patient_predictions is a dictionary of low level data for each patient that
+        # consists of x, y, and prediction frames for each patient. The format is like so:
+        #
+        # {
+        #   patient: (
+        #       x+y,
+        #       predictions
+        #   ),
+        #   patient2: (
+        #       ...
+        #   )
+        #   ...
+        # }
         self.patient_predictions = {}
 
     def get_cross_patient_train_test_idx(self):
@@ -230,6 +248,8 @@ class ARDSDetectionModel(object):
             self.print_aggregate_results()
         if self.args.plot_predictions or self.args.plot_disease_evolution:
             self.plot_predictions()
+        if self.args.plot_pairwise_features:
+            self.plot_pairwise_feature_visualizations()
 
     def convert_loc_to_iloc(self, df, loc_indices):
         copied = df.copy()
@@ -400,6 +420,31 @@ class ARDSDetectionModel(object):
             plt.yticks(np.arange(0, 1.01, .1))
             plt.xticks([0, 5, 11, 17, 23], [1, 6, 12, 18, 24])
 
+    def plot_pairwise_feature_visualizations(self):
+        """
+        Visualize predictions versus feature relationships in the data.
+        """
+        max_features_per_plot = 5
+        all_rows = None
+        all_preds = None
+        new_cols = None
+        for pt, (rows, preds) in self.patient_predictions.items():
+            rows = rows.drop(['ventBN', 'hour', 'set_type'], axis=1)
+            new_cols = rows.columns
+            if all_rows is None:
+                all_rows = rows.values
+                all_preds = preds.values
+            else:
+                all_rows = np.append(all_rows, rows.values, axis=0)
+                all_preds = np.append(all_preds, preds.values, axis=0)
+
+        all_rows = pd.DataFrame(all_rows, columns=new_cols)
+        all_rows['preds'] = all_preds
+        to_plot = list(set(all_rows.columns).difference(set(['y', 'preds', 'patient'])))
+        for i in range(0, len(to_plot), max_features_per_plot):
+            sns.pairplot(all_rows, vars=to_plot[i:i+max_features_per_plot], hue="preds")
+            plt.show()
+
     def aggregate_results(self):
         """
         Aggregate final results for all patients into a friendly data frame
@@ -492,6 +537,7 @@ def build_parser():
     parser.add_argument('--plot-disease-evolution', action='store_true', help='Plot evolution of disease over time')
     parser.add_argument('--plot-predictions', action='store_true', help='Plot prediction bars')
     parser.add_argument('--tiled-disease-evol', action='store_true', help='Plot disease evolution in tiled manner')
+    parser.add_argument('--plot-pairwise-features', action='store_true', help='Plot pairwise relationships between features to better visualize their relationships and predictions')
     return parser
 
 
