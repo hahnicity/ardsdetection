@@ -21,8 +21,9 @@ def main():
     data = []
     for pt in ehr.PATIENT_ID.unique():
         if pt in patient_id_diffs:
-            pt = patient_id_diffs[pt]
-        key_rows = codekey[codekey['Patient Unique Identifier'] == pt]
+            key_rows = codekey[codekey['Patient Unique Identifier'] == patient_id_diffs[pt]]
+        else:
+            key_rows = codekey[codekey['Patient Unique Identifier'] == pt]
         if len(key_rows) > 1:
             raise Exception('Found more than one row for pt {}'.format(pt))
         elif len(key_rows) == 0:

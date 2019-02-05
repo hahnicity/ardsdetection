@@ -21,6 +21,7 @@ from algorithms.breath_meta import get_file_experimental_breath_meta
 from algorithms.constants import EXPERIMENTAL_META_HEADER
 
 coloredlogs.install()
+DEMOGRAPHIC_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/demographic/cohort_demographics.csv')
 EHR_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv')
 
 
@@ -87,13 +88,14 @@ class Dataset(object):
         # XXX Vent ratio?? = (min vent * pco2) / (pbw * 100 * 37.5)
         # supposed to correspond well with dead space
         # https://www.atsjournals.org/doi/pdf/10.1164/rccm.201804-0692OC
+        #
+        # Let's leave this for later. For now just keep going with basics
     ]
     demographic_features = [
-        "age",
-        "sex",
-        "height",
-        'pbw',  # predicted body weight
-        'mbw',  # measured body weight
+        "AGE",
+        "SEX",
+        "HEIGHT_CM",
+        "WEIGHT_KG"
     ]
 
     def __init__(self,
@@ -197,6 +199,8 @@ class Dataset(object):
             self.ehr_data = pd.read_csv(EHR_DATA_PATH)
             self.ehr_data['DATA_TIME'] = pd.to_datetime(self.ehr_data.DATA_TIME, format="%m/%d/%y %H:%M")
         self.use_demographic_features = use_demographic_features
+        if use_demographic_features:
+            self.demographic_data = pd.read_csv(DEMOGRAPHIC_DATA_PATH)
 
     def get(self):
         """
@@ -403,9 +407,21 @@ class Dataset(object):
             cols = cols + self.ehr_features
 
         # PROCESS DEMOGRAPHIC DATA
-        if self.use_demographic_features:
-            # XXX
-            pass
+        if self.use_demographic_features and len(meta) > 0:
+            pt_data = self.demographic_data[self.demographic_data.PATIENT_ID == patient_id]
+            if len(pt_data) == 0:
+                logging.warn('unable to find demographic data for {}.'.format(patient_id))
+                demo_obs = np.empty((len(meta), len(self.demographic_features)))
+                demo_obs[:] = np.nan
+            elif len(pt_data) > 1:
+                raise Exception('Found more than one row of demographic data for {}'.format(patient_id))
+            else:
+                row = pt_data.iloc[0][self.demographic_features].values
+                demo_obs = np.repeat([row], len(meta), axis=0).astype(np.float32)
+            meta = np.append(meta, demo_obs, axis=1)
+            cols = cols + self.demographic_features
+        elif self.use_demographic_features:
+            cols = cols + self.demographic_features
 
         df = pd.DataFrame(meta, columns=cols)
         try:
