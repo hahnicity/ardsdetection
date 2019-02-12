@@ -453,6 +453,7 @@ class Dataset(object):
                     bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
                 except ValueError:
                     bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+                # Currently we aren't filtering data before start time in unframed data frames
                 mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
                 meta = meta[mask]
 
