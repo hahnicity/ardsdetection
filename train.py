@@ -16,10 +16,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from sklearn.cross_validation import KFold, train_test_split
+from sklearn.model_selection import GridSearchCV, KFold, train_test_split
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler
@@ -276,19 +275,20 @@ class ARDSDetectionModel(object):
 
     def _perform_rf_grid_search(self, x_train, y_train):
         params = {
-            "n_estimators": range(10, 50, 5),
+            "n_estimators": range(10, 110, 5),
             "max_features": ['auto', 'log2', None],
             "criterion": ["entropy", 'gini'],
             "max_depth": range(5, 30, 5) + [None],
             "oob_score": [True, False],
             "warm_start": [True, False],
-            "min_samples_split": [2, 5, 10, 15],
+            "min_samples_split": [2, 3, 4, 5, 7, 10],
         }
         x_train_expanded = self.data.loc[x_train.index]
         cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, 10)
         # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
         cv = self.convert_loc_to_iloc(x_train, cv)
-        clf = GridSearchCV(RandomForestClassifier(random_state=1), params, cv=cv, n_jobs=multiprocessing.cpu_count())
+        # keep 1 core around to actually do other stuff
+        clf = GridSearchCV(RandomForestClassifier(random_state=1), params, cv=cv, n_jobs=multiprocessing.cpu_count()-1)
         clf.fit(x_train, y_train.values)
         print("Params: ", clf.best_params_)
         print("Best CV score: ", clf.best_score_)
@@ -297,7 +297,7 @@ class ARDSDetectionModel(object):
     def _perform_mlp_grid_search(self, x_train, y_train):
         params = {
             'activation': ['relu', 'tanh', 'logistic'],
-            'algorithm': ['l-bfgs', 'sgd', 'adam'],
+            'solver': ['lbfgs', 'sgd', 'adam'],
             'hidden_layer_sizes': [
                 (16), (32), (64), (128),
                 (16, 16), (16, 32), (16, 64), (16, 128),
@@ -306,18 +306,20 @@ class ARDSDetectionModel(object):
                 (128, 16), (128, 32), (128, 64), (128, 128),
             ],
             'alpha': [0.00001, .0001, .001, .01, .1],
+            'batch_size': [8, 16, 32, 64, 128, 256],
+            'learning_rate_init': [.0001, .001, .01, .1],
             # Should I change batch size / learning rate?
         }
         x_train_expanded = self.data.loc[x_train.index]
         cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, 10)
         # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
         cv = self.convert_loc_to_iloc(x_train, cv)
-        clf = GridSearchCV(MLPClassifier(random_state=1), params, cv=cv, n_jobs=multiprocessing.cpu_count())
+        # keep 1 core around to actually do other stuff
+        clf = GridSearchCV(MLPClassifier(random_state=1), params, cv=cv, n_jobs=multiprocessing.cpu_count()-1)
         clf.fit(x_train, y_train.values)
         print("Params: ", clf.best_params_)
         print("Best CV score: ", clf.best_score_)
         self.models.append(clf)
-        pass
 
     def aggregate_statistics(self, y_test, predictions, model_idx):
         """
