@@ -7,6 +7,7 @@ Performs learning for our classifier
 from argparse import ArgumentParser
 import csv
 from math import sqrt, ceil
+import multiprocessing
 import operator
 from random import randint, sample
 import time
@@ -20,6 +21,7 @@ from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
+from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler
 
 from collate import Dataset
@@ -88,6 +90,8 @@ class ARDSDetectionModel(object):
 
     def get_cross_patient_train_test_idx(self):
         """
+        Split patients according to some kind of random split with proportions defined
+        by CLI args.
         """
         unique_patients = self.data['patient'].unique()
         mapping = {patho: [] for n, patho in self.pathos.items()}
@@ -104,9 +108,11 @@ class ARDSDetectionModel(object):
             num_to_use = int(round(total_test_patients * proportion))
             if num_to_use < 1:
                 raise Exception("You do not have enough patients for {} cohort".format(k))
+            # Randomly choose <num_to_use> patients from the array.
             patients = sample(v, num_to_use)
-            print("number {} patients in training: {}".format(k, num_patients - len(patients)))
-            print("number {} patients in test: {}".format(k, len(patients)))
+            if not self.args.no_print_results:
+                print("number {} patients in training: {}".format(k, num_patients - len(patients)))
+                print("number {} patients in test: {}".format(k, len(patients)))
             patients_to_use.extend(patients)
 
         train_patient_data = self.data.query('patient not in {}'.format(patients_to_use))
@@ -212,7 +218,12 @@ class ARDSDetectionModel(object):
             yield (x_train, x_test, y_train, y_test)
 
     def train(self, x_train, y_train):
-        clf = RandomForestClassifier(random_state=1, oob_score=True)
+        if args.algo == 'RF':
+            # XXX I think I did grid search on this and the results were just the same
+            # as default. Maybe I should run it again...
+            clf = RandomForestClassifier(random_state=1, oob_score=True)
+        elif args.algo == 'MLP':
+            clf = MLPClassifier(random_state=1)
         clf.fit(x_train, y_train)
         self.models.append(clf)
 
@@ -258,6 +269,12 @@ class ARDSDetectionModel(object):
                 for train_loc, test_loc in loc_indices]
 
     def perform_grid_search(self, x_train, y_train):
+        if self.args.algo == 'RF':
+            self._perform_rf_grid_search(x_train, y_train)
+        elif self.args.algo == 'MLP':
+            self._perform_mlp_grid_search(x_train, y_train)
+
+    def _perform_rf_grid_search(self, x_train, y_train):
         params = {
             "n_estimators": range(10, 50, 5),
             "max_features": ['auto', 'log2', None],
@@ -271,11 +288,36 @@ class ARDSDetectionModel(object):
         cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, 10)
         # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
         cv = self.convert_loc_to_iloc(x_train, cv)
-        clf = GridSearchCV(RandomForestClassifier(random_state=1), params, cv=cv)
+        clf = GridSearchCV(RandomForestClassifier(random_state=1), params, cv=cv, n_jobs=multiprocessing.cpu_count())
         clf.fit(x_train, y_train.values)
         print("Params: ", clf.best_params_)
         print("Best CV score: ", clf.best_score_)
         self.models.append(clf)
+
+    def _perform_mlp_grid_search(self, x_train, y_train):
+        params = {
+            'activation': ['relu', 'tanh', 'logistic'],
+            'algorithm': ['l-bfgs', 'sgd', 'adam'],
+            'hidden_layer_sizes': [
+                (16), (32), (64), (128),
+                (16, 16), (16, 32), (16, 64), (16, 128),
+                (32, 16), (32, 32), (32, 64), (32, 128),
+                (64, 16), (64, 32), (64, 64), (64, 128),
+                (128, 16), (128, 32), (128, 64), (128, 128),
+            ],
+            'alpha': [0.00001, .0001, .001, .01, .1],
+            # Should I change batch size / learning rate?
+        }
+        x_train_expanded = self.data.loc[x_train.index]
+        cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, 10)
+        # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
+        cv = self.convert_loc_to_iloc(x_train, cv)
+        clf = GridSearchCV(MLPClassifier(random_state=1), params, cv=cv, n_jobs=multiprocessing.cpu_count())
+        clf.fit(x_train, y_train.values)
+        print("Params: ", clf.best_params_)
+        print("Best CV score: ", clf.best_score_)
+        self.models.append(clf)
+        pass
 
     def aggregate_statistics(self, y_test, predictions, model_idx):
         """
@@ -538,6 +580,7 @@ def build_parser():
     parser.add_argument('--plot-predictions', action='store_true', help='Plot prediction bars')
     parser.add_argument('--tiled-disease-evol', action='store_true', help='Plot disease evolution in tiled manner')
     parser.add_argument('--plot-pairwise-features', action='store_true', help='Plot pairwise relationships between features to better visualize their relationships and predictions')
+    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP'], default='RF')
     return parser
 
 
