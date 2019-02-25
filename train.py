@@ -217,11 +217,11 @@ class ARDSDetectionModel(object):
             yield (x_train, x_test, y_train, y_test)
 
     def train(self, x_train, y_train):
-        if args.algo == 'RF':
+        if self.args.algo == 'RF':
             # XXX I think I did grid search on this and the results were just the same
             # as default. Maybe I should run it again...
             clf = RandomForestClassifier(random_state=1, oob_score=True)
-        elif args.algo == 'MLP':
+        elif self.args.algo == 'MLP':
             clf = MLPClassifier(random_state=1)
         clf.fit(x_train, y_train)
         self.models.append(clf)
@@ -279,9 +279,9 @@ class ARDSDetectionModel(object):
             "max_features": ['auto', 'log2', None],
             "criterion": ["entropy", 'gini'],
             "max_depth": range(5, 30, 5) + [None],
-            "oob_score": [True, False],
-            "warm_start": [True, False],
-            "min_samples_split": [2, 3, 4, 5, 7, 10],
+            #"oob_score": [True, False],
+            #"warm_start": [True, False],
+            #"min_samples_split": [2, 3, 4, 5, 7, 10],
         }
         x_train_expanded = self.data.loc[x_train.index]
         cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, 10)
@@ -305,7 +305,7 @@ class ARDSDetectionModel(object):
                 (64, 16), (64, 32), (64, 64), (64, 128),
                 (128, 16), (128, 32), (128, 64), (128, 128),
             ],
-            'alpha': [0.00001, .0001, .001, .01, .1],
+            #'alpha': [0.00001, .0001, .001, .01, .1],
             'batch_size': [8, 16, 32, 64, 128, 256],
             'learning_rate_init': [.0001, .001, .01, .1],
             # Should I change batch size / learning rate?
