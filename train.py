@@ -288,7 +288,7 @@ class ARDSDetectionModel(object):
         # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
         cv = self.convert_loc_to_iloc(x_train, cv)
         # keep 1 core around to actually do other stuff
-        clf = GridSearchCV(RandomForestClassifier(random_state=1), params, cv=cv, n_jobs=multiprocessing.cpu_count()-1)
+        clf = GridSearchCV(RandomForestClassifier(random_state=1), params, cv=cv, n_jobs=self.args.grid_search_jobs)
         clf.fit(x_train, y_train.values)
         print("Params: ", clf.best_params_)
         print("Best CV score: ", clf.best_score_)
@@ -315,7 +315,7 @@ class ARDSDetectionModel(object):
         # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
         cv = self.convert_loc_to_iloc(x_train, cv)
         # keep 1 core around to actually do other stuff
-        clf = GridSearchCV(MLPClassifier(random_state=1), params, cv=cv, n_jobs=multiprocessing.cpu_count()-1)
+        clf = GridSearchCV(MLPClassifier(random_state=1), params, cv=cv, n_jobs=self.args.grid_search_jobs)
         clf.fit(x_train, y_train.values)
         print("Params: ", clf.best_params_)
         print("Best CV score: ", clf.best_score_)
@@ -583,6 +583,7 @@ def build_parser():
     parser.add_argument('--tiled-disease-evol', action='store_true', help='Plot disease evolution in tiled manner')
     parser.add_argument('--plot-pairwise-features', action='store_true', help='Plot pairwise relationships between features to better visualize their relationships and predictions')
     parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP'], default='RF')
+    parser.add_argument('-gsj', '--grid-search-jobs', type=int, default=multiprocessing.cpu_count(), help='run grid search with this many cores')
     return parser
 
 
