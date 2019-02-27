@@ -220,7 +220,7 @@ class ARDSDetectionModel(object):
         if self.args.algo == 'RF':
             # XXX I think I did grid search on this and the results were just the same
             # as default. Maybe I should run it again...
-            clf = RandomForestClassifier(random_state=1, oob_score=True)
+            clf = RandomForestClassifier(random_state=1, oob_score=True, criterion='gini', max_features='auto', max_depth=5, n_estimators=55)
         elif self.args.algo == 'MLP':
             clf = MLPClassifier(random_state=1)
         clf.fit(x_train, y_train)
