@@ -306,7 +306,7 @@ class ARDSDetectionModel(object):
                 (128, 16), (128, 32), (128, 64), (128, 128),
             ],
             #'alpha': [0.00001, .0001, .001, .01, .1],
-            'batch_size': [8, 16, 32, 64, 128, 256],
+            #'batch_size': [8, 16, 32, 64, 128, 256],
             'learning_rate_init': [.0001, .001, .01, .1],
             # Should I change batch size / learning rate?
         }
