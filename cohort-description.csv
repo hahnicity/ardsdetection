@@ -8,22 +8,22 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0321RPI2320160920,N,1,ARDS,,,,,,1,,,
 0321RPI2320160920,N,1,ARDS,,,,,,1,,,
 0113RPI1320160105,N ,1,ARDS,1/5/16 19:30,,2,Aspiration PNA,1,1,,,
-0088RPI0120151130,Y,1,ARDS,11/29/15 9:20,,2,Aspiration,,,,,No data due to berlin
+0088RPI0120151130,N,1,ARDS,11/29/15 9:20,,2,Aspiration,,,,,No data due to berlin. But also data was misattributed
 0093RPI0920151212,Y,1,ARDS,12/12/15 7:45,,2,Postop,,,,1 (on 11/18/15 - for hemothorax),
 0098RPI1420151218,Y,1,ARDS,12/20/15 4:50,,2,Pneumonia /Sepsis,,,,,
 0099RPI0120151219,Y,1,ARDS,12/18/15 14:05,,2,Pneumonia,,,,,
 0102RPI0120151225,Y,1,ARDS,12/24/15 22:49,,3,Pancreatitis/Sepsis,,,,,
 0103RPI1220151230,Y,1,ARDS,12/28/15 19:00,,2,Unclear,,,,,no data due to berlin
 0120RPI1820160118,Y,1,ARDS,1/18/16 17:20,,3,Pneumonia /Sepsis,,,,,
-0122RPI1320160120,Y,1,ARDS,1/20/16 14:56,,3,Pneumonia,,,,,
+0122RPI1320160120,Y,1,ARDS,1/20/16 14:56,,3,Pneumonia,,,,,OK to use within bounds. Extubated to bipap
 0127RPI0120160121,Y,1,ARDS,1/21/16 2:00,,3,Aspiration,,,,,
 0129RPI1620160126,Y,1,ARDS,1/26/16 22:16,,3,Pneumonia,,,,,
 0131RPI1820160129,Y,1,ARDS,1/27/16 21:23,,2,Pneumonia,,,,,no data due to berlin
 0139RPI1620160205,Y,1,ARDS,2/5/16 9:30,,2,Sepsis,,,,,
-0209RPI1920160408,Y,1,ARDS,4/8/16 14:07,,,,,,,,
+0209RPI1920160408,Y,1,ARDS,4/8/16 14:07,,,,,,,,OK to use. Extubated to bipap
 0224RPI3020160414,Y,1,ARDS,4/14/16 16:31,,,,,,,,
 0229RPI2320160424,Y,1,ARDS,4/21/16 17:49,,,,,,,,no data due to berlin
-0235RPI1320160426,Y,1,ARDS,4/27/16 2:44,,,,,,,,
+0235RPI1320160426,Y,1,ARDS,4/27/16 2:44,,,,,,,,data before. We think its bipap
 0243RPI0720160512,Y,1,ARDS,5/12/16 15:50,,,,,,,,
 0245RPI1420160512,Y,1,ARDS,5/12/16 14:22,,,,,,,,
 0251RPI1820160609,Y,1,ARDS,6/4/16 23:30,,,,,,,,
@@ -39,16 +39,16 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0313RPI2220160909,Y,1,ARDS,9/5/16 8:55,,3,Aspiration,,,,,no data due to berlin
 0322RPI3220160920,Y,1,ARDS,9/18/16 1:28,,3,Sepsis,,,,,no data due to berlin
 0331RPI3220160926,Y,1,ARDS,9/15/16 2:22,,3,Sepsis and hem disease,,,,,no data due to berlin
-0332RPI4020161003,Y,1,ARDS,9/27/16 15:35,,2,Trauma,,,,,??? Did we collect correct pt data?
+0332RPI4020161003,N,1,ARDS,9/27/16 15:35,,2,Trauma,,,,,Not correct patient misattributed
 0357RPI3520161101,Y,1,ARDS,11/1/16 22:04,,3,Sepsis,,,,,
 0359RPI3720161107,Y,1,ARDS,11/3/16 3:10,,2,Pneumonia,,,,,no data due to berlin
 0372RPI2220161211,Y,1,ARDS,12/11/16 13:06,,2,Pneumonia ,,,,,
-0373RPI5820161126,Y,1,ARDS,11/28/16 18:15,,2,Aspiration,,,,,
+0373RPI5820161126,Y,1,ARDS,11/28/16 18:15,,2,Aspiration,,,,,some data was misattributed to 0365
 0377RPI2720161219,Y,1,ARDS,12/19/16 10:29,,2,Aspiration PNA,,,,,no data
 0381RPI2320161212,Y,1,ARDS,12/12/16 3:00,,2,Aspiration,,,,,
 0083RPI1120151120,N,1,COPD,,11/18/15 8:58,,,1,,,,
 0346RPI1120161016,N,1,COPD,,10/11/16 4:41,,,1,,,,
-0111RPI1520160101,Y,1,COPD,,1/1/16 4:30,,,,,,,
+0111RPI1520160101,Y,1,COPD,,1/1/16 4:30,,,,,,,usable but only within vent time.
 0112RPI1620160105,Y,1,COPD,,1/5/16 8:15,,,,,,,
 0124RPI1220160123,Y,1,COPD,,1/23/16 18:14,,,,,,,
 0132RPI1720160127,Y,1,COPD,,1/27/16 12:59,,,,,,,
@@ -58,7 +58,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0340RPI2320161015,Y,1,COPD,,10/12/16 21:05,,,,,,,
 0347RPI4220161016,Y,1,COPD,,10/16/16 18:05,,,,,,,
 0365RPI5820161125,Y,1,COPD,,11/25/16 19:09,,,,,,,
-0133RPI0920160127,Y ,1,COPD,,1/27/16 17:40,,,,,,,
+0133RPI0920160127,Y ,1,COPD,,1/27/16 17:40,,,,,,,OK to use. Extubated to bipap
 0306RPI3520160830,Y,1,COPD+ASTHMA,,8/30/16 9:10,,,,,,,
 0082RPI1420151118,N,1,OTHERS,,11/12/15 0:45,,,,1,,1,
 0116RPI1520160112,N,1,OTHERS,,,,,1,,,,
@@ -88,7 +88,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0148RPI0120160214,Y,1,ARDS,2/14/16 11:30,,,,,,,,
 0149RPI1820160212,Y,1,ARDS,2/14/16 1:34,,,,,,,,
 0150RPI0520160216,Y,1,ARDS,2/17/16 0:45,,,,,,,,
-0153RPI0720160217,Y,1,ARDS,2/17/16 11:10,,,,,,,,
+0153RPI0720160217,Y,1,ARDS,2/17/16 11:10,,,,,,,,data before vent time. 
 0160RPI1420160220,Y,1,ARDS,2/21/16 5:11,,,,,,,,
 0186RPI0920160313,Y,1,ARDS,3/12/16 18:15,,,,,,,,
 0194RPI0320160317,Y,1,ARDS,3/17/16 5:26,,,,,,,,
@@ -99,13 +99,13 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0506RPI3720170807,Y,1,ARDS,8/7/17 7:24,,,,,,,,
 0508RPI4820170811,Y,1,ARDS,8/10/17 16:40,,,,,,,,
 0511RPI5220170831,Y,1,ARDS,8/30/17 19:23,,,,,,,,
-0514RPI5420170905,Y,1,ARDS,9/5/17 13:09,,,,,,,,
+0514RPI5420170905,Y,1,ARDS,9/5/17 13:09,,,,,,,,removed data from another patient at the end
 0527RPI0420171028,Y,1,ARDS,10/28/17 1:11,,,,,,,,
 0529RPI2420171116,Y,1,ARDS,11/10/17 14:47,,,,,,,,
 0542RPI0220171127,N,1,ARDS,11/30/17 20:50,,,,,,,,Less than 10 minutes of breathing. Should be excluded.
 0546RPI5120171216,Y,1,ARDS,12/16/17 15:48,,,,,,,,
 0549RPI4420171213,Y,1,ARDS,12/13/17 9:58,,,,,,,,
-0551RPI0720180102,Y,1,ARDS,12/23/17 10:41,,,,,,,,
+0551RPI0720180102,Y,1,ARDS,12/23/17 10:41,,,,,,,,Has a bit of bopap at end
 0558RPI0820180104,Y,1,ARDS,1/4/18 23:51,,,,,,,,
 0569RPI0420180116,Y,1,ARDS,1/16/18 1:10,,,,,,,,
 0147RPI1220160213,Y,1,ARDS,2/13/16 4:15,,,,,,,,
@@ -117,7 +117,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0170RPI2120160301,Y,1,COPD,,3/1/16 0:15,,,,,,,
 0199RPI1620160327,Y,1,COPD,,3/26/16 11:33,,,,,,,
 0387RPI3920161224,Y,1,COPD,,12/23/16 5:29,,,,,,,
-0397RPI2220170104,Y,1,COPD,,12/29/16 12:50,,,,,,,
+0397RPI2220170104,Y,1,COPD,,12/29/16 12:50,,,,,,,messy data because bipap
 0144RPI0920160212,Y,1,OTHERS,,2/12/16 10:40,,,,,,,
 0157RPI0920160218,Y,1,OTHERS,,2/18/16 15:06,,,,,,,
 0162RPI2220160214,Y,1,OTHERS,,2/15/16 11:05,,,,,,,
@@ -140,7 +140,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0423RPI3220170205,Y,1,OTHERS,,2/5/17 15:29,,,,,,,
 0426RPI4320170216,Y,1,COPD,,2/16/17 9:40,,,,,,,
 0433RPI5420170304,Y,1,OTHERS,,3/4/17 6:53,,,,,,,
-0434RPI4520170224,Y,1,OTHERS,,2/24/17 15:25,,,,,,,
+0434RPI4520170224,Y,1,OTHERS,,2/24/17 15:25,,,,,,,just use data within bounds. Was on bipap prior to intubation
 0437RPI4120170310,Y,1,ASTHMA,,3/6/17 4:22,,,,,,,
 0443RPI1620170319,Y,1,OTHERS,,3/19/17 13:21,,,,,,,
 0460RPI2220170518,Y,1,COPD,,5/17/17 17:15,,,,,,,
@@ -271,7 +271,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0199RPI1620160327,Y,4,COPD,,3/26/16 11:33,,,,,,,
 0225RPI2520160416,Y,4,COPD,,4/15/16 19:23,,,,,,,
 0001RPI0120150218,Y,4,OTHERS,,2/13/15 12:50,,,,,,,
-0033RPI0520150603,Y,4,OTHERS,,6/3/15 11:35,,,,,,,
+0033RPI0520150603,Y,4,OTHERS,,6/3/15 11:35,,,,,,,Has small amount of extra data afterwards. This is because they were extubated to bipap. Can use!
 0036RPI1020150606,N,4,OTHERS,,6/5/15 20:15,,,,,,,Weird - our data collection is for 4 hrs starting 6/4. But vent start is 6/5/15. Might have to toss pt.
 0108RPI0120160101,Y,4,OTHERS,,1/1/16 13:20,,,,,,,
 0115RPI1720160104,N,4,OTHERS,,1/3/16 8:10,,,,,,,
@@ -285,7 +285,7 @@ TODO,,,,,,,,,,,,
 0032RPI,N,1,OTHERS,,,,,,,,,Don't add yet!
 ,,,,,,,,,,,,
 ,,,,,,,,,,,,
-Deprecated,,,,,,,,,,,,
+Deprecated patients + experiment,,,,,,,,,,,,
 0008RPI0120150227,Y,3,ARDS,2/27/15 12:20,,,,,,,,
 0013RPI0120150321,Y,3,ARDS,3/21/15 3:59,,,,,,,,
 0015RPI0320150401,Y,3,ARDS,4/1/15 5:13,,,,,,,,
