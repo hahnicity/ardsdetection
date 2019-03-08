@@ -9,6 +9,7 @@ model-*
 scaler-*
 *grid_search_results.pkl
 *.xlsx
+*.pkl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
