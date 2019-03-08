@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 import os
 import re
 import subprocess
@@ -7,7 +8,7 @@ import subprocess
 def does_file_have_no_timestamp_pat(filename):
     pattern = re.compile(
         "(?P<year>201[456])-(?P<month>[01]\d)-(?P<day>[0123]\d)"
-        "__(?P<hour>[012]\d):(?P<minute>[0-5]\d):(?P<second>[0-5]\d)"
+        "__(?P<hour>[012]\d):(?P<minute>\d{2}):(?P<second>\d{2})"
         ".(?P<millis>\d+).csv"
     )
     match = pattern.search(filename)
@@ -34,6 +35,8 @@ def add_timestamp(filename):
     dict_ = match.groupdict()
     dict_['millis'] = int(dict_['millis']) / 1000
     time = "{year}-{month}-{day}-{hour}-{minute}-{second}.{millis}".format(**dict_)
+    # ensure the date can be read properly
+    datetime.strptime(time, '%Y-%m-%d-%H-%M-%S.%f')
     os.system('echo {} > /tmp/time.stamp'.format(time))
     os.system('cat /tmp/time.stamp {} > /tmp/vent.file'.format(filename))
     proc = subprocess.Popen(['mv', '/tmp/vent.file', filename])

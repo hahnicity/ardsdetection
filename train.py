@@ -546,6 +546,8 @@ def create_df(args):
         args.test_frame_size,
         args.test_post_hour,
         args.test_start_hour_delta,
+        use_ehr_features=args.use_ehr_features,
+        use_demographic_features=args.use_demographic_features,
     ).get()
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
@@ -584,6 +586,8 @@ def build_parser():
     parser.add_argument('--plot-pairwise-features', action='store_true', help='Plot pairwise relationships between features to better visualize their relationships and predictions')
     parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP'], default='RF')
     parser.add_argument('-gsj', '--grid-search-jobs', type=int, default=multiprocessing.cpu_count(), help='run grid search with this many cores')
+    parser.add_argument('-ehr', '--use-ehr-features', action='store_true', help='use EHR data in learning')
+    parser.add_argument('-demo', '--use-demographic-features', action='store_true', help='use demographic data in learning')
     return parser
 
 

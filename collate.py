@@ -335,7 +335,12 @@ class Dataset(object):
                 pass
 
         if load_from_raw:
-            meta = get_file_experimental_breath_meta(filename, ignore_missing_bes=False)[1:]
+            try:
+                meta = get_file_experimental_breath_meta(filename, ignore_missing_bes=False)[1:]
+            except Exception as err:
+                logging.error('Unable to load data from file: {}'.format(filename))
+                raise err
+
             try:
                 os.mkdir(meta_dir)
             except OSError:  # dir likely exists
