@@ -16,7 +16,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0103RPI1220151230,Y,1,ARDS,12/28/15 19:00,,2,Unclear,,,,,no data due to berlin
 0120RPI1820160118,Y,1,ARDS,1/18/16 17:20,,3,Pneumonia /Sepsis,,,,,
 0122RPI1320160120,Y,1,ARDS,1/20/16 14:56,,3,Pneumonia,,,,,OK to use within bounds. Extubated to bipap
-0127RPI0120160121,Y,1,ARDS,1/21/16 2:00,,3,Aspiration,,,,,
+0127RPI0120160124,Y,1,ARDS,1/21/16 2:00,,3,Aspiration,,,,,
 0129RPI1620160126,Y,1,ARDS,1/26/16 22:16,,3,Pneumonia,,,,,
 0131RPI1820160129,Y,1,ARDS,1/27/16 21:23,,2,Pneumonia,,,,,no data due to berlin
 0139RPI1620160205,Y,1,ARDS,2/5/16 9:30,,2,Sepsis,,,,,
@@ -113,7 +113,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0145RPI1120160212,Y,1,ASTHMA,,2/12/16 14:00,,,,,,,
 0545RPI0520171214,Y,1,ASTHMA,,12/13/17 21:45,,,,,,,
 0552RPI2520180101,Y,1,ASTHMA,,12/27/17 14:12,,,,,,,
-0166RPI2120160227,Y,1,COPD,,2/27/16 16:55,,,,,,,
+0166RPI2220160227,Y,1,COPD,,2/27/16 16:55,,,,,,,
 0170RPI2120160301,Y,1,COPD,,3/1/16 0:15,,,,,,,
 0199RPI1620160327,Y,1,COPD,,3/26/16 11:33,,,,,,,
 0387RPI3920161224,Y,1,COPD,,12/23/16 5:29,,,,,,,
