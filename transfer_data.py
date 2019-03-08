@@ -1,11 +1,14 @@
 from argparse import ArgumentParser
 from datetime import datetime, timedelta
+from glob import glob
 import os
 import re
 import subprocess
 from warnings import warn
 
 import pandas as pd
+
+from add_timestamp_to_file import add_timestamp, check_if_file_already_has_timestamp, does_file_have_no_timestamp_pat
 
 SERVER_NAME = 'b2c-compute'
 SERVER_DIRNAME = '/x1/data/results/backups'
@@ -48,6 +51,13 @@ def get_first_days_data(patient_id, initial_dt, experiment_num):
         stderr=subprocess.PIPE,
     )
     stdout, stderr = proc.communicate()
+
+    # ensure that patients have proper timestamping on their files if not attach a timestamp.
+    pt_files = glob(os.path.join(out_dir, '*.csv'))
+    for filename in pt_files:
+        if does_file_have_no_timestamp_pat(filename) and not check_if_file_already_has_timestamp(filename):
+            print("file {} seems to have no timestamp. adding one".format(filename))
+            add_timestamp(filename)
 
 
 def copy_ards_patient(row, experiment_num):
@@ -96,6 +106,17 @@ def copy_non_ards_patient(row, experiment_num):
     get_first_days_data(patient_id, dt, experiment_num)
 
 
+def check_if_patient_data_exists(row):
+    patient_id = row['Patient Unique Identifier']
+    first_file_cmd = "ls {} | head -n 1".format(os.path.join(SERVER_DIRNAME, patient_id, '*.csv'))
+    proc = subprocess.Popen(['ssh', SERVER_NAME, first_file_cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+    if stderr:
+        return False
+    else:
+        return True
+
+
 def main():
     parser = ArgumentParser()
     parser.add_argument('-d', '--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
@@ -114,6 +135,10 @@ def main():
 
     for idx, row in enrollment.iterrows():
         patho = row['Pathophysiology']
+        # Check if patient dir exists first
+        if not check_if_patient_data_exists(row):
+            warn('Were unable to find data for patient {}. Check if this is correct!'.format(row['Patient Unique Identifier']))
+            continue
         if 'ARDS' in patho:
             copy_ards_patient(row, args.experiment)
         else:
