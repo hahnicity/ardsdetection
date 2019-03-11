@@ -3,6 +3,7 @@ non_phasic_coverage_plots
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 import argparse
+import math
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -37,10 +38,11 @@ def main():
     hour_idxs = perform_patient_hour_mapping(df, phases, 'no')
     coverage = find_hourly_coverage(df, hour_idxs)
 
-    max_square_plot = 25
+    max_square_plot = 16
+    sqrt_max = math.sqrt(max_square_plot)
     for idx, patient in enumerate(coverage.keys()):
         plt.suptitle('Coverage Reports')
-        plt.subplot(5, 5, (idx % max_square_plot)+1)
+        plt.subplot(sqrt_max, sqrt_max, (idx % max_square_plot)+1)
 
         frac = coverage[patient]['frac_coverage']
         vals = frac.values()
@@ -49,7 +51,7 @@ def main():
                 vals.append(0)
 
         plt.bar(range(24), vals)
-        plt.title(patient, fontsize=8)
+        plt.title(patient, fontsize=8, pad=.5)
         plt.xticks([])
         plt.yticks([])
         if ((idx + 1) % max_square_plot) == 0:
