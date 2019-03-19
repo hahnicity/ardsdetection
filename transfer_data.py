@@ -13,11 +13,11 @@ from add_timestamp_to_file import add_timestamp, check_if_file_already_has_times
 SERVER_NAME = 'b2c-compute'
 SERVER_DIRNAME = '/x1/data/results/backups'
 # XXX change in future to be generalizable to testing cohorts
-DATA_PATH = 'data/experiment{num}/training/raw'
+DATA_PATH = 'experiment{num}/training/raw'
 
 
-def get_first_days_data(patient_id, initial_dt, experiment_num):
-    out_dir = os.path.join(DATA_PATH.format(num=experiment_num), patient_id)
+def get_first_days_data(base_data_path, patient_id, initial_dt, experiment_num):
+    out_dir = os.path.join(os.path.join(base_data_path, DATA_PATH.format(num=experiment_num), patient_id))
     try:
         os.mkdir(out_dir)
     except OSError:
@@ -60,7 +60,7 @@ def get_first_days_data(patient_id, initial_dt, experiment_num):
             add_timestamp(filename)
 
 
-def copy_ards_patient(row, experiment_num):
+def copy_ards_patient(base_data_path, row, experiment_num):
     patient_id = row['Patient Unique Identifier']
     berlin_start = row['Date when Berlin criteria first met (m/dd/yyy)']
     try:
@@ -70,10 +70,10 @@ def copy_ards_patient(row, experiment_num):
         return
     # should also be grabbing data from at least 2 hours prior because of the way our file rotation
     # is set up
-    get_first_days_data(patient_id, dt, experiment_num)
+    get_first_days_data(base_data_path, patient_id, dt, experiment_num)
 
 
-def copy_non_ards_patient(row, experiment_num):
+def copy_non_ards_patient(base_data_path, row, experiment_num):
     patient_id = row['Patient Unique Identifier']
     try:
         dt = datetime.strptime(row['vent_start_time'], '%m/%d/%y %H:%M')
@@ -103,7 +103,7 @@ def copy_non_ards_patient(row, experiment_num):
         except ValueError:
             print('Was unable to get first file for patient: {}'.format(patient_id))
             return
-    get_first_days_data(patient_id, dt, experiment_num)
+    get_first_days_data(base_data_path, patient_id, dt, experiment_num)
 
 
 def check_if_patient_data_exists(row):
@@ -119,6 +119,7 @@ def check_if_patient_data_exists(row):
 
 def main():
     parser = ArgumentParser()
+    parser.add_argument('-dp', '--data-path', default='/fastdata/ardsdetection')
     parser.add_argument('-d', '--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
     parser.add_argument('-e', '--experiment', default=1, choices=[1, 2, 3, 4, 5], type=int)
     parser.add_argument('-p', '--only-patient', help='Only gather data for specific patient id')
@@ -140,9 +141,9 @@ def main():
             warn('Were unable to find data for patient {}. Check if this is correct!'.format(row['Patient Unique Identifier']))
             continue
         if 'ARDS' in patho:
-            copy_ards_patient(row, args.experiment)
+            copy_ards_patient(args.data_path, row, args.experiment)
         else:
-            copy_non_ards_patient(row, args.experiment)
+            copy_non_ards_patient(args.data_path, row, args.experiment)
 
 
 if __name__ == "__main__":

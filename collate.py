@@ -21,8 +21,8 @@ from algorithms.breath_meta import get_file_experimental_breath_meta
 from algorithms.constants import EXPERIMENTAL_META_HEADER
 
 coloredlogs.install()
-DEMOGRAPHIC_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/demographic/cohort_demographics.csv')
-EHR_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv')
+DEMOGRAPHIC_DATA_PATH = os.path.join(os.path.dirname(__file__), 'demographic/cohort_demographics.csv')
+EHR_DATA_PATH = os.path.join(os.path.dirname(__file__), 'ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv')
 
 
 class Dataset(object):
@@ -98,6 +98,7 @@ class Dataset(object):
     ]
 
     def __init__(self,
+                 data_dir_path,
                  cohort_description,
                  feature_set,
                  frame_size,
@@ -118,6 +119,7 @@ class Dataset(object):
         testing set to be created after the training set with differing parameterization for
         all patients
 
+        :param data_dir_path: path to directory where breath data is located
         :param cohort_description: path to cohort description file
         :param feature_set: flow_time/flow_time_opt/flow_time_orig/broad/broad_opt/custom
         :param frame_size: stack N breaths in the data
@@ -135,7 +137,7 @@ class Dataset(object):
         """
         raw_dirs = []
         for i in experiment_num.split('+'):
-            raw_dirs.append('data/experiment{num}/training/raw'.format(num=i))
+            raw_dirs.append(os.path.join(data_dir_path, 'experiment{num}/training/raw'.format(num=i)))
         self.desc = pd.read_csv(cohort_description)
         self.file_map = {}
         self.experiment_num = experiment_num
@@ -195,11 +197,11 @@ class Dataset(object):
         # XXX Add use_vent_features
         self.use_ehr_features = use_ehr_features
         if use_ehr_features:
-            self.ehr_data = pd.read_csv(EHR_DATA_PATH)
+            self.ehr_data = pd.read_csv(os.path.join(data_dir_path, EHR_DATA_PATH))
             self.ehr_data['DATA_TIME'] = pd.to_datetime(self.ehr_data.DATA_TIME, format="%m/%d/%y %H:%M")
         self.use_demographic_features = use_demographic_features
         if use_demographic_features:
-            self.demographic_data = pd.read_csv(DEMOGRAPHIC_DATA_PATH)
+            self.demographic_data = pd.read_csv(os.path.join(data_dir_path, DEMOGRAPHIC_DATA_PATH))
             self.demographic_data.loc[self.demographic_data.SEX == 'M', 'SEX'] = 0
             self.demographic_data.loc[self.demographic_data.SEX == 'F', 'SEX'] = 1
 

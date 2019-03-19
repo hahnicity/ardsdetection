@@ -535,6 +535,7 @@ def create_df(args):
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
     df = Dataset(
+        args.data_path,
         args.cohort_description,
         args.feature_set,
         args.frame_size,
@@ -557,6 +558,7 @@ def create_df(args):
 
 def build_parser():
     parser = ArgumentParser()
+    parser.add_argument('-dp', '--data-path', default='/fastdata/ardsdetection')
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='path to cohort description file')
     parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "flow_time_opt", "flow_time_orig", "broad", "broad_opt"])
     parser.add_argument('--no-load-intermediates', action='store_false', help='do not load from intermediate data')

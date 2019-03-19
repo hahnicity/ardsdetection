@@ -10,7 +10,7 @@ from sklearn.metrics import roc_auc_score
 from collate import Dataset
 from train import ARDSDetectionModel, build_parser
 
-DF_DIR = 'data/experiment{experiment_num}/training/grid_search/{feature_set}/ehr_{ehr_features}/demo_{demo_features}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}'
+DF_DIR = 'experiment{experiment_num}/training/grid_search/{feature_set}/ehr_{ehr_features}/demo_{demo_features}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}'
 
 
 def get_all_possible_features():
@@ -53,6 +53,7 @@ def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
     else:
         combo = list(combo) + [('ventBN', 2), ('hour', -1)]
         dataset = Dataset(
+            main_args.data_dir,
             model_args.cohort_description,
             'custom',
             main_args.frame_size,
@@ -92,6 +93,7 @@ def func_star(args):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('-dp', '--data-dir', default='/fastdata/ardsdetection')
     parser.add_argument('--feature-set', choices=['flow_time', 'broad'], default='flow_time')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
@@ -118,7 +120,7 @@ def main():
     results = {}
     feature_combos = get_all_possible_features()
     possible_folds = [5, 10]
-    out_dir = DF_DIR.format(
+    out_dir = os.path.join(main_args.data_path, DF_DIR.format(
         experiment_num=main_args.experiment,
         feature_set=main_args.feature_set,
         ehr_features='on' if main_args.use_ehr_features else 'off',
@@ -130,7 +132,7 @@ def main():
         tfs=main_args.test_frame_size,
         tsd=main_args.test_start_hour_delta,
         tsp=main_args.test_post_hour
-    )
+    ))
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     feature_gen = feature_combos['{}_gen'.format(main_args.feature_set)]
