@@ -40,7 +40,7 @@ def main():
 
     max_square_plot = 16
     sqrt_max = math.sqrt(max_square_plot)
-    for idx, patient in enumerate(coverage.keys()):
+    for idx, patient in enumerate(sorted(coverage.keys())):
         plt.suptitle('Coverage Reports')
         plt.subplot(sqrt_max, sqrt_max, (idx % max_square_plot)+1)
 
