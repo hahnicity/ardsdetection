@@ -42,7 +42,7 @@ def main():
     model_args.no_print_results = True
 
     df = create_df(model_args)
-    ctrl_all_results, ards_all_results = run_sequential(df, model_args, args.num_runs)
+    ctrl_all_results, ards_all_results = run_sequential(df, model_args, main_args.num_runs)
 
     print("Control means after {} runs".format(main_args.num_runs))
     print(ctrl_all_results.mean(axis=0))

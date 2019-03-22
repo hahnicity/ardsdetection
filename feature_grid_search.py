@@ -11,7 +11,7 @@ from collate import Dataset
 from run_sequential_simple_split import run_sequential
 from train import ARDSDetectionModel, build_parser
 
-DF_DIR = 'experiment{experiment_num}/training/grid_search/{feature_set}/ehr_{ehr_features}/demo_{demo_features}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}'
+DF_DIR = 'experiment{experiment_num}/training/grid_search/{feature_set}/ehr_{ehr_features}/demo_{demo_features}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}/{algo}'
 
 
 def get_all_possible_features():
@@ -46,7 +46,7 @@ def run_model(model_args, main_args, combo, model_idx, out_dir):
     results['features'] = features
     path = os.path.join(out_dir, 'dataset-{}.pkl'.format(model_idx))
 
-    if os.path.exists(path):
+    if os.path.exists(path) and main_args.load_if_exists:
         dataset = pd.read_pickle(path)
         if 'set_type' not in dataset.columns:
             dataset['set_type'] = 'train_test'
@@ -103,7 +103,7 @@ def main():
     parser.add_argument('--feature-set', choices=['flow_time', 'broad'], default='flow_time')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
-    parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1+4')
+    parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1')
     parser.add_argument("-fs", "--frame-size", default=20, type=int)
     parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var', 'std', 'mean+var', 'mean+std', 'median+var', 'median+std'], default='median')
     parser.add_argument('-tfs', "--test-frame-size", default=None, type=int)
@@ -116,7 +116,10 @@ def main():
     parser.add_argument('--use-demographic-features', action='store_true')
     parser.add_argument('--run-type', choices=['kfold', 'sequential_split'])
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
-    parser.add_argument('-nr', '--num-runs', type=int, default=20)
+    # just running 20 times is unfortunately insufficient
+    parser.add_argument('-nr', '--num-runs', type=int, default=50)
+    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA'], default='RF')
+    parser.add_argument('--load-if-exists', action='store_true', help='load previously saved intermediate datasets')
     main_args = parser.parse_args()
 
     # We're doing this because these args are not necessary, and we can just pass them
@@ -124,6 +127,7 @@ def main():
     model_args = build_parser().parse_args([])
     model_args.no_copd_to_ctrl = False
     model_args.no_print_results = True
+    model_args.algo = main_args.algo
 
     results = {}
     feature_combos = get_all_possible_features()
@@ -138,7 +142,8 @@ def main():
         ff=main_args.frame_func,
         tfs=main_args.test_frame_size,
         tsd=main_args.test_start_hour_delta,
-        tsp=main_args.test_post_hour
+        tsp=main_args.test_post_hour,
+        algo=main_args.algo,
     ))
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
@@ -160,7 +165,7 @@ def main():
     print('Best AUC: {}'.format(best[1]))
     print('Best features: {}'.format(results[best[0]]))
     dict_ = pickle.dumps(results)
-    results_file = 'experiment{}_{}_{}_ehr-{}_demo-{}_fs{}_ff{}_sd{}_sp{}_tfs{}_tsd{}_tsp{}_grid_search_results.pkl'.format(
+    results_file = 'experiment{}_{}_{}_ehr-{}_demo-{}_fs{}_ff{}_sd{}_sp{}_tfs{}_tsd{}_tsp{}_{}_grid_search_results.pkl'.format(
         main_args.experiment,
         main_args.feature_set,
         main_args.run_type,
@@ -172,7 +177,8 @@ def main():
         main_args.post_hour,
         main_args.test_frame_size,
         main_args.test_start_hour_delta,
-        main_args.test_post_hour
+        main_args.test_post_hour,
+        main_args.algo,
     )
     with open(results_file, 'w') as f:
         f.write(dict_)
