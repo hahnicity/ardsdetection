@@ -21,8 +21,8 @@ from algorithms.breath_meta import get_file_experimental_breath_meta
 from algorithms.constants import EXPERIMENTAL_META_HEADER
 
 coloredlogs.install()
-DEMOGRAPHIC_DATA_PATH = os.path.join(os.path.dirname(__file__), 'demographic/cohort_demographics.csv')
-EHR_DATA_PATH = os.path.join(os.path.dirname(__file__), 'ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv')
+DEMOGRAPHIC_DATA_PATH = 'demographic/cohort_demographics.csv'
+EHR_DATA_PATH = 'ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv'
 
 
 class Dataset(object):

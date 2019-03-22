@@ -17,6 +17,7 @@ from collate import Dataset
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('-dp', '--data-path', default='/fastdata/ardsdetection')
     parser.add_argument('-p', '--from-pickle')
     parser.add_argument('-t', '--to-pickle')
     parser.add_argument('-d', '--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
@@ -26,7 +27,7 @@ def main():
     if args.from_pickle:
         df = pd.read_pickle(args.from_pickle)
     else:
-        cls = Dataset(args.cohort_description, 'flow_time', 20, True, args.experiment, 24, 0, 'mean')
+        cls = Dataset(args.data_path, args.cohort_description, 'flow_time', 20, True, args.experiment, 24, 0, 'mean')
         df = cls.get_unframed_dataset()
 
     if args.to_pickle:
