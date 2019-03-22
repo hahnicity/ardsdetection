@@ -8,6 +8,7 @@ import pickle
 from sklearn.metrics import roc_auc_score
 
 from collate import Dataset
+from run_sequential_simple_split import run_sequential
 from train import ARDSDetectionModel, build_parser
 
 DF_DIR = 'experiment{experiment_num}/training/grid_search/{feature_set}/ehr_{ehr_features}/demo_{demo_features}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}'
@@ -36,9 +37,8 @@ def get_all_possible_features():
     return {'flow_time_gen': all_ft_combos, 'broad_gen': all_combos}
 
 
-def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
-    results = {folds: {'auc': 0} for folds in possible_folds}
-    results['idx'] = model_idx
+def run_model(model_args, main_args, combo, model_idx, out_dir):
+    results = {'auc': 0, 'idx': model_idx, 'run_type': main_args.run_type}
     if not combo:
         results['features'] = []
         return results
@@ -53,7 +53,7 @@ def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
     else:
         combo = list(combo) + [('ventBN', 2), ('hour', -1)]
         dataset = Dataset(
-            main_args.data_dir,
+            main_args.data_path,
             model_args.cohort_description,
             'custom',
             main_args.frame_size,
@@ -70,18 +70,24 @@ def run_model(model_args, main_args, combo, model_idx, possible_folds, out_dir):
             use_demographic_features=main_args.use_demographic_features,
         ).get()
 
-    top_auc = 0
-    for folds in possible_folds:
-        model_args.folds = folds
+    if main_args.run_type == 'kfold':
+        model_args.cross_patient_kfold = True
+        # only run with 10-fold cross-validation
+        model_args.folds = 10
         model = ARDSDetectionModel(model_args, dataset)
         model.train_and_test()
         auc = roc_auc_score(model.results.patho.tolist(), model.results.prediction.tolist())
-        results[folds]['auc'] = auc
-        if auc > top_auc:
-            top_auc = auc
+        results['auc'] = auc
         del model  # paranoia
+    elif main_args.run_type == 'sequential_split':
+        model_args.split_type = 'simple'
+        model_args.split_ratio = main_args.split_ratio
+        results['num_runs'] = main_args.num_runs
+        ctrl_results, ards_results = run_sequential(dataset, model_args, main_args.num_runs)
+        auc = ards_results.auc.mean()
+        results['auc'] = auc
 
-    if top_auc > main_args.auc_thresh:
+    if auc > main_args.auc_thresh:
         dataset.to_pickle(path)
 
     return results
@@ -93,7 +99,7 @@ def func_star(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-dp', '--data-dir', default='/fastdata/ardsdetection')
+    parser.add_argument('-dp', '--data-path', default='/fastdata/ardsdetection')
     parser.add_argument('--feature-set', choices=['flow_time', 'broad'], default='flow_time')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
@@ -108,18 +114,19 @@ def main():
     parser.add_argument('--debug', action='store_true', help='debug whats going wrong with the script without implementing multiprocessing')
     parser.add_argument('--use-ehr-features', action='store_true')
     parser.add_argument('--use-demographic-features', action='store_true')
+    parser.add_argument('--run-type', choices=['kfold', 'sequential_split'])
+    parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
+    parser.add_argument('-nr', '--num-runs', type=int, default=20)
     main_args = parser.parse_args()
 
     # We're doing this because these args are not necessary, and we can just pass them
     # easily over code because they wont be changing
     model_args = build_parser().parse_args([])
     model_args.no_copd_to_ctrl = False
-    model_args.cross_patient_kfold = True
     model_args.no_print_results = True
 
     results = {}
     feature_combos = get_all_possible_features()
-    possible_folds = [5, 10]
     out_dir = os.path.join(main_args.data_path, DF_DIR.format(
         experiment_num=main_args.experiment,
         feature_set=main_args.feature_set,
@@ -137,7 +144,7 @@ def main():
         os.makedirs(out_dir)
     feature_gen = feature_combos['{}_gen'.format(main_args.feature_set)]
 
-    input_gen = [(model_args, main_args, combo, idx, possible_folds, out_dir) for idx, combo in enumerate(feature_gen)]
+    input_gen = [(model_args, main_args, combo, idx, out_dir) for idx, combo in enumerate(feature_gen)]
 
     if not main_args.debug:
         pool = multiprocessing.Pool(main_args.threads)
@@ -149,13 +156,14 @@ def main():
         for args in input_gen[:2]:
             results.append(run_model(*args))
 
-    best = max([(features_run['idx'], features_run[folds]['auc']) for features_run in results for folds in possible_folds], key=lambda x: x[1])
+    best = max([(features_run['idx'], features_run['auc']) for features_run in results], key=lambda x: x[1])
     print('Best AUC: {}'.format(best[1]))
     print('Best features: {}'.format(results[best[0]]))
     dict_ = pickle.dumps(results)
-    results_file = 'experiment{}_{}_ehr-{}_demo-{}_fs{}_ff{}_sd{}_sp{}_tfs{}_tsd{}_tsp{}_grid_search_results.pkl'.format(
+    results_file = 'experiment{}_{}_{}_ehr-{}_demo-{}_fs{}_ff{}_sd{}_sp{}_tfs{}_tsd{}_tsp{}_grid_search_results.pkl'.format(
         main_args.experiment,
         main_args.feature_set,
+        main_args.run_type,
         'on' if main_args.use_ehr_features else 'off',
         'on' if main_args.use_demographic_features else 'off',
         main_args.frame_size,

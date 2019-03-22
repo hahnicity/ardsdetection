@@ -18,10 +18,13 @@ import pandas as pd
 import seaborn as sns
 from sklearn.model_selection import GridSearchCV, KFold, train_test_split
 from sklearn.decomposition import KernelPCA, PCA
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
+from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.svm import SVC
 
 from collate import Dataset
 from metrics import *
@@ -218,11 +221,19 @@ class ARDSDetectionModel(object):
 
     def train(self, x_train, y_train):
         if self.args.algo == 'RF':
-            # XXX I think I did grid search on this and the results were just the same
-            # as default. Maybe I should run it again...
             clf = RandomForestClassifier(random_state=1, oob_score=True, criterion='gini', max_features='auto', max_depth=5, n_estimators=55)
         elif self.args.algo == 'MLP':
             clf = MLPClassifier(random_state=1)
+        elif self.args.algo == 'SVM':
+            raise NotImplementedError()
+        elif self.args.algo == 'LOG_REG':
+            raise NotImplementedError()
+        elif self.args.algo == 'ADA':
+            raise NotImplementedError()
+        elif self.args.algo == 'NB':
+            raise NotImplementedError()
+        elif self.args.algo == 'GBC':
+            raise NotImplementedError()
         clf.fit(x_train, y_train)
         self.models.append(clf)
 
@@ -272,6 +283,16 @@ class ARDSDetectionModel(object):
             self._perform_rf_grid_search(x_train, y_train)
         elif self.args.algo == 'MLP':
             self._perform_mlp_grid_search(x_train, y_train)
+        elif self.args.algo == 'SVM':
+            self._perform_svm_grid_search(x_train, y_train)
+        elif self.args.algo == 'LOG_REG':
+            self._perform_log_reg_grid_search(x_train, y_train)
+        elif self.args.algo == 'ADA':
+            self._perform_adaboost_grid_search(x_train, y_train)
+        elif self.args.algo == 'NB':
+            self._perform_nb_grid_search(x_train, y_train)
+        elif self.args.algo == 'GBC':
+            self._perform_gbc_grid_search(x_train, y_train)
 
     def _perform_rf_grid_search(self, x_train, y_train):
         params = {
@@ -279,20 +300,8 @@ class ARDSDetectionModel(object):
             "max_features": ['auto', 'log2', None],
             "criterion": ["entropy", 'gini'],
             "max_depth": range(5, 30, 5) + [None],
-            #"oob_score": [True, False],
-            #"warm_start": [True, False],
-            #"min_samples_split": [2, 3, 4, 5, 7, 10],
         }
-        x_train_expanded = self.data.loc[x_train.index]
-        cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, 10)
-        # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
-        cv = self.convert_loc_to_iloc(x_train, cv)
-        # keep 1 core around to actually do other stuff
-        clf = GridSearchCV(RandomForestClassifier(random_state=1), params, cv=cv, n_jobs=self.args.grid_search_jobs)
-        clf.fit(x_train, y_train.values)
-        print("Params: ", clf.best_params_)
-        print("Best CV score: ", clf.best_score_)
-        self.models.append(clf)
+        self._perform_grid_search(RandomForestClassifier(random_state=1), params, x_train, y_train)
 
     def _perform_mlp_grid_search(self, x_train, y_train):
         params = {
@@ -305,17 +314,71 @@ class ARDSDetectionModel(object):
                 (64, 16), (64, 32), (64, 64), (64, 128),
                 (128, 16), (128, 32), (128, 64), (128, 128),
             ],
+            # cut down on # params to search otherwise it will take forever
             #'alpha': [0.00001, .0001, .001, .01, .1],
             #'batch_size': [8, 16, 32, 64, 128, 256],
             'learning_rate_init': [.0001, .001, .01, .1],
-            # Should I change batch size / learning rate?
         }
+        self._perform_grid_search(MLPClassifier(random_state=1), params, x_train, y_train)
+
+    def _perform_svm_grid_search(self, x_train, y_train):
+        params = [{
+            'C': [2**i for i in range(-5, 5)],
+            'kernel': ['rbf', 'linear', 'sigmoid'],
+        }, {
+            'C': [2**i for i in range(-5, 5)],
+            'kernel': ['poly'],
+            'degree': range(2, 8),
+        }]
+        self._perform_grid_search(SVC(random_state=1, cache_size=256), params, x_train, y_train)
+
+    def _perform_adaboost_grid_search(self, x_train, y_train):
+        params = {
+            'learning_rate': [2**i for i in range(-5, 3)],
+            'n_estimators': [20*i for i in range(1, 15)],
+            'algorithm': ['SAMME', 'SAMME.R'],
+        }
+        self._perform_grid_search(AdaBoostClassifier(random_state=1), params, x_train, y_train)
+
+    def _perform_gbc_grid_search(self, x_train, y_train):
+        # Another case where we cannot go too crazy on tuning everything
+        params = {
+            'loss': ['deviance', 'exponential'],
+            'learning_rate': [2**i for i in range(-5, 1)],
+            'n_estimators': [50*i for i in range(1, 8)],
+            'criterion': ['friedman_mse', 'mse', 'mae'],
+            'max_features': [None, 'log2', 'auto'],
+        }
+        self._perform_grid_search(GradientBoostingClassifier(random_state=1), params, x_train, y_train)
+
+    def _perform_nb_grid_search(self, x_train, y_train):
+        params = {
+            'var_smoothing': [10**i for i in range(-12, -2)],
+        }
+        self._perform_grid_search(GaussianNB(), params, x_train, y_train)
+
+    def _perform_log_reg_grid_search(self, x_train, y_train):
+        params = [{
+            'penalty': ['l2'],
+            'solver': ['newton-cg', 'lbfgs', 'sag'],
+            'C': [2**i for i in range(-5, 5)],
+            'tol': [10**i for i in range(-8, -2)],
+            'max_iter': [100, 200, 300, 400],
+        }, {
+            'penalty': ['l1'],
+            'C': [2**i for i in range(-5, 5)],
+            'tol': [10**i for i in range(-8, -2)],
+            'solver': ['liblinear', 'saga'],
+        }]
+        self._perform_grid_search(LogisticRegression(random_state=1), params, x_train, y_train)
+
+    def _perform_grid_search(self, cls, params, x_train, y_train):
         x_train_expanded = self.data.loc[x_train.index]
         cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, 10)
         # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
         cv = self.convert_loc_to_iloc(x_train, cv)
         # keep 1 core around to actually do other stuff
-        clf = GridSearchCV(MLPClassifier(random_state=1), params, cv=cv, n_jobs=self.args.grid_search_jobs)
+        clf = GridSearchCV(cls, params, cv=cv, n_jobs=self.args.grid_search_jobs)
         clf.fit(x_train, y_train.values)
         print("Params: ", clf.best_params_)
         print("Best CV score: ", clf.best_score_)
@@ -500,9 +563,18 @@ class ARDSDetectionModel(object):
             fps = float(len(self.results[(self.results.patho != n) & (self.results.prediction == n)]))
             fns = float(len(self.results[(self.results.patho == n) & (self.results.prediction != n)]))
             accuracy = round((tps+tns) / (tps+tns+fps+fns), 4)
-            sensitivity = round(tps / (tps+fns), 4)
-            specificity = round(tns / (tns+fps), 4)
-            precision = round(tps / (tps+fps), 4)
+            try:
+                sensitivity = round(tps / (tps+fns), 4)
+            except ZeroDivisionError:
+                sensitivity = 0
+            try:
+                specificity = round(tns / (tns+fps), 4)
+            except ZeroDivisionError:
+                specificity = 0
+            try:
+                precision = round(tps / (tps+fps), 4)
+            except ZeroDivisionError:  # Can happen when no predictions for cls are made
+                precision = 0
             if len(self.pathos) > 2:
                 auc = np.nan
             elif len(self.pathos) == 2:
@@ -562,7 +634,7 @@ def build_parser():
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='path to cohort description file')
     parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "flow_time_opt", "flow_time_orig", "broad", "broad_opt"])
     parser.add_argument('--no-load-intermediates', action='store_false', help='do not load from intermediate data')
-    parser.add_argument('--split-ratio', type=float, default=.2)
+    parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
     parser.add_argument("--grid-search", action="store_true", help='perform grid search for model hyperparameters')
     parser.add_argument('--split-type', choices=['simple', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
@@ -586,7 +658,7 @@ def build_parser():
     parser.add_argument('--plot-predictions', action='store_true', help='Plot prediction bars')
     parser.add_argument('--tiled-disease-evol', action='store_true', help='Plot disease evolution in tiled manner')
     parser.add_argument('--plot-pairwise-features', action='store_true', help='Plot pairwise relationships between features to better visualize their relationships and predictions')
-    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP'], default='RF')
+    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA'], default='RF')
     parser.add_argument('-gsj', '--grid-search-jobs', type=int, default=multiprocessing.cpu_count(), help='run grid search with this many cores')
     parser.add_argument('-ehr', '--use-ehr-features', action='store_true', help='use EHR data in learning')
     parser.add_argument('-demo', '--use-demographic-features', action='store_true', help='use demographic data in learning')
