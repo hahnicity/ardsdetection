@@ -321,11 +321,11 @@ class ARDSDetectionModel(object):
 
     def _perform_rf_grid_search(self, x_train, y_train):
         params = {
-            #"n_estimators": range(10, 110, 5),
-            #"max_features": ['auto', 'log2', None],
-            #"criterion": ["entropy", 'gini'],
-            #"max_depth": range(5, 30, 5) + [None],
-            "criterion": ["entropy"],
+            "n_estimators": range(10, 110, 5),
+            "max_features": ['auto', 'log2', None],
+            "criterion": ["entropy", 'gini'],
+            "max_depth": range(5, 30, 5) + [None],
+            #"criterion": ["entropy"],
         }
         self._perform_grid_search(RandomForestClassifier(random_state=1), params, x_train, y_train)
 
