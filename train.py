@@ -5,6 +5,7 @@ learn
 Performs learning for our classifier
 """
 from argparse import ArgumentParser
+from collections import Counter
 import csv
 from math import sqrt, ceil
 import multiprocessing
@@ -15,6 +16,7 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pprint import pprint
 import seaborn as sns
 from sklearn.model_selection import GridSearchCV, KFold, train_test_split
 from sklearn.decomposition import KernelPCA, PCA
@@ -272,6 +274,29 @@ class ARDSDetectionModel(object):
         if self.args.plot_pairwise_features:
             self.plot_pairwise_feature_visualizations()
 
+        if self.args.grid_search:
+            self.aggregate_grid_search_results()
+
+    def aggregate_grid_search_results(self):
+        print("---- Grid Search Final Results ----")
+        print("----")
+        grid_results = {}
+        for model in self.models:
+            for param in model.best_params_:
+                if param not in grid_results:
+                    grid_results[param] = []
+                grid_results[param].append(model.best_params_[param])
+        pprint(grid_results)
+        print('---- Grid Search Averages ----')
+        for param in grid_results:
+            first_inst = grid_results[param][0]
+            if isinstance(first_inst, int) or isinstance(first_inst, float):
+                print("param: {}. average: {}".format(param, sum(grid_results[param]) / len(grid_results[param])))
+        print('---- Grid Search Majority ----')
+        for param in grid_results:
+            counts = Counter(grid_results[param])
+            print('param: {}. max: {}'.format(param, max(counts)))
+
     def convert_loc_to_iloc(self, df, loc_indices):
         copied = df.copy()
         copied['idx'] = range(len(df))
@@ -296,10 +321,11 @@ class ARDSDetectionModel(object):
 
     def _perform_rf_grid_search(self, x_train, y_train):
         params = {
-            "n_estimators": range(10, 110, 5),
-            "max_features": ['auto', 'log2', None],
-            "criterion": ["entropy", 'gini'],
-            "max_depth": range(5, 30, 5) + [None],
+            #"n_estimators": range(10, 110, 5),
+            #"max_features": ['auto', 'log2', None],
+            #"criterion": ["entropy", 'gini'],
+            #"max_depth": range(5, 30, 5) + [None],
+            "criterion": ["entropy"],
         }
         self._perform_grid_search(RandomForestClassifier(random_state=1), params, x_train, y_train)
 
@@ -379,7 +405,7 @@ class ARDSDetectionModel(object):
         cv = self.convert_loc_to_iloc(x_train, cv)
         # keep 1 core around to actually do other stuff
         clf = GridSearchCV(cls, params, cv=cv, n_jobs=self.args.grid_search_jobs)
-        clf.fit(x_train, y_train.values)
+        clf.fit(x_train, y_train)
         print("Params: ", clf.best_params_)
         print("Best CV score: ", clf.best_score_)
         self.models.append(clf)
