@@ -222,8 +222,9 @@ class ARDSDetectionModel(object):
             yield (x_train, x_test, y_train, y_test)
 
     def train(self, x_train, y_train):
+        hyperparams = self._get_hyperparameters()
         if self.args.algo == 'RF':
-            clf = RandomForestClassifier(random_state=1, oob_score=True, criterion='gini', max_features='auto', max_depth=5, n_estimators=55)
+            clf = RandomForestClassifier(**hyperparams)
         elif self.args.algo == 'MLP':
             clf = MLPClassifier(random_state=1)
         elif self.args.algo == 'SVM':
@@ -238,6 +239,29 @@ class ARDSDetectionModel(object):
             raise NotImplementedError()
         clf.fit(x_train, y_train)
         self.models.append(clf)
+
+    def _get_hyperparameters(self):
+        params = {
+            "RF": {
+                "average": {
+                    "random_state": 1,
+                    "max_depth": 5,
+                    "max_features": 'auto',
+                    'criterion': 'entropy',
+                    'n_estimators': 53,
+                    'oob_score': True,
+                },
+                "max": {
+                    "random_state": 1,
+                    "max_depth": 5,
+                    "max_features": 'auto',
+                    'criterion': 'entropy',
+                    'n_estimators': 60,
+                    'oob_score': True,
+                },
+            },
+        }
+        return params[self.args.algo][self.args.hyperparameter_type]
 
     def train_and_test(self):
         """
@@ -295,7 +319,8 @@ class ARDSDetectionModel(object):
         print('---- Grid Search Majority ----')
         for param in grid_results:
             counts = Counter(grid_results[param])
-            print('param: {}. max: {}'.format(param, max(counts)))
+            param_val, _ = max(counts.items(), key=lambda x: x[1])
+            print('param: {}. max: {}'.format(param, param_val))
 
     def convert_loc_to_iloc(self, df, loc_indices):
         copied = df.copy()
@@ -688,6 +713,7 @@ def build_parser():
     parser.add_argument('-gsj', '--grid-search-jobs', type=int, default=multiprocessing.cpu_count(), help='run grid search with this many cores')
     parser.add_argument('-ehr', '--use-ehr-features', action='store_true', help='use EHR data in learning')
     parser.add_argument('-demo', '--use-demographic-features', action='store_true', help='use demographic data in learning')
+    parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'max'], default='average')
     return parser
 
 
