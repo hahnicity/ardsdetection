@@ -14,10 +14,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from sklearn.cross_validation import KFold, train_test_split
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.grid_search import GridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
 from sklearn.preprocessing import MinMaxScaler
 
