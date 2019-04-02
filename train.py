@@ -395,12 +395,14 @@ class ARDSDetectionModel(object):
         # Another case where we cannot go too crazy on tuning everything
         params = {
             'loss': ['deviance', 'exponential'],
-            'learning_rate': [2**i for i in range(-5, 1)],
+            # I need to reduce the parameters because grid search is running to long.
+            #'learning_rate': [2**i for i in range(-5, 1)],
             'n_estimators': [50*i for i in range(1, 8)],
             'criterion': ['friedman_mse', 'mse', 'mae'],
             'max_features': [None, 'log2', 'auto'],
         }
-        self._perform_grid_search(GradientBoostingClassifier(random_state=1), params, x_train, y_train)
+        # implement early stopping because grid search is taking too long
+        self._perform_grid_search(GradientBoostingClassifier(random_state=1, n_iter_no_change=100), params, x_train, y_train)
 
     def _perform_nb_grid_search(self, x_train, y_train):
         params = {
