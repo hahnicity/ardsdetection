@@ -21,7 +21,7 @@ def main():
     parser.add_argument('-p', '--from-pickle')
     parser.add_argument('-t', '--to-pickle')
     parser.add_argument('-d', '--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
-    parser.add_argument('-e', '--experiment', default='1+4')
+    parser.add_argument('-e', '--experiment', default='1')
     args = parser.parse_args()
 
     if args.from_pickle:

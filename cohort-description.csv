@@ -32,7 +32,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0265RPI2920160622,Y,1,ARDS,6/24/16 19:43,,,,,,,,
 0266RPI1720160622,Y,1,ARDS,6/22/16 13:26,,,,,,,,
 0268RPI1220160624,Y,1,ARDS,6/24/16 4:31,,,,,,,,
-0270RPI0920160630,Y,1,ARDS,6/30/16 21:02,,,,,,,,
+0270RPI0920160630,N,1,ARDS,6/30/16 21:02,,,,,,,,< 1 hr of data
 0271RPI1220160630,Y,1,ARDS,6/30/16 4:51,,,,,,,,
 0289RPI3220160802,Y,1,ARDS,8/1/16 1:50,,3,,,,,,no data
 0313RPI2220160909,Y,1,ARDS,9/5/16 8:55,,3,Aspiration,,,,,no data due to berlin
@@ -41,7 +41,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0357RPI3520161101,Y,1,ARDS,11/1/16 22:04,,3,Sepsis,,,,,
 0359RPI3720161107,Y,1,ARDS,11/3/16 3:10,,2,Pneumonia,,,,,no data due to berlin
 0372RPI2220161211,Y,1,ARDS,12/11/16 13:06,,2,Pneumonia ,,,,,
-0373RPI5820161126,Y,1,ARDS,11/28/16 18:15,,2,Aspiration,,,,,some data was misattributed to 0365
+0373RPI5820161126,N,1,ARDS,11/28/16 18:15,,2,Aspiration,,,,,some data was misattributed to 0365. < 1 hr of data tho
 0377RPI2720161219,Y,1,ARDS,12/19/16 10:29,,2,Aspiration PNA,,,,,no data
 0381RPI2320161212,Y,1,ARDS,12/12/16 3:00,,2,Aspiration,,,,,
 0083RPI1120151120,N,1,COPD,,11/18/15 8:58,,,1,,,,
@@ -64,7 +64,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0108RPI0120160101,Y,1,OTHERS,,1/1/16 13:20,,,,,,,
 0119RPI1920160118,Y,1,OTHERS,,1/17/16 0:52,,,,,,,weird af files (no data)
 0125RPI1120160123,Y,1,OTHERS,,1/23/16 10:30,,,,,,,
-0134RPI0320160201,Y,1,OTHERS,,1/31/16 10:00,,,,,,,
+0134RPI0320160201,N,1,OTHERS,,1/31/16 10:00,,,,,,,< 1 hr of data
 0135RPI1420160203,Y,1,OTHERS,,2/3/16 1:29,,,,,,,
 0231RPI1220160424,Y,1,OTHERS,,4/24/16 7:31,,,,,,,
 0254RPI1120160609,Y,1,OTHERS,,6/3/16 15:05,,,,,,,
@@ -91,7 +91,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0186RPI0920160313,Y,1,ARDS,3/12/16 18:15,,,,,,,,
 0194RPI0320160317,Y,1,ARDS,3/17/16 5:26,,,,,,,,
 0390RPI2220161230,Y,1,ARDS,12/30/16 14:06,,,,,,,,
-0409RPI4220170118,Y,1,ARDS,1/18/17 5:04,,,,,,,,
+,,,,,,,,,,,,
 0411RPI5820170119,Y,1,ARDS,1/18/17 20:48,,,,,,,,
 0412RPI5520170121,Y,1,ARDS,1/21/17 16:52,,,,,,,,
 0506RPI3720170807,Y,1,ARDS,8/7/17 7:24,,,,,,,,
@@ -165,7 +165,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0033RPI0520150603,Y,1,OTHERS,,6/3/15 11:35,,,,,,,Has small amount of extra data afterwards. This is because they were extubated to bipap. Can use!
 0036RPI1020150606,N,1,OTHERS,,6/5/15 20:15,,,,,,,Weird - our data collection is for 4 hrs starting 6/4. But vent start is 6/5/15. Might have to toss pt.
 0115RPI1720160104,N,1,OTHERS,,1/3/16 8:10,,,,,,,
-,,,,,,,,,,,,
+0606RPI1920180416,Y,1,OTHERS,,4/16/18 1:54,,,,,,,
 ,,,,,,,,,,,,
 ,,,,,,,,,,,,
 ,,,,,,,,,,,,
@@ -234,3 +234,9 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0238RPI1220160428,,3,,,,,,,,,,
 0255RPI1320160610,,3,,,,,,,,,,
 0259RPI2320160615,,3,,,,,,,,,,
+,,,,,,,,,,,,
+,,,,,,,,,,,,
+,,,,,,,,,,,,
+,,,,,,,,,,,,
+,,,,,,,,,,,,
+0409RPI4220170118,Y,8,ARDS,1/18/17 5:04,,,,,,,,withdrawn from consideration due to splitting. Group 8 is placeholder

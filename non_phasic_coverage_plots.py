@@ -43,6 +43,9 @@ def analyze_coverage(coverage, ards_patients, other_patients, hours):
         ards_hours_covered.append(seconds_covered / float(one_hr))
     plt.hist(ards_hours_covered, bins=hours)
     plt.title('ARDS Coverage in {} Hours'.format(hours))
+    plt.xticks(range(hours), range(hours))
+    plt.xlabel('number hours data')
+    plt.ylabel('# patients in bin')
     plt.show()
 
     other_hours_covered = []
@@ -52,6 +55,9 @@ def analyze_coverage(coverage, ards_patients, other_patients, hours):
         other_hours_covered.append(seconds_covered / float(one_hr))
     plt.hist(other_hours_covered, bins=hours)
     plt.title('OTHER Coverage in {} Hours'.format(hours))
+    plt.xticks(range(hours), range(hours))
+    plt.xlabel('number hours data')
+    plt.ylabel('# patients in bin')
     plt.show()
 
     # Generate Hourly Coverage Reports
