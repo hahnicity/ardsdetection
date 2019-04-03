@@ -12,6 +12,26 @@ from cohort_tools.non_phasic_analysis import perform_patient_hour_mapping
 from cohort_tools.quality_check import find_hourly_coverage
 
 
+def plot_patient(idx, patient, coverage, title):
+    max_square_plot = 16
+    sqrt_max = math.sqrt(max_square_plot)
+    plt.subplot(sqrt_max, sqrt_max, (idx % max_square_plot)+1)
+
+    frac = coverage[patient]['frac_coverage']
+    vals = frac.values()
+    if len(frac.keys()) < 24:
+        for _ in range(sorted(frac.keys())[-1] + 1, 24):
+            vals.append(0)
+
+    plt.bar(range(24), vals)
+    plt.title(patient, fontsize=8, pad=.5)
+    plt.xticks([])
+    plt.yticks([])
+    plt.suptitle(title + " Coverage Reports")
+    if ((idx + 1) % max_square_plot) == 0:
+        plt.show()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--cohort-file', default='cohort-description.csv')
@@ -22,7 +42,7 @@ def main():
     df = df.rename(columns={'abs_time_at_BS': 'abs_bs'})
     df['breath_time'] = df['iTime'] + df['eTime']
     cohort = pd.read_csv(args.cohort_file)
-    cohort = cohort[((cohort.experiment_group == 1) | (cohort.experiment_group == 4)) & (cohort['Potential Enrollment'] == 'Y')]
+    cohort = cohort[((cohort.experiment_group == 1)) & (cohort['Potential Enrollment'] == 'Y')]
     # make phases file from cohort file
     ards_patients = df[df.y == 1].patient.unique()
     other_patients = df[(df.y == 0) | (df.y == 2)].patient.unique()
@@ -38,26 +58,13 @@ def main():
     hour_idxs = perform_patient_hour_mapping(df, phases, 'no')
     coverage = find_hourly_coverage(df, hour_idxs)
 
-    max_square_plot = 16
-    sqrt_max = math.sqrt(max_square_plot)
-    for idx, patient in enumerate(sorted(coverage.keys())):
-        plt.suptitle('Coverage Reports')
-        plt.subplot(sqrt_max, sqrt_max, (idx % max_square_plot)+1)
+    for idx, patient in enumerate(sorted(ards_patients)):
+        plot_patient(idx, patient, coverage, 'ARDS')
+    plt.show()
 
-        frac = coverage[patient]['frac_coverage']
-        vals = frac.values()
-        if len(frac.keys()) < 24:
-            for _ in range(sorted(frac.keys())[-1] + 1, 24):
-                vals.append(0)
-
-        plt.bar(range(24), vals)
-        plt.title(patient, fontsize=8, pad=.5)
-        plt.xticks([])
-        plt.yticks([])
-        if ((idx + 1) % max_square_plot) == 0:
-            plt.show()
-    else:
-        plt.show()
+    for idx, patient in enumerate(sorted(other_patients)):
+        plot_patient(idx, patient, coverage, 'OTHER')
+    plt.show()
 
 
 if __name__ == "__main__":
