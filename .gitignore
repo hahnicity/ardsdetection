@@ -10,6 +10,7 @@ scaler-*
 *grid_search_results.pkl
 *.xlsx
 *.pkl
+*spark_demo.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
