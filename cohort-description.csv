@@ -16,7 +16,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0120RPI1820160118,Y,1,ARDS,1/18/16 17:20,,3,Pneumonia /Sepsis,,,,,
 0122RPI1320160120,Y,1,ARDS,1/20/16 14:56,,3,Pneumonia,,,,,OK to use within bounds. Extubated to bipap
 0127RPI0120160124,Y,1,ARDS,1/21/16 2:00,,3,Aspiration,,,,,
-,,,,,,,,,,,,
+0129RPI1620160126,Y,1,ARDS,1/26/16 22:16,,3,Pneumonia,,,,,
 0131RPI1820160129,Y,1,ARDS,1/27/16 21:23,,2,Pneumonia,,,,,no data due to berlin
 0139RPI1620160205,Y,1,ARDS,2/5/16 9:30,,2,Sepsis,,,,,
 0209RPI1920160408,Y,1,ARDS,4/8/16 14:07,,,,,,,,OK to use. Extubated to bipap
@@ -84,7 +84,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0380RPI3920161212,Y,1,OTHERS,,12/12/16 9:30,,,,,,,
 0384RPI4520161220,Y,1,OTHERS,,12/17/16 19:15,,,,,,,
 0148RPI0120160214,Y,1,ARDS,2/14/16 11:30,,,,,,,,
-,,,,,,,,,,,,
+0149RPI1820160212,Y,1,ARDS,2/14/16 1:34,,,,,,,,
 0150RPI0520160216,Y,1,ARDS,2/17/16 0:45,,,,,,,,
 0153RPI0720160217,Y,1,ARDS,2/17/16 11:10,,,,,,,,data before vent time. 
 0160RPI1420160220,Y,1,ARDS,2/21/16 5:11,,,,,,,,
@@ -98,7 +98,7 @@ Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,
 0508RPI4820170811,Y,1,ARDS,8/10/17 16:40,,,,,,,,
 0511RPI5220170831,Y,1,ARDS,8/30/17 19:23,,,,,,,,
 0514RPI5420170905,Y,1,ARDS,9/5/17 13:09,,,,,,,,removed data from another patient at the end
-,,,,,,,,,,,,
+0527RPI0420171028,Y,1,ARDS,10/28/17 1:11,,,,,,,,
 0529RPI2420171116,Y,1,ARDS,11/10/17 14:47,,,,,,,,
 0542RPI0220171127,N,1,ARDS,11/30/17 20:50,,,,,,,,Less than 10 minutes of breathing. Should be excluded.
 0546RPI5120171216,Y,1,ARDS,12/16/17 15:48,,,,,,,,

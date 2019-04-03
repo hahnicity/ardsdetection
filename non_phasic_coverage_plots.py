@@ -3,6 +3,7 @@ non_phasic_coverage_plots
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 import argparse
+from copy import copy
 import math
 
 import pandas as pd
@@ -12,24 +13,56 @@ from cohort_tools.non_phasic_analysis import perform_patient_hour_mapping
 from cohort_tools.quality_check import find_hourly_coverage
 
 
-def plot_patient(idx, patient, coverage, title):
+def plot_patient(idx, patient, coverage, patho, hours):
     max_square_plot = 16
     sqrt_max = math.sqrt(max_square_plot)
     plt.subplot(sqrt_max, sqrt_max, (idx % max_square_plot)+1)
 
     frac = coverage[patient]['frac_coverage']
     vals = frac.values()
-    if len(frac.keys()) < 24:
-        for _ in range(sorted(frac.keys())[-1] + 1, 24):
+    if len(frac.keys()) < hours:
+        for _ in range(sorted(frac.keys())[-1] + 1, hours):
             vals.append(0)
 
-    plt.bar(range(24), vals)
+    plt.bar(range(hours), vals)
     plt.title(patient, fontsize=8, pad=.5)
     plt.xticks([])
+    plt.ylim((0, 1))
     plt.yticks([])
-    plt.suptitle(title + " Coverage Reports")
+    plt.suptitle("{} {} Hour Coverage Reports".format(patho, hours))
     if ((idx + 1) % max_square_plot) == 0:
         plt.show()
+
+
+def analyze_coverage(coverage, ards_patients, other_patients, hours):
+    one_hr = 60 * 60
+    ards_hours_covered = []
+    for patient in ards_patients:
+        # calculate total hours of coverage for a patient.
+        seconds_covered = sum(coverage[patient]['seconds_covered'].values())
+        ards_hours_covered.append(seconds_covered / float(one_hr))
+    plt.hist(ards_hours_covered, bins=hours)
+    plt.title('ARDS Coverage in {} Hours'.format(hours))
+    plt.show()
+
+    other_hours_covered = []
+    for patient in other_patients:
+        # calculate total hours of coverage for a patient.
+        seconds_covered = sum(coverage[patient]['seconds_covered'].values())
+        other_hours_covered.append(seconds_covered / float(one_hr))
+    plt.hist(other_hours_covered, bins=hours)
+    plt.title('OTHER Coverage in {} Hours'.format(hours))
+    plt.show()
+
+    # Generate Hourly Coverage Reports
+
+    for idx, patient in enumerate(sorted(ards_patients)):
+        plot_patient(idx, patient, coverage, 'ARDS', hours)
+    plt.show()
+
+    for idx, patient in enumerate(sorted(other_patients)):
+        plot_patient(idx, patient, coverage, 'OTHER', hours)
+    plt.show()
 
 
 def main():
@@ -58,13 +91,20 @@ def main():
     hour_idxs = perform_patient_hour_mapping(df, phases, 'no')
     coverage = find_hourly_coverage(df, hour_idxs)
 
-    for idx, patient in enumerate(sorted(ards_patients)):
-        plot_patient(idx, patient, coverage, 'ARDS')
-    plt.show()
+    # analyze 24 hr coverage
+    analyze_coverage(coverage, ards_patients, other_patients, 24)
 
-    for idx, patient in enumerate(sorted(other_patients)):
-        plot_patient(idx, patient, coverage, 'OTHER')
-    plt.show()
+    # analyze 6 hr coverage
+    six_hr_coverage = copy(coverage)
+    for patient in coverage:
+        for key in coverage[patient]:
+            for hour in range(6, 24):
+                try:
+                    del six_hr_coverage[patient][key][hour]
+                except:
+                    pass
+    analyze_coverage(six_hr_coverage, ards_patients, other_patients, 6)
+
 
 
 if __name__ == "__main__":
