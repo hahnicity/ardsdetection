@@ -15,6 +15,3 @@ Checkout the `ats-abstract` branch and run.
 
 	git checkout ats-abstract
 	python train.py -p flow-time-opt-ats.pkl --folds 5
-
-
-

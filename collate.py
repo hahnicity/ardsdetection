@@ -27,7 +27,7 @@ EHR_DATA_PATH = 'ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv'
 
 class Dataset(object):
     # Feature sets are mapped by (feature_name, breath_meta_feature_index)
-    necessities = [('ventBN', 2), ('hour', -1)]
+    necessities = [('ventBN', 1), ('hour', -1)]
     flow_time_feature_set = necessities + [
         # minF_to_zero is just pef_to_zero
         ('mean_flow_from_pef', 38),
@@ -112,7 +112,8 @@ class Dataset(object):
                  test_start_hour_delta=None,
                  custom_vent_features=None,
                  use_ehr_features=True,
-                 use_demographic_features=True):
+                 use_demographic_features=True,
+                 vent_bn_diff_tolerance=5):
         """
         Define a dataset for use in training an ARDS detection algorithm. If we desire we can
         have separate parameterization for train and test sets. This causes a completely new
@@ -186,6 +187,7 @@ class Dataset(object):
         self.load_intermediates = load_intermediates
         self.post_hour = post_hour
         self.start_hour_delta = start_hour_delta
+        self.vent_bn_diff_tolerance = vent_bn_diff_tolerance
         if test_frame_size or test_post_hour or test_start_hour_delta:
             self.test_frame_size = test_frame_size if isinstance(test_frame_size, int) else frame_size
             self.test_post_hour = test_post_hour if isinstance(test_post_hour, int) else post_hour
@@ -297,7 +299,7 @@ class Dataset(object):
                 if type_ == 'unframed':
                     tmp = self.process_unframed_patient_data(patient, files, pt_start_time, post_hour)
                 elif type_ == 'framed':
-                    tmp = self.process_patient_data(patient, files, pt_start_time, post_hour, frame_size)
+                    tmp = self.process_framed_patient_data(patient, files, pt_start_time, post_hour, frame_size)
                 tmp['y'] = gt_label
                 tmp['set_type'] = cohort
 
@@ -354,9 +356,9 @@ class Dataset(object):
 
         return meta
 
-    def process_patient_data(self, patient_id, pt_files, start_time, post_hour, frame_size):
+    def process_framed_patient_data(self, patient_id, pt_files, start_time, post_hour, frame_size):
         """
-        Process all patient data for use in our learning algorithms
+        Process all patient framed data for use in our learning algorithms
 
         :param patient_id: patient pseudo-id
         :param pt_files: abspath to all patient vent files
@@ -367,6 +369,7 @@ class Dataset(object):
         # PROCESS ALL VENTILATOR DATA
         #
         # Cut off the header with [1:]
+        pt_files = sorted(pt_files)
         meta = self.load_breath_meta_file(pt_files[0])
         for f in pt_files[1:]:
             meta.extend(self.load_breath_meta_file(f))
@@ -454,7 +457,6 @@ class Dataset(object):
             meta = np.array(meta)
             if isinstance(meta[0], list):
                 raise Exception('Rows inside metadata are a list for patient: {}. Something went wrong. Try deleting metadata files and re-run'.format(patient_id))
-            meta = meta[meta[:, 29].argsort()]
             if start_time is not None:
                 try:
                     bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
@@ -498,15 +500,12 @@ class Dataset(object):
         :param post_hour: time to stop analyzing data relative to start of ventilation of berlin match
         """
         # index of abs bs is 29. So sort by BS time.
-        mat = mat[mat[:, 29].argsort()]
-        if start_time is not None:
-            try:
-                bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
-            except ValueError:
-                bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
-            mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
-            mat = mat[mask]
-
+        try:
+            bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+        except ValueError:
+            bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+        mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
+        mat = mat[mask]
         hour_row = np.zeros((len(mat), 1))
         try:
             bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
@@ -540,6 +539,14 @@ class Dataset(object):
         for low_idx in range(0, len(mat), frame_size):
             row = None
             stack = mat[low_idx:low_idx+frame_size]
+            # compare vent bn diffs on stacked breaths.
+            diffs = stack[:-1, 0] + 1 - stack[1:, 0]
+            # do not include the stack if it is discontiguous to too large a degree
+            #
+            if (diffs > self.vent_bn_diff_tolerance).any():
+                # last vent BN possible is 65536 (2^16) I'd like to recognize if this is occurring
+                if not (diffs > (2 ** 16) - self.vent_bn_diff_tolerance).any():
+                    continue
             stack_times.append(bs_times[low_idx:low_idx+frame_size][0])
             # We still have ventBN in the matrix, and this essentially gives average BN
             #
