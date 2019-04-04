@@ -234,7 +234,7 @@ class ARDSDetectionModel(object):
         elif self.args.algo == 'ADA':
             clf = AdaBoostClassifier(**hyperparams)
         elif self.args.algo == 'NB':
-            raise NotImplementedError()
+            clf = GaussianNB(**hyperparams)
         elif self.args.algo == 'GBC':
             raise NotImplementedError()
         clf.fit(x_train, y_train)
@@ -324,10 +324,10 @@ class ARDSDetectionModel(object):
             },
             'NB': {
                 'average': {
-
+                    'var_smoothing': .28,
                 },
                 'majority': {
-
+                    'var_smoothing': 0.1,
                 },
             },
         }
