@@ -228,11 +228,11 @@ class ARDSDetectionModel(object):
         elif self.args.algo == 'MLP':
             clf = MLPClassifier(random_state=1)
         elif self.args.algo == 'SVM':
-            raise NotImplementedError()
+            clf = SVC(**hyperparams)
         elif self.args.algo == 'LOG_REG':
-            raise NotImplementedError()
+            clf = LogisticRegression(**hyperparams)
         elif self.args.algo == 'ADA':
-            raise NotImplementedError()
+            clf = AdaBoostClassifier(**hyperparams)
         elif self.args.algo == 'NB':
             raise NotImplementedError()
         elif self.args.algo == 'GBC':
@@ -251,13 +251,83 @@ class ARDSDetectionModel(object):
                     'n_estimators': 53,
                     'oob_score': True,
                 },
-                "max": {
+                "majority": {
                     "random_state": 1,
                     "max_depth": 5,
                     "max_features": 'auto',
                     'criterion': 'entropy',
                     'n_estimators': 60,
                     'oob_score': True,
+                },
+            },
+            'ADA': {
+                "average": {
+                    'random_state': 1,
+                    'n_estimators': 116,
+                    'learning_rate': 0.128125,
+                    'algorithm': 'SAMME.R',
+                },
+                "majority": {
+                    'random_state': 1,
+                    'n_estimators': 160,
+                    'learning_rate': 0.125,
+                    'algorithm': 'SAMME.R',
+                },
+            },
+            'LOG_REG': {
+                'average': {
+                    'random_state': 1,
+                    'penalty': 'l2',
+                    'C': 0.04375,
+                    'max_iter': 100,
+                    'tol': 0.000520102,
+                    'solver': 'sag',
+                },
+                'majority': {
+                    'random_state': 1,
+                    'penalty': 'l2',
+                    'C': 0.03125,
+                    'max_iter': 100,
+                    'tol': 0.001,
+                    'solver': 'sag',
+                },
+            },
+            'SVM': {
+                'average': {
+                    'C': 5.0375,
+                    'degree': 2,
+                    'kernel': 'poly',
+                    'cache_size': 512,
+                },
+                'majority': {
+                    'C': (8 + 4 + 2) / 3, # 8, 4, and 2 were equally represented. So averaged them
+                    'degree': 2,
+                    'kernel': 'poly',
+                    'cache_size': 512,
+                },
+            },
+            'MLP': {
+                'average': {
+
+                },
+                'majority': {
+
+                },
+            },
+            'GBC': {
+                'average': {
+
+                },
+                'majority': {
+
+                },
+            },
+            'NB': {
+                'average': {
+
+                },
+                'majority': {
+
                 },
             },
         }
@@ -320,7 +390,7 @@ class ARDSDetectionModel(object):
         for param in grid_results:
             counts = Counter(grid_results[param])
             param_val, _ = max(counts.items(), key=lambda x: x[1])
-            print('param: {}. max: {}'.format(param, param_val))
+            print('param: {}. majority: {}'.format(param, param_val))
 
     def convert_loc_to_iloc(self, df, loc_indices):
         copied = df.copy()
@@ -381,7 +451,7 @@ class ARDSDetectionModel(object):
             'kernel': ['poly'],
             'degree': range(2, 8),
         }]
-        self._perform_grid_search(SVC(random_state=1, cache_size=256), params, x_train, y_train)
+        self._perform_grid_search(SVC(random_state=1, cache_size=512), params, x_train, y_train)
 
     def _perform_adaboost_grid_search(self, x_train, y_train):
         params = {
@@ -715,7 +785,7 @@ def build_parser():
     parser.add_argument('-gsj', '--grid-search-jobs', type=int, default=multiprocessing.cpu_count(), help='run grid search with this many cores')
     parser.add_argument('-ehr', '--use-ehr-features', action='store_true', help='use EHR data in learning')
     parser.add_argument('-demo', '--use-demographic-features', action='store_true', help='use demographic data in learning')
-    parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'max'], default='average')
+    parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'majority'], default='average')
     return parser
 
 
