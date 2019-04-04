@@ -764,7 +764,7 @@ def build_parser():
     parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
     parser.add_argument('--load-model')
     parser.add_argument('--load-scaler')
-    parser.add_argument("--folds", type=int, default=10)
+    parser.add_argument("--folds", type=int, default=5)
     parser.add_argument('-fs', "--frame-size", default=20, type=int)
     parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var', 'std', 'mean+var', 'mean+std', 'median+var', 'median+std'], default='median')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
