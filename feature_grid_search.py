@@ -114,7 +114,7 @@ def main():
     parser.add_argument('--debug', action='store_true', help='debug whats going wrong with the script without implementing multiprocessing')
     parser.add_argument('--use-ehr-features', action='store_true')
     parser.add_argument('--use-demographic-features', action='store_true')
-    parser.add_argument('--run-type', choices=['kfold', 'sequential_split'])
+    parser.add_argument('--run-type', choices=['kfold', 'sequential_split'], default='kfold')
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
     # just running 20 times is unfortunately insufficient
     parser.add_argument('-nr', '--num-runs', type=int, default=50)

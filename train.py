@@ -406,7 +406,7 @@ class ARDSDetectionModel(object):
 
     def _perform_nb_grid_search(self, x_train, y_train):
         params = {
-            'var_smoothing': [10**i for i in range(-12, -2)],
+            'var_smoothing': [10**i for i in range(-14, 5)],
         }
         self._perform_grid_search(GaussianNB(), params, x_train, y_train)
 
