@@ -97,7 +97,7 @@ class ARDSDetectionModel(object):
         Split patients according to some kind of random split with proportions defined
         by CLI args.
         """
-        unique_patients = self.data['patient'].unique()
+        unique_patients = sorted(self.data['patient'].unique())
         mapping = {patho: [] for n, patho in self.pathos.items()}
         for patient in list(unique_patients):
             patient_rows = self.data[self.data.patient == patient]
@@ -128,7 +128,7 @@ class ARDSDetectionModel(object):
         Get indexes to split dataset
         """
         idxs = []
-        unique_patients = x.patient.unique()
+        unique_patients = sorted(x.patient.unique())
         mapping = {patho: [] for n, patho in self.pathos.items()}
 
         for patient in unique_patients:
