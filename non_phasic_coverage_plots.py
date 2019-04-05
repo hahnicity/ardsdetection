@@ -80,6 +80,7 @@ def main():
     df = pd.read_pickle(args.data_frame)
     df = df.rename(columns={'abs_time_at_BS': 'abs_bs'})
     df['breath_time'] = df['iTime'] + df['eTime']
+    df = df.sort_values(by=['patient', 'abs_bs'])
     cohort = pd.read_csv(args.cohort_file)
     cohort = cohort[((cohort.experiment_group == 1)) & (cohort['Potential Enrollment'] == 'Y')]
     # make phases file from cohort file
