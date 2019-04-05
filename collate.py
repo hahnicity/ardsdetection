@@ -5,7 +5,6 @@ collate
 Create dataset of items we wish to use for the training/testing of our
 model.
 """
-from collections import OrderedDict
 import csv
 from datetime import datetime
 from glob import glob
@@ -27,52 +26,52 @@ EHR_DATA_PATH = 'ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv'
 
 class Dataset(object):
     # Feature sets are mapped by (feature_name, breath_meta_feature_index)
-    necessities = [('ventBN', 1), ('hour', -1)]
+    necessities = ['ventBN']
     flow_time_feature_set = necessities + [
-        # minF_to_zero is just pef_to_zero
-        ('mean_flow_from_pef', 38),
-        ('inst_RR', 8),
-        ('minF_to_zero', 36),
-        ('pef_+0.16_to_zero', 37),
-        ('iTime', 6),
-        ('eTime', 7),
-        ('I:E ratio', 5),
-        ('dyn_compliance', 39),
-        ('TVratio', 11),
+        # slope_minF_to_zero is just pef_to_zero
+        'mean_flow_from_pef',
+        'inst_RR',
+        'slope_minF_to_zero',
+        'pef_+0.16_to_zero',
+        'iTime',
+        'eTime',
+        'I:E ratio',
+        'dyn_compliance',
+        'tve:tvi ratio',
     ]
     flow_time_original = necessities + [
-        ('mean_flow_from_pef', 38),
-        ('inst_RR', 8),
-        ('minF_to_zero', 36),
-        ('pef_+0.16_to_zero', 37),
-        ('iTime', 6),
-        ('eTime', 7),
-        ('I:E ratio', 5),
-        ('dyn_compliance', 39),
+        'mean_flow_from_pef',
+        'inst_RR',
+        'slope_minF_to_zero',
+        'pef_+0.16_to_zero',
+        'iTime',
+        'eTime',
+        'I:E ratio',
+        'dyn_compliance',
     ]
     flow_time_optimal = necessities + [
-        ('dyn_compliance', 39),
-        ('TVratio', 11),
-        ('mean_flow_from_pef', 38),
-        ('eTime', 7),
-        ('I:E ratio', 5),
+        'dyn_compliance',
+        'tve:tvi ratio',
+        'mean_flow_from_pef',
+        'eTime',
+        'I:E ratio',
     ]
     broad_feature_set = flow_time_feature_set + [
-        ('TVi', 9),
-        ('TVe', 10),
-        ('Maw', 16),
-        ('ipAUC', 18),
-        ('PIP', 15),
-        ('PEEP', 17),
-        ('epAUC', 19),
+        'TVi',
+        'TVe',
+        'Maw',
+        'ipAUC',
+        'PIP',
+        'PEEP',
+        'epAUC',
     ]
     broad_optimal = necessities + [
-        ('PEEP', 17),
-        ('I:E Ratio', 5),
-        ('inst_RR', 8),
-        ('TVi', 9),
-        ('PIP', 15),
-        ('iTime', 6),
+        'PEEP',
+        'I:E Ratio',
+        'inst_RR',
+        'TVi',
+        'PIP',
+        'iTime',
     ]
     ehr_features = [
         "TEMPERATURE_F",
@@ -157,17 +156,17 @@ class Dataset(object):
                 self.file_map[patient] = files
 
         if feature_set == 'flow_time':
-            self.features = OrderedDict(self.flow_time_feature_set)
+            self.vent_features = self.flow_time_feature_set
         if feature_set == 'flow_time_orig':
-            self.features = OrderedDict(self.flow_time_original)
+            self.vent_features = self.flow_time_original
         elif feature_set == 'flow_time_opt':
-            self.features = OrderedDict(self.flow_time_optimal)
+            self.vent_features = self.flow_time_optimal
         elif feature_set == 'broad':
-            self.features = OrderedDict(self.broad_feature_set)
+            self.vent_features = self.broad_feature_set
         elif feature_set == 'broad_opt':
-            self.features = OrderedDict(self.broad_optimal)
+            self.vent_features = self.broad_optimal
         elif feature_set == 'custom':
-            self.features = OrderedDict(custom_vent_features)
+            self.vent_features = custom_vent_features
 
         frame_funcs = frame_func.split('+')
         self.frame_funcs = []
@@ -300,9 +299,26 @@ class Dataset(object):
                     tmp = self.process_unframed_patient_data(patient, files, pt_start_time, post_hour)
                 elif type_ == 'framed':
                     tmp = self.process_framed_patient_data(patient, files, pt_start_time, post_hour, frame_size)
+
+                # If we don't have any data don't bother with further steps
+                if len(tmp) == 0:
+                    continue
+
                 tmp['y'] = gt_label
                 tmp['set_type'] = cohort
 
+                # Add relative hour timing to here based on the row_time
+                hour_row = np.zeros((len(tmp), 1))
+                row_time = tmp.row_time.values
+                for hour in range(0, 24):
+                    mask = np.logical_and(
+                        (pt_start_time + np.timedelta64(hour, 'h')) <= row_time,
+                        (pt_start_time + np.timedelta64(hour+1, 'h')) > row_time
+                    )
+                    hour_row[mask] = hour
+                tmp['hour'] = hour_row
+
+                # append patient data frames together
                 if df is None:
                     df = tmp
                 else:
@@ -367,12 +383,11 @@ class Dataset(object):
         :param frame_size: size of frames to use
         """
         # PROCESS ALL VENTILATOR DATA
-        #
-        # Cut off the header with [1:]
         pt_files = sorted(pt_files)
         meta = self.load_breath_meta_file(pt_files[0])
         for f in pt_files[1:]:
-            meta.extend(self.load_breath_meta_file(f))
+            tmp = self.load_breath_meta_file(f)
+            meta.extend(tmp)
 
         if len(meta) != 0:
             meta, bs_times = self.process_breath_features(np.array(meta), start_time, post_hour)
@@ -386,15 +401,12 @@ class Dataset(object):
 
         cols = []
         for idx, func in enumerate(self.frame_funcs):
-            cols.extend(["{}_{}".format(func.__name__, feature) for feature in self.features.keys()])
+            cols.extend(["{}_{}".format(func.__name__, feature) for feature in self.vent_features])
             # perform a bit of cleanup on hour and ventBN cols
             if idx == 0:
-                hour_colname = 'hour'
                 ventbn_colname = 'ventBN'
             elif idx > 0:
-                hour_colname = 'dropme'
                 ventbn_colname = 'dropme'
-            cols[cols.index('{}_hour'.format(func.__name__))] = hour_colname
             cols[cols.index('{}_ventBN'.format(func.__name__))] = ventbn_colname
 
         # PROCESS EHR DATA
@@ -435,6 +447,7 @@ class Dataset(object):
             cols = cols + self.demographic_features
 
         df = pd.DataFrame(meta, columns=cols)
+        df['row_time'] = stack_times
         try:
             df = df.drop(['dropme'], axis=1)
         except KeyError:  # its possible we only have 1 feature type to use
@@ -465,6 +478,7 @@ class Dataset(object):
                 # Currently we aren't filtering data before start time in unframed data frames
                 mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
                 meta = meta[mask]
+                bs_times = bs_times[mask]
 
         # If all data was filtered by our starting time criteria
         if len(meta) == 0:
@@ -485,6 +499,7 @@ class Dataset(object):
             df['abs_time_at_BS'] = pd.to_datetime(df['abs_time_at_BS'], format="%Y-%m-%d %H-%M-%S.%f")
         except ValueError:
             df['abs_time_at_BS'] = pd.to_datetime(df['abs_time_at_BS'], format="%Y-%m-%d %H:%M:%S.%f")
+        df['row_time'] = bs_times
         df = df.drop(to_drop, axis=1)
         df['patient'] = patient_id
         return df
@@ -506,19 +521,12 @@ class Dataset(object):
             bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
         mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
         mat = mat[mask]
-        hour_row = np.zeros((len(mat), 1))
         try:
             bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
         except ValueError:
             bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
-        for hour in range(0, 24):
-            mask = np.logical_and(
-                (start_time + np.timedelta64(hour, 'h')) <= bs_times,
-                (start_time + np.timedelta64(hour+1, 'h')) > bs_times
-            )
-            hour_row[mask] = hour
-        row_idxs = list(self.features.values())
-        mat = np.append(mat, hour_row, axis=1)
+        # Derive numpy row idxs based on which features we want in the model
+        row_idxs = [EXPERIMENTAL_META_HEADER.index(feature) for feature in self.vent_features]
         mat = mat[:, row_idxs]
         mat = mat.astype(np.float32)
         mask = np.any(np.isnan(mat) | np.isinf(mat), axis=1)
@@ -542,7 +550,6 @@ class Dataset(object):
             # compare vent bn diffs on stacked breaths.
             diffs = stack[:-1, 0] + 1 - stack[1:, 0]
             # do not include the stack if it is discontiguous to too large a degree
-            #
             if (diffs > self.vent_bn_diff_tolerance).any():
                 # last vent BN possible is 65536 (2^16) I'd like to recognize if this is occurring
                 if not (diffs > (2 ** 16) - self.vent_bn_diff_tolerance).any():
