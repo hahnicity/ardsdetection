@@ -199,14 +199,12 @@ class ARDSDetectionModel(object):
         elif self.args.split_type == 'test_all':
             idxs = [([], x.index)]
 
-        try:
-            x = x.drop(['hour'], axis=1)
-        except:
-            pass
-        try:
-            x = x.drop(['y', 'patient', 'ventBN', 'set_type'], axis=1)
-        except:  # maybe we didnt define ventBN, its not that important anyhow.
-            x = x.drop(['y', 'patient', 'set_type'], axis=1)
+        # try dropping cols
+        for col in ['hour', 'row_time', 'y', 'patient', 'ventBN', 'set_type']:
+            try:
+                x = x.drop(col, axis=1)
+            except:
+                pass
 
         for train_idx, test_idx in idxs:
             x_train = x.loc[train_idx].dropna()
@@ -234,7 +232,7 @@ class ARDSDetectionModel(object):
         elif self.args.algo == 'ADA':
             clf = AdaBoostClassifier(**hyperparams)
         elif self.args.algo == 'NB':
-            raise NotImplementedError()
+            clf = GaussianNB(**hyperparams)
         elif self.args.algo == 'GBC':
             raise NotImplementedError()
         clf.fit(x_train, y_train)
@@ -324,10 +322,10 @@ class ARDSDetectionModel(object):
             },
             'NB': {
                 'average': {
-
+                    'var_smoothing': .28,
                 },
                 'majority': {
-
+                    'var_smoothing': 0.1,
                 },
             },
         }
@@ -764,7 +762,7 @@ def build_parser():
     parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
     parser.add_argument('--load-model')
     parser.add_argument('--load-scaler')
-    parser.add_argument("--folds", type=int, default=10)
+    parser.add_argument("--folds", type=int, default=5)
     parser.add_argument('-fs', "--frame-size", default=20, type=int)
     parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var', 'std', 'mean+var', 'mean+std', 'median+var', 'median+std'], default='median')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')

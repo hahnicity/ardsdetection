@@ -73,7 +73,7 @@ def run_model(model_args, main_args, combo, model_idx, out_dir):
     if main_args.run_type == 'kfold':
         model_args.cross_patient_kfold = True
         # only run with 10-fold cross-validation
-        model_args.folds = 10
+        model_args.folds = 5
         model = ARDSDetectionModel(model_args, dataset)
         model.train_and_test()
         auc = roc_auc_score(model.results.patho.tolist(), model.results.prediction.tolist())
