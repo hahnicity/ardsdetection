@@ -470,15 +470,13 @@ class Dataset(object):
             meta = np.array(meta)
             if isinstance(meta[0], list):
                 raise Exception('Rows inside metadata are a list for patient: {}. Something went wrong. Try deleting metadata files and re-run'.format(patient_id))
-            if start_time is not None:
-                try:
-                    bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
-                except ValueError:
-                    bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
-                # Currently we aren't filtering data before start time in unframed data frames
-                mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
-                meta = meta[mask]
-                bs_times = bs_times[mask]
+            try:
+                bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+            except ValueError:
+                bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+            # Currently we aren't filtering data before start time in unframed data frames
+            mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
+            meta = meta[mask]
 
         # If all data was filtered by our starting time criteria
         if len(meta) == 0:
@@ -499,7 +497,7 @@ class Dataset(object):
             df['abs_time_at_BS'] = pd.to_datetime(df['abs_time_at_BS'], format="%Y-%m-%d %H-%M-%S.%f")
         except ValueError:
             df['abs_time_at_BS'] = pd.to_datetime(df['abs_time_at_BS'], format="%Y-%m-%d %H:%M:%S.%f")
-        df['row_time'] = bs_times
+        df['row_time'] = df['abs_time_at_BS']
         df = df.drop(to_drop, axis=1)
         df['patient'] = patient_id
         return df

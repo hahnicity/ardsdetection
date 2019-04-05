@@ -22,6 +22,7 @@ def main():
     parser.add_argument('-t', '--to-pickle')
     parser.add_argument('-d', '--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
     parser.add_argument('-e', '--experiment', default='1')
+    parser.add_argument('--plot-by-hour', action='store_true')
     args = parser.parse_args()
 
     if args.from_pickle:
@@ -32,6 +33,9 @@ def main():
 
     if args.to_pickle:
         pd.to_pickle(df, args.to_pickle)
+
+    if not args.plot_by_hour:
+        return
 
     desc = pd.read_csv(args.cohort_description)
     hour_bins = {}
