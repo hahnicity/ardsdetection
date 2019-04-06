@@ -501,7 +501,7 @@ class ARDSDetectionModel(object):
 
     def _perform_grid_search(self, cls, params, x_train, y_train):
         x_train_expanded = self.data.loc[x_train.index]
-        cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, 10)
+        cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, self.args.grid_search_kfolds)
         # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
         cv = self.convert_loc_to_iloc(x_train, cv)
         # keep 1 core around to actually do other stuff
@@ -763,7 +763,8 @@ def build_parser():
     parser.add_argument('--no-load-intermediates', action='store_false', help='do not load from intermediate data')
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
-    parser.add_argument("--grid-search", action="store_true", help='perform grid search for model hyperparameters')
+    parser.add_argument("--grid-search", action="store_true", help='perform a grid search  for model hyperparameters')
+    parser.add_argument("--grid-search-kfolds", type=int, default=3, help='number of validation kfolds to use in the grid search')
     parser.add_argument('--split-type', choices=['simple', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
     parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
     parser.add_argument('--load-model')
