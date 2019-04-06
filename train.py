@@ -423,21 +423,27 @@ class ARDSDetectionModel(object):
         self._perform_grid_search(RandomForestClassifier(random_state=1), params, x_train, y_train)
 
     def _perform_mlp_grid_search(self, x_train, y_train):
-        params = {
-            'activation': ['relu', 'tanh', 'logistic'],
-            'solver': ['lbfgs', 'sgd', 'adam'],
-            'hidden_layer_sizes': [
-                (16), (32), (64), (128),
-                (16, 16), (16, 32), (16, 64), (16, 128),
-                (32, 16), (32, 32), (32, 64), (32, 128),
-                (64, 16), (64, 32), (64, 64), (64, 128),
-                (128, 16), (128, 32), (128, 64), (128, 128),
-            ],
+        hiddens = [
+            (16,), (32,), (64,), (128,),
+            (16, 16), (16, 32), (16, 64), (16, 128),
+            (32, 16), (32, 32), (32, 64), (32, 128),
+            (64, 16), (64, 32), (64, 64), (64, 128),
+            (128, 16), (128, 32), (128, 64), (128, 128),
+        ]
+        activations = ['relu', 'tanh', 'logistic', 'identity']
+        params = [{
+            'activation': activations,
+            'solver': ['lbfgs'],
+            'hidden_layer_sizes': hiddens,
+        }, {
+            'activation': activations,
+            'solver': ['sgd', 'adam'],
+            'learning_rate_init': [.001, .01, .1],
+            'hidden_layer_sizes': hiddens,
             # cut down on # params to search otherwise it will take forever
             #'alpha': [0.00001, .0001, .001, .01, .1],
             #'batch_size': [8, 16, 32, 64, 128, 256],
-            'learning_rate_init': [.0001, .001, .01, .1],
-        }
+        }]
         self._perform_grid_search(MLPClassifier(random_state=1), params, x_train, y_train)
 
     def _perform_svm_grid_search(self, x_train, y_train):
