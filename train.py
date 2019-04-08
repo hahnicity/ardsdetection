@@ -224,7 +224,7 @@ class ARDSDetectionModel(object):
         if self.args.algo == 'RF':
             clf = RandomForestClassifier(**hyperparams)
         elif self.args.algo == 'MLP':
-            clf = MLPClassifier(random_state=1)
+            clf = MLPClassifier(**hyperparams)
         elif self.args.algo == 'SVM':
             clf = SVC(**hyperparams)
         elif self.args.algo == 'LOG_REG':
@@ -306,10 +306,14 @@ class ARDSDetectionModel(object):
             },
             'MLP': {
                 'average': {
-
+                    "hidden_layer_sizes": (55, 16),
+                    "solver": 'adam',
+                    'activation': 'logistic',
                 },
                 'majority': {
-
+                    'hidden_layer_sizes': (32, 16),
+                    "solver": 'adam',
+                    'activation': 'logistic',
                 },
             },
             'GBC': {
