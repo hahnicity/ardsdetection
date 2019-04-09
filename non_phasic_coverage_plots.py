@@ -6,6 +6,7 @@ import argparse
 from copy import copy
 import math
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -41,6 +42,10 @@ def analyze_coverage(coverage, ards_patients, other_patients, hours):
         # calculate total hours of coverage for a patient.
         seconds_covered = sum(coverage[patient]['seconds_covered'].values())
         ards_hours_covered.append(seconds_covered / float(one_hr))
+    ards_hours_covered = np.array(ards_hours_covered)
+    threshes = [1, hours / 4.0 , hours / 2, hours / 1.5, hours - 1]
+    for thresh in threshes:
+        print('{} ARDS patients with > {} hour of data in first {} hours'.format(len(ards_hours_covered[ards_hours_covered > thresh]), thresh, hours))
     plt.hist(ards_hours_covered, bins=hours)
     plt.title('ARDS Coverage in {} Hours'.format(hours))
     plt.xticks(range(hours), range(hours))
@@ -53,6 +58,9 @@ def analyze_coverage(coverage, ards_patients, other_patients, hours):
         # calculate total hours of coverage for a patient.
         seconds_covered = sum(coverage[patient]['seconds_covered'].values())
         other_hours_covered.append(seconds_covered / float(one_hr))
+    other_hours_covered = np.array(other_hours_covered)
+    for thresh in threshes:
+        print('{} OTHER patients with > {} hour of data in first {} hours'.format(len(other_hours_covered[other_hours_covered > thresh]), thresh, hours))
     plt.hist(other_hours_covered, bins=hours)
     plt.title('OTHER Coverage in {} Hours'.format(hours))
     plt.xticks(range(hours), range(hours))
