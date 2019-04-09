@@ -44,8 +44,7 @@ def run_model(model_args, main_args, combo, model_idx, out_dir):
     if not combo:
         results['features'] = []
         return results
-    features = [k[0] for k in combo]
-    results['features'] = features
+    results['features'] = combo
     path = os.path.join(out_dir, 'dataset-{}.pkl'.format(model_idx))
 
     if os.path.exists(path) and main_args.load_if_exists:
