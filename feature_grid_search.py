@@ -19,10 +19,10 @@ def get_all_possible_features():
     Get all possible feature permutations
     """
     all_possible_flow_time_features = [
-        ('mean_flow_from_pef', 38), ('inst_RR', 8), ('minF_to_zero', 36),
-        ('pef_+0.16_to_zero', 37), ('iTime', 6), ('eTime', 7), ('I:E ratio', 5),
+        'mean_flow_from_pef', 'inst_RR', 'slope_minF_to_zero',
+        'pef_+0.16_to_zero', 'iTime', 'eTime', 'I:E ratio',
         # XXX Add pressure itime eventually, altho it may only be useful for PC/PS pts.
-        ('dyn_compliance', 39), ('TVratio', 11)
+        'dyn_compliance', 'tve:tvi ratio'
     ]
     # There is actually no way that we can do grid search on all possible broad features
     # because it will yield 8388608 possibilities, which is infeasible to search thru.
@@ -30,7 +30,9 @@ def get_all_possible_features():
     # features down to 17 possibilities still yields 262144 choices. 13 possibilities gives
     # 16384 choices
     all_possibilities = all_possible_flow_time_features + [
-        ('TVi', 9), ('PIP', 15), ('PEEP', 17), ('vol_at_76', 41), ('min_pressure', 35)
+        'TVi', 'TVe', 'Maw', 'ipAUC', 'PIP', 'PEEP', 'epAUC',
+        # XXX others that can be investigated in future
+        # vol_at_76, min_pressure
     ]
     all_ft_combos = (set(compress(all_possible_flow_time_features, mask)) for mask in product(*[[0,1]]*len(all_possible_flow_time_features)))
     all_combos = (set(compress(all_possibilities, mask)) for mask in product(*[[0,1]]*len(all_possibilities)))
@@ -51,7 +53,7 @@ def run_model(model_args, main_args, combo, model_idx, out_dir):
         if 'set_type' not in dataset.columns:
             dataset['set_type'] = 'train_test'
     else:
-        combo = list(combo) + [('ventBN', 2), ('hour', -1)]
+        combo = list(combo) + ['ventBN']
         dataset = Dataset(
             main_args.data_path,
             model_args.cohort_description,
