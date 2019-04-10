@@ -515,17 +515,18 @@ class Dataset(object):
         :param post_hour: time to stop analyzing data relative to start of ventilation of berlin match
         """
         # index of abs bs is 29. So sort by BS time.
+        abs_bs_idx = EXPERIMENTAL_META_HEADER.index('abs_time_at_BS')
         try:
-            bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+            bs_times = pd.to_datetime(mat[:, abs_bs_idx], format="%Y-%m-%d %H-%M-%S.%f").values
         except ValueError:
-            bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+            bs_times = pd.to_datetime(mat[:, abs_bs_idx], format="%Y-%m-%d %H:%M:%S.%f").values
         # perform filtering via start and end times
         mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
         mat = mat[mask]
         try:
-            bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H-%M-%S.%f").values
+            bs_times = pd.to_datetime(mat[:, abs_bs_idx], format="%Y-%m-%d %H-%M-%S.%f").values
         except ValueError:
-            bs_times = pd.to_datetime(mat[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
+            bs_times = pd.to_datetime(mat[:, abs_bs_idx], format="%Y-%m-%d %H:%M:%S.%f").values
         # Derive numpy row idxs based on which features we want in the model
         row_idxs = [EXPERIMENTAL_META_HEADER.index(feature) for feature in self.vent_features]
         mat = mat[:, row_idxs]
@@ -553,6 +554,8 @@ class Dataset(object):
             vent_bn_idx = self.vent_features.index('ventBN')
             diffs = stack[:-1, vent_bn_idx] + 1 - stack[1:, vent_bn_idx]
             # do not include the stack if it is discontiguous to too large a degree
+            #if abs(sum(diffs)) > 20:
+            #    print(sum(diffs), stack[:, vent_bn_idx].astype(int))
             if (diffs > self.vent_bn_diff_tolerance).any():
                 # last vent BN possible is 65536 (2^16) I'd like to recognize if this is occurring
                 if not (diffs > (2 ** 16) - self.vent_bn_diff_tolerance).any():
