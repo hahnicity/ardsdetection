@@ -222,6 +222,61 @@ class Dataset(object):
         """
         return self._get_dataset('unframed')
 
+    def get_framed_from_unframed_dataset(self, unframed):
+        """
+        Get a framed dataset using a previously processed unframed dataset. This can
+        be helpful in cases where we are re-computing frequently on the same dataset
+        like in the case of feature grid search
+
+        :param unframed: The pd.DataFrame instance of the unframed dataset
+        """
+        # XXX also need to eventually be able to process more than just
+        # train_test set. But for now thats all we can do
+        if len(unframed.set_type.unique()) != 1:
+            raise NotImplementedError('Cannot run this method with separate train and test sets currently')
+        cols = self._get_dataframe_colnames()
+        all_pts = None
+        for patient_id in unframed.patient.unique():
+            patient_rows = unframed[unframed.patient == patient_id]
+            pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient_id].iloc[0]
+            patho = patient_rows.iloc[0].y
+            if patho != 1:
+                pt_start_time = pt_row['vent_start_time']
+            else:
+                pt_start_time = pt_row['Date when Berlin criteria first met (m/dd/yyy)']
+            pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M"))
+            meta = patient_rows[self.vent_features].values
+            # XXX why is frame_size a local var
+            meta, stack_times = self.create_breath_frames(meta, self.frame_size, patient_rows.abs_time_at_BS.values, patient_id)
+            if len(meta) == 0:
+                logging.warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
+                continue
+            # XXX Add processing for EHR and Demographic data later. But for now
+            # we don't really need to compute it.
+            tmp = pd.DataFrame(meta, columns=cols)
+            tmp['patient'] = patient_id
+            tmp['row_time'] = stack_times
+            tmp['set_type'] = 'train_test'
+            tmp['y'] = patho
+            hour_row = np.zeros((len(tmp), 1))
+            for hour in range(0, 24):
+                mask = np.logical_and(
+                    (pt_start_time + np.timedelta64(hour, 'h')) <= stack_times,
+                    (pt_start_time + np.timedelta64(hour+1, 'h')) > stack_times
+                )
+                hour_row[mask] = hour
+            tmp['hour'] = hour_row
+            try:
+                tmp = tmp.drop(['dropme'], axis=1)
+            except KeyError:  # its possible we only have 1 feature type to use
+                pass
+            if all_pts is None:
+                all_pts = tmp
+            else:
+                all_pts = all_pts.append(tmp)
+
+        return all_pts
+
     def _get_dataset(self, type_):
         df = None
         # We are using separate parameterization for both train and test
@@ -388,11 +443,17 @@ class Dataset(object):
         pt_files = sorted(pt_files)
         meta = self.load_breath_meta_file(pt_files[0])
         for f in pt_files[1:]:
+            # This takes up about 21% of the time in this function if ehr and demo
+            # data is not processed
             tmp = self.load_breath_meta_file(f)
             meta.extend(tmp)
 
         if len(meta) != 0:
+            # This takes up 54% of the time in this function if ehr and demo data
+            # is not processed
             meta, bs_times = self.process_breath_features(np.array(meta), start_time, post_hour)
+            # This takes up 15% of computation time if ehr and demo data is not
+            # processed
             meta, stack_times = self.create_breath_frames(meta, frame_size, bs_times, patient_id)
             if len(meta) == 0:
                 logging.warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
@@ -400,16 +461,7 @@ class Dataset(object):
         # If all data was filtered by our starting time criteria
         if len(meta) == 0:
             meta = []
-
-        cols = []
-        for idx, func in enumerate(self.frame_funcs):
-            cols.extend(["{}_{}".format(func.__name__, feature) for feature in self.vent_features])
-            # perform a bit of cleanup on hour and ventBN cols
-            if idx == 0:
-                ventbn_colname = 'ventBN'
-            elif idx > 0:
-                ventbn_colname = 'dropme'
-            cols[cols.index('{}_ventBN'.format(func.__name__))] = ventbn_colname
+        cols = self._get_dataframe_colnames()
 
         # PROCESS EHR DATA
         if self.use_ehr_features and len(meta) > 0:
@@ -424,6 +476,8 @@ class Dataset(object):
                 ehr_obs = np.empty((len(meta), len(self.ehr_features)))
                 ehr_obs[:] = np.nan
             else:
+                # XXX this takes an extradinarily long amount of time to complete.
+                # Takes about 85% of the computation time of this func
                 ehr_obs = self.link_breath_and_ehr_features(pt_data, stack_times)
 
             meta = np.append(meta, ehr_obs, axis=1)
@@ -610,3 +664,15 @@ class Dataset(object):
                     row.append(val)
             ehr_obs.append(row)
         return np.array(ehr_obs).astype(np.float32)
+
+    def _get_dataframe_colnames(self):
+        cols = []
+        for idx, func in enumerate(self.frame_funcs):
+            cols.extend(["{}_{}".format(func.__name__, feature) for feature in self.vent_features])
+            # perform a bit of cleanup on hour and ventBN cols
+            if idx == 0:
+                ventbn_colname = 'ventBN'
+            elif idx > 0:
+                ventbn_colname = 'dropme'
+            cols[cols.index('{}_ventBN'.format(func.__name__))] = ventbn_colname
+        return cols
