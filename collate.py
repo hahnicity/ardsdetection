@@ -518,6 +518,7 @@ class Dataset(object):
         many breaths we have from a patient, when the breaths occurred, and how
         many patients we have in aggregate
         """
+        pt_files = sorted(pt_files)
         meta = self.load_breath_meta_file(pt_files[0])
         for f in pt_files[1:]:
             meta.extend(self.load_breath_meta_file(f))
@@ -531,7 +532,7 @@ class Dataset(object):
             except ValueError:
                 bs_times = pd.to_datetime(meta[:, 29], format="%Y-%m-%d %H:%M:%S.%f").values
             # Currently we aren't filtering data before start time in unframed data frames
-            mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
+            mask = np.logical_and(start_time <= bs_times, bs_times <= (start_time + np.timedelta64(post_hour, 'h')))
             meta = meta[mask]
 
         # If all data was filtered by our starting time criteria
@@ -575,12 +576,10 @@ class Dataset(object):
         except ValueError:
             bs_times = pd.to_datetime(mat[:, abs_bs_idx], format="%Y-%m-%d %H:%M:%S.%f").values
         # perform filtering via start and end times
-        mask = bs_times <= (start_time + np.timedelta64(post_hour, 'h'))
+        mask = np.logical_and(start_time <= bs_times, bs_times <= (start_time + np.timedelta64(post_hour, 'h')))
         mat = mat[mask]
-        try:
-            bs_times = pd.to_datetime(mat[:, abs_bs_idx], format="%Y-%m-%d %H-%M-%S.%f").values
-        except ValueError:
-            bs_times = pd.to_datetime(mat[:, abs_bs_idx], format="%Y-%m-%d %H:%M:%S.%f").values
+        bs_times = bs_times[mask]
+
         # Derive numpy row idxs based on which features we want in the model
         row_idxs = [EXPERIMENTAL_META_HEADER.index(feature) for feature in self.vent_features]
         mat = mat[:, row_idxs]
