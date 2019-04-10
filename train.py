@@ -737,7 +737,7 @@ def create_df(args):
     """
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
-    df = Dataset(
+    dataset = Dataset(
         args.data_path,
         args.cohort_description,
         args.feature_set,
@@ -752,7 +752,14 @@ def create_df(args):
         args.test_start_hour_delta,
         use_ehr_features=args.use_ehr_features,
         use_demographic_features=args.use_demographic_features,
-    ).get()
+    )
+    df = dataset.get()
+    # Perform evaluation on number of frames dropped if we want
+    if args.print_dropped_frame_eval:
+        for patient, frames_dropped in dataset.frames_dropped.items():
+            n_frames_cur = len(df[df.patient == patient])
+            print('{}% of frames dropped for patient {}. n frames cur: {}. n frames dropped: {}'.format(round(100 * float(frames_dropped) / (frames_dropped+n_frames_cur), 3), patient, n_frames_cur, frames_dropped))
+
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
 
@@ -795,6 +802,7 @@ def build_parser():
     parser.add_argument('-ehr', '--use-ehr-features', action='store_true', help='use EHR data in learning')
     parser.add_argument('-demo', '--use-demographic-features', action='store_true', help='use demographic data in learning')
     parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'majority'], default='average')
+    parser.add_argument('-pdfe', '--print-dropped-frame-eval', action='store_true', help='Print evaluation of all the frames we drop')
     return parser
 
 
