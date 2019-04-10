@@ -238,15 +238,15 @@ class Dataset(object):
         all_pts = None
         for patient_id in unframed.patient.unique():
             patient_rows = unframed[unframed.patient == patient_id]
-            pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient_id].iloc[0]
+            desc_pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient_id].iloc[0]
             patho = patient_rows.iloc[0].y
             if patho != 1:
-                pt_start_time = pt_row['vent_start_time']
+                pt_start_time = desc_pt_row['vent_start_time']
             else:
-                pt_start_time = pt_row['Date when Berlin criteria first met (m/dd/yyy)']
+                pt_start_time = desc_pt_row['Date when Berlin criteria first met (m/dd/yyy)']
             pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M"))
-            meta = patient_rows[self.vent_features].values
-            # XXX why is frame_size a local var
+            meta = patient_rows[self.vent_features].dropna().values
+            # XXX why is frame_size a local var?
             meta, stack_times = self.create_breath_frames(meta, self.frame_size, patient_rows.abs_time_at_BS.values, patient_id)
             if len(meta) == 0:
                 logging.warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
