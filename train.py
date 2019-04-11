@@ -265,33 +265,33 @@ class ARDSDetectionModel(object):
             'ADA': {
                 "average": {
                     'random_state': 1,
-                    'n_estimators': 116,
-                    'learning_rate': 0.128125,
+                    'n_estimators': 80,
+                    'learning_rate': 0.23125,
                     'algorithm': 'SAMME.R',
                 },
                 "majority": {
                     'random_state': 1,
-                    'n_estimators': 160,
-                    'learning_rate': 0.125,
+                    'n_estimators': 120,
+                    'learning_rate': 0.03125,
                     'algorithm': 'SAMME.R',
                 },
             },
             'LOG_REG': {
                 'average': {
                     'random_state': 1,
-                    'penalty': 'l2',
-                    'C': 0.04375,
+                    'penalty': 'l1',
+                    'C': 0.0875,
                     'max_iter': 100,
-                    'tol': 0.000520102,
-                    'solver': 'sag',
+                    'tol': 0.000420004,
+                    'solver': 'liblinear',
                 },
                 'majority': {
                     'random_state': 1,
-                    'penalty': 'l2',
-                    'C': 0.03125,
+                    'penalty': 'l1',
+                    'C': 0.0625,
                     'max_iter': 100,
-                    'tol': 0.001,
-                    'solver': 'sag',
+                    'tol': 1e-8,
+                    'solver': 'liblinear',
                 },
             },
             'SVM': {
@@ -330,10 +330,10 @@ class ARDSDetectionModel(object):
             },
             'NB': {
                 'average': {
-                    'var_smoothing': .28,
+                    'var_smoothing': .244,
                 },
                 'majority': {
-                    'var_smoothing': 0.1,
+                    'var_smoothing': 0.01,
                 },
             },
         }

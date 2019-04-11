@@ -269,7 +269,7 @@ class Dataset(object):
             tmp['hour'] = hour_row
             try:
                 tmp = tmp.drop(['dropme'], axis=1)
-            except KeyError:  # its possible we only have 1 feature type to use
+            except (KeyError, ValueError):  # its possible we only have 1 feature type to use
                 pass
             if all_pts is None:
                 all_pts = tmp
@@ -509,7 +509,7 @@ class Dataset(object):
         df['row_time'] = stack_times
         try:
             df = df.drop(['dropme'], axis=1)
-        except KeyError:  # its possible we only have 1 feature type to use
+        except (KeyError, ValueError):  # its possible we only have 1 feature type to use
             pass
         df['patient'] = patient_id
         return df
