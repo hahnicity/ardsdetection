@@ -112,8 +112,7 @@ class Dataset(object):
                  custom_vent_features=None,
                  use_ehr_features=True,
                  use_demographic_features=True,
-                 vent_bn_frac_missing=.5,
-                 vent_bn_diff_tolerance=5):
+                 vent_bn_frac_missing=.5):
         """
         Define a dataset for use in training an ARDS detection algorithm. If we desire we can
         have separate parameterization for train and test sets. This causes a completely new
@@ -135,7 +134,7 @@ class Dataset(object):
         :param custom_vent_features: If you set features manually you must specify which to use in format (feature name, index)
         :param use_ehr_features: Should we use EHR derived features?
         :param use_demographic_features: Should we use demographic features?
-        :param XXX:
+        :param vent_bn_frac_missing: Define amount of sequential BNs we will allow missing from a frame
         """
         raw_dirs = []
         for i in experiment_num.split('+'):
@@ -188,7 +187,6 @@ class Dataset(object):
         self.load_intermediates = load_intermediates
         self.post_hour = post_hour
         self.start_hour_delta = start_hour_delta
-        self.vent_bn_diff_tolerance = vent_bn_diff_tolerance
         self.vent_bn_frac_missing = vent_bn_frac_missing
         # keep track of the number of frames dropped per patient
         self.frames_dropped = {}
@@ -608,30 +606,22 @@ class Dataset(object):
         for low_idx in range(0, len(mat), frame_size):
             row = None
             stack = mat[low_idx:low_idx+frame_size]
-            # do not include the stack if it is discontiguous to too large a degree
-            #bns_missing = abs(sum(diffs))
-            #missing_thresh = int(frame_size * self.vent_bn_frac_missing)
-            #if bns_missing > int(frame_size * self.vent_bn_frac_missing):
-            #    if not bns_missing - (2 ** 16) <= missing_thresh:
-            #        if not patient_id in self.frames_dropped:
-            #            self.frames_dropped[patient_id] = 1
-            #        else:
-            #            self.frames_dropped[patient_id] += 1
-            #       continue
-            #    print(sum(diffs), stack[:, vent_bn_idx].astype(int))
             # compare vent bn diffs on stacked breaths.
             vent_bn_idx = self.vent_features.index('ventBN')
             diffs = stack[:-1, vent_bn_idx] + 1 - stack[1:, vent_bn_idx]
-            if (diffs > self.vent_bn_diff_tolerance).any():
+            # do not include the stack if it is discontiguous to too large a degree
+            bns_missing = sum(abs(diffs))
+            missing_thresh = int(frame_size * self.vent_bn_frac_missing)
+            if bns_missing > missing_thresh:
                 # last vent BN possible is 65536 (2^16) I'd like to recognize if this is occurring
-                if not (diffs > (2 ** 16) - self.vent_bn_diff_tolerance).any():
+                if not abs(bns_missing - (2 ** 16)) <= missing_thresh:
                     if not patient_id in self.frames_dropped:
                         self.frames_dropped[patient_id] = 1
                     else:
                         self.frames_dropped[patient_id] += 1
                     continue
             stack_times.append(bs_times[low_idx:low_idx+frame_size][0])
-            # We still have ventBN in the matrix, and this essentially gives average BN
+            # We still have ventBN in the matrix, and this essentially gives func(BN)
             #
             # axis=0 takes function across a column
             for func in self.frame_funcs:
