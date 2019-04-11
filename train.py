@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pprint import pprint
+from prettytable import PrettyTable
 import seaborn as sns
 from sklearn.model_selection import GridSearchCV, KFold, train_test_split
 from sklearn.decomposition import KernelPCA, PCA
@@ -200,6 +201,7 @@ class ARDSDetectionModel(object):
             except:
                 pass
 
+        colnames = x.columns
         for train_idx, test_idx in idxs:
             x_train = x.loc[train_idx].dropna()
             x_test = x.loc[test_idx].dropna()
@@ -208,9 +210,9 @@ class ARDSDetectionModel(object):
 
             scaler = self.get_and_fit_scaler(x_train)
             if len(x_train) != 0:
-                x_train = pd.DataFrame(scaler.transform(x_train), index=x_train.index)
+                x_train = pd.DataFrame(scaler.transform(x_train), index=x_train.index, columns=colnames)
             if len(x_test) != 0:
-                x_test = pd.DataFrame(scaler.transform(x_test), index=x_test.index)
+                x_test = pd.DataFrame(scaler.transform(x_test), index=x_test.index, columns=colnames)
             yield (x_train, x_test, y_train, y_test)
 
     def train(self, x_train, y_train):
@@ -230,6 +232,14 @@ class ARDSDetectionModel(object):
         elif self.args.algo == 'GBC':
             raise NotImplementedError()
         clf.fit(x_train, y_train)
+        if self.args.algo == 'RF' and not self.args.no_print_results:
+            print('--- OOB scores ---')
+            oob_table = PrettyTable()
+            oob_table.field_names = ['feature', 'score']
+            oob_scores = zip(x_train.columns, clf.feature_importances_)
+            for feature, score in oob_scores:
+                oob_table.add_row([feature, round(score, 4)])
+            print(oob_table)
         self.models.append(clf)
 
     def _get_hyperparameters(self):
@@ -731,7 +741,7 @@ def create_df(args):
     """
     if args.from_pickle:
         return pd.read_pickle(args.from_pickle)
-    dataset = Dataset(
+    data_cls = Dataset(
         args.data_path,
         args.cohort_description,
         args.feature_set,
@@ -747,12 +757,19 @@ def create_df(args):
         use_ehr_features=args.use_ehr_features,
         use_demographic_features=args.use_demographic_features,
     )
-    df = dataset.get()
+    if args.load_from_unframed:
+        unframed = pd.read_pickle(args.load_from_unframed)
+        df = data_cls.get_framed_from_unframed_dataset(unframed)
+    else:
+        df = data_cls.get()
     # Perform evaluation on number of frames dropped if we want
     if args.print_dropped_frame_eval:
-        for patient, frames_dropped in dataset.frames_dropped.items():
+        table = PrettyTable()
+        table.field_names = ['patient', 'Current Frames', 'Frames Dropped', '% Dropped']
+        for patient, frames_dropped in data_cls.frames_dropped.items():
             n_frames_cur = len(df[df.patient == patient])
-            print('{}% of frames dropped for patient {}. n frames cur: {}. n frames dropped: {}'.format(round(100 * float(frames_dropped) / (frames_dropped+n_frames_cur), 3), patient, n_frames_cur, frames_dropped))
+            table.add_row([patient, n_frames_cur, frames_dropped, round(100 * float(frames_dropped) / (frames_dropped+n_frames_cur), 3)])
+        print(table)
 
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
@@ -797,6 +814,7 @@ def build_parser():
     parser.add_argument('-demo', '--use-demographic-features', action='store_true', help='use demographic data in learning')
     parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'majority'], default='average')
     parser.add_argument('-pdfe', '--print-dropped-frame-eval', action='store_true', help='Print evaluation of all the frames we drop')
+    parser.add_argument('--load-from-unframed', action='store_true')
     return parser
 
 
