@@ -239,6 +239,7 @@ class Dataset(object):
         all_pts = None
         for patient_id in unframed.patient.unique():
             patient_rows = unframed[unframed.patient == patient_id]
+            patient_rows = patient_rows.replace([np.inf, -np.inf], np.nan)
             desc_pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient_id].iloc[0]
             patho = patient_rows.iloc[0].y
             if patho != 1:
