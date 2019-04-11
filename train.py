@@ -249,16 +249,16 @@ class ARDSDetectionModel(object):
                     "random_state": 1,
                     "max_depth": 5,
                     "max_features": 'auto',
-                    'criterion': 'entropy',
-                    'n_estimators': 53,
+                    'criterion': 'gini',
+                    'n_estimators': 33,
                     'oob_score': True,
                 },
                 "majority": {
                     "random_state": 1,
                     "max_depth": 5,
                     "max_features": 'auto',
-                    'criterion': 'entropy',
-                    'n_estimators': 60,
+                    'criterion': 'gini',
+                    'n_estimators': 15,
                     'oob_score': True,
                 },
             },
@@ -322,10 +322,18 @@ class ARDSDetectionModel(object):
             },
             'GBC': {
                 'average': {
-
+                    'random_state': 1,
+                    'n_estimators': 180,
+                    'criterion': 'mae',
+                    'loss': 'exponential',
+                    'max_features': 'log2',
                 },
                 'majority': {
-
+                    'random_state': 1,
+                    'n_estimators': 50,
+                    'criterion': 'mae',
+                    'loss': 'exponential',
+                    'max_features': 'log2',
                 },
             },
             'NB': {
