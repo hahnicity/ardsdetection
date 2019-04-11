@@ -112,6 +112,7 @@ class Dataset(object):
                  custom_vent_features=None,
                  use_ehr_features=True,
                  use_demographic_features=True,
+                 vent_bn_frac_missing=.5,
                  vent_bn_diff_tolerance=5):
         """
         Define a dataset for use in training an ARDS detection algorithm. If we desire we can
@@ -134,6 +135,7 @@ class Dataset(object):
         :param custom_vent_features: If you set features manually you must specify which to use in format (feature name, index)
         :param use_ehr_features: Should we use EHR derived features?
         :param use_demographic_features: Should we use demographic features?
+        :param XXX:
         """
         raw_dirs = []
         for i in experiment_num.split('+'):
@@ -187,6 +189,7 @@ class Dataset(object):
         self.post_hour = post_hour
         self.start_hour_delta = start_hour_delta
         self.vent_bn_diff_tolerance = vent_bn_diff_tolerance
+        self.vent_bn_frac_missing = vent_bn_frac_missing
         # keep track of the number of frames dropped per patient
         self.frames_dropped = {}
         if test_frame_size or test_post_hour or test_start_hour_delta:
@@ -246,7 +249,7 @@ class Dataset(object):
                 pt_start_time = desc_pt_row['Date when Berlin criteria first met (m/dd/yyy)']
             pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M"))
             meta = patient_rows[self.vent_features].dropna().values
-            # XXX why is frame_size a local var?
+            # XXX be able to adjust for frame sizes that change in train and test
             meta, stack_times = self.create_breath_frames(meta, self.frame_size, patient_rows.abs_time_at_BS.values, patient_id)
             if len(meta) == 0:
                 logging.warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
@@ -275,6 +278,8 @@ class Dataset(object):
             else:
                 all_pts = all_pts.append(tmp)
 
+        # reindex and return
+        all_pts.index = range(len(all_pts))
         return all_pts
 
     def _get_dataset(self, type_):
@@ -603,12 +608,20 @@ class Dataset(object):
         for low_idx in range(0, len(mat), frame_size):
             row = None
             stack = mat[low_idx:low_idx+frame_size]
+            # do not include the stack if it is discontiguous to too large a degree
+            #bns_missing = abs(sum(diffs))
+            #missing_thresh = int(frame_size * self.vent_bn_frac_missing)
+            #if bns_missing > int(frame_size * self.vent_bn_frac_missing):
+            #    if not bns_missing - (2 ** 16) <= missing_thresh:
+            #        if not patient_id in self.frames_dropped:
+            #            self.frames_dropped[patient_id] = 1
+            #        else:
+            #            self.frames_dropped[patient_id] += 1
+            #       continue
+            #    print(sum(diffs), stack[:, vent_bn_idx].astype(int))
             # compare vent bn diffs on stacked breaths.
             vent_bn_idx = self.vent_features.index('ventBN')
             diffs = stack[:-1, vent_bn_idx] + 1 - stack[1:, vent_bn_idx]
-            # do not include the stack if it is discontiguous to too large a degree
-            #if abs(sum(diffs)) > 20:
-            #    print(sum(diffs), stack[:, vent_bn_idx].astype(int))
             if (diffs > self.vent_bn_diff_tolerance).any():
                 # last vent BN possible is 65536 (2^16) I'd like to recognize if this is occurring
                 if not (diffs > (2 ** 16) - self.vent_bn_diff_tolerance).any():

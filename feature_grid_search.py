@@ -39,7 +39,7 @@ def get_all_possible_features():
     return {'flow_time_gen': all_ft_combos, 'broad_gen': all_combos}
 
 
-def run_model(model_args, main_args, combo, model_idx, out_dir):
+def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
     results = {'auc': 0, 'idx': model_idx, 'run_type': main_args.run_type}
     if not combo:
         results['features'] = []
@@ -53,7 +53,7 @@ def run_model(model_args, main_args, combo, model_idx, out_dir):
             dataset['set_type'] = 'train_test'
     else:
         combo = list(combo) + ['ventBN']
-        dataset = Dataset(
+        data_cls = Dataset(
             main_args.data_path,
             model_args.cohort_description,
             'custom',
@@ -69,14 +69,21 @@ def run_model(model_args, main_args, combo, model_idx, out_dir):
             custom_vent_features=combo,
             use_ehr_features=main_args.use_ehr_features,
             use_demographic_features=main_args.use_demographic_features,
-        ).get()
+        )
+        if unframed_df is None:
+            dataset = data_cls.get()
+        else:
+            dataset = data_cls.get_framed_from_unframed_dataset(unframed_df)
 
     if main_args.run_type == 'kfold':
         model_args.cross_patient_kfold = True
-        # only run with 10-fold cross-validation
+        # only run with 5-fold cross-validation
         model_args.folds = 5
         model = ARDSDetectionModel(model_args, dataset)
-        model.train_and_test()
+        try:
+            model.train_and_test()
+        except:
+            dataset.to_pickle('err-dataset.pkl')
         auc = roc_auc_score(model.results.patho.tolist(), model.results.prediction.tolist())
         results['auc'] = auc
         del model  # paranoia
@@ -121,6 +128,7 @@ def main():
     parser.add_argument('-nr', '--num-runs', type=int, default=50)
     parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA'], default='RF')
     parser.add_argument('--load-if-exists', action='store_true', help='load previously saved intermediate datasets')
+    parser.add_argument('--load-from-unframed', help='Load a new dataset from an existing unframed dataset')
     main_args = parser.parse_args()
 
     # We're doing this because these args are not necessary, and we can just pass them
@@ -149,8 +157,12 @@ def main():
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     feature_gen = feature_combos['{}_gen'.format(main_args.feature_set)]
+    if main_args.load_from_unframed:
+        unframed = pd.read_pickle(main_args.load_from_unframed)
+    else:
+        unframed = None
 
-    input_gen = [(model_args, main_args, combo, idx, out_dir) for idx, combo in enumerate(feature_gen)]
+    input_gen = [(model_args, main_args, combo, idx, out_dir, unframed) for idx, combo in enumerate(feature_gen)]
 
     if not main_args.debug:
         pool = multiprocessing.Pool(main_args.threads)
