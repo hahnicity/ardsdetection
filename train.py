@@ -230,7 +230,7 @@ class ARDSDetectionModel(object):
         elif self.args.algo == 'NB':
             clf = GaussianNB(**hyperparams)
         elif self.args.algo == 'GBC':
-            raise NotImplementedError()
+            clf = GradientBoostingClassifier(**hyperparams)
         clf.fit(x_train, y_train)
         if self.args.algo == 'RF' and not self.args.no_print_results:
             print('--- OOB scores ---')
@@ -327,6 +327,7 @@ class ARDSDetectionModel(object):
                     'criterion': 'mae',
                     'loss': 'exponential',
                     'max_features': 'log2',
+                    'n_iter_no_change': 100,
                 },
                 'majority': {
                     'random_state': 1,
@@ -334,6 +335,7 @@ class ARDSDetectionModel(object):
                     'criterion': 'mae',
                     'loss': 'exponential',
                     'max_features': 'log2',
+                    'n_iter_no_change': 100,
                 },
             },
             'NB': {
