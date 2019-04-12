@@ -296,16 +296,16 @@ class ARDSDetectionModel(object):
             },
             'SVM': {
                 'average': {
-                    'C': 5.0375,
-                    'degree': 2,
-                    'kernel': 'poly',
+                    'C': 7,
+                    'kernel': 'sigmoid',
                     'cache_size': 512,
+                    'random_state': 1,
                 },
                 'majority': {
-                    'C': (8 + 4 + 2) / 3, # 8, 4, and 2 were equally represented. So averaged them
-                    'degree': 2,
-                    'kernel': 'poly',
+                    'C': 8,
+                    'kernel': 'sigmoid',
                     'cache_size': 512,
+                    'random_state': 1,
                 },
             },
             'MLP': {
