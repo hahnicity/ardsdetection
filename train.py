@@ -310,14 +310,16 @@ class ARDSDetectionModel(object):
             },
             'MLP': {
                 'average': {
-                    "hidden_layer_sizes": (55, 16),
+                    "hidden_layer_sizes": (38, 16),
                     "solver": 'adam',
-                    'activation': 'logistic',
+                    'activation': 'identity',
+                    'learning_rate_init': .07525,
                 },
                 'majority': {
                     'hidden_layer_sizes': (32, 16),
                     "solver": 'adam',
-                    'activation': 'logistic',
+                    'activation': 'identity',
+                    'learning_rate_init': .1,
                 },
             },
             'GBC': {
