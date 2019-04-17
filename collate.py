@@ -482,8 +482,7 @@ class Dataset(object):
                 ehr_obs = np.empty((len(meta), len(self.ehr_features)))
                 ehr_obs[:] = np.nan
             else:
-                # XXX this takes an extradinarily long amount of time to complete.
-                # Takes about 85% of the computation time of this func
+                # this func now takes only 17% of the time for this entire func
                 ehr_obs = self.link_breath_and_ehr_features(pt_data, stack_times, patient_id)
 
             meta = np.append(meta, ehr_obs, axis=1)
@@ -643,32 +642,8 @@ class Dataset(object):
         :param stack_times: Times our breath frames are occurring
         """
         ehr_obs = []
-        # add feedforward
-        for feature in self.ehr_features:
-            feature_vals = ehr_data[feature].dropna()
-            if len(feature_vals) == 0:
-                logging.warn('EHR feature {} for patient {} is not available! All patient data may be dropped!'.format(feature, patient_id))
-                continue
-            # first feedforward vals between items
-            for iloc, val in enumerate(feature_vals):
-                cur_idx = feature_vals.index[iloc]
-                if iloc == len(feature_vals) - 1:
-                    next_idx = ehr_data.index[-1]
-                else:
-                    next_idx = feature_vals.index[iloc+1] - 1
-                if next_idx - cur_idx == 0:
-                    continue
-                # this call takes up 88% of the time in function
-                ehr_data.loc[cur_idx:next_idx, feature] = val
-
-        # add feedbackward mechanism at start
-        for feature in self.ehr_features:
-            feature_vals = ehr_data[feature].dropna()
-            if len(feature_vals) == 0:
-                continue
-            first_val = feature_vals.iloc[0]
-            # this call takes 10%
-            ehr_data.loc[ehr_data.index[0]:feature_vals.index[0], feature] = first_val
+        # add feedforward and feedbackward data
+        ehr_data = ehr_data.fillna(method='ffill').fillna(method='bfill')
 
         for iloc, (loc, row) in enumerate(ehr_data.iterrows()):
             linked_vals = []
@@ -685,6 +660,8 @@ class Dataset(object):
 
             for feature in self.ehr_features:
                 val = row[feature]
+                if not isinstance(val, str) and np.isnan(val) and len(ehr_obs) == 0 and n_stacks > 0:
+                    logging.warn('EHR feature {} for patient {} is nan. This may cause patient data to be dropped'.format(feature, patient_id))
                 if isinstance(val, str) and '<0.2' in val:
                     val = 0
                 elif isinstance(val, str) and '<6.87' in val:
