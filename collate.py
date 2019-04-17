@@ -203,6 +203,8 @@ class Dataset(object):
         if use_ehr_features:
             self.ehr_data = pd.read_csv(os.path.join(data_dir_path, EHR_DATA_PATH))
             self.ehr_data['DATA_TIME'] = pd.to_datetime(self.ehr_data.DATA_TIME, format="%m/%d/%y %H:%M")
+            self.ehr_data = self.ehr_data.sort_values(by=['PATIENT_ID', 'DATA_TIME'])
+            self.ehr_data.index = range(len(self.ehr_data))
         self.use_demographic_features = use_demographic_features
         if use_demographic_features:
             self.demographic_data = pd.read_csv(os.path.join(data_dir_path, DEMOGRAPHIC_DATA_PATH))
@@ -476,13 +478,13 @@ class Dataset(object):
                 if stripped_id in patients_in_data:
                     logging.error('unable to find ehr data for {}. The linkage is bad'.format(patient_id))
                 else:
-                    logging.warn('unable to find ehr data for {}. We were unable to find the patient'.format(patient_id))
+                    logging.error('unable to find ehr data for {}. We were unable to find the patient'.format(patient_id))
                 ehr_obs = np.empty((len(meta), len(self.ehr_features)))
                 ehr_obs[:] = np.nan
             else:
                 # XXX this takes an extradinarily long amount of time to complete.
                 # Takes about 85% of the computation time of this func
-                ehr_obs = self.link_breath_and_ehr_features(pt_data, stack_times)
+                ehr_obs = self.link_breath_and_ehr_features(pt_data, stack_times, patient_id)
 
             meta = np.append(meta, ehr_obs, axis=1)
             cols = cols + self.ehr_features
@@ -493,7 +495,7 @@ class Dataset(object):
         if self.use_demographic_features and len(meta) > 0:
             pt_data = self.demographic_data[self.demographic_data.PATIENT_ID == patient_id]
             if len(pt_data) == 0:
-                logging.warn('unable to find demographic data for {}.'.format(patient_id))
+                logging.error('unable to find demographic data for {}.'.format(patient_id))
                 demo_obs = np.empty((len(meta), len(self.demographic_features)))
                 demo_obs[:] = np.nan
             elif len(pt_data) > 1:
@@ -633,7 +635,7 @@ class Dataset(object):
             stacks.append(row)
         return np.array(stacks), np.array(stack_times)
 
-    def link_breath_and_ehr_features(self, ehr_data, stack_times):
+    def link_breath_and_ehr_features(self, ehr_data, stack_times, patient_id):
         """
         Link breath data to EHR data.
 
@@ -641,31 +643,55 @@ class Dataset(object):
         :param stack_times: Times our breath frames are occurring
         """
         ehr_obs = []
-        for time_start in stack_times:
-            # This uses a feed-forward mechanism of data linkage from ehr where
-            # the last recorded observation is fed forward into the future.
-            # Another possibility is to link points in time together and then
-            # impute the value from the trend line. For now feedforward is simpler.
-            slice = ehr_data[ehr_data.DATA_TIME <= time_start]
-            row = []
-            for feature in self.ehr_features:
-                vals = slice[feature].dropna()
-                if len(vals) == 0:
-                    # what to do? just put a NaN?
-                    row.append(np.nan)
+        # add feedforward
+        for feature in self.ehr_features:
+            feature_vals = ehr_data[feature].dropna()
+            if len(feature_vals) == 0:
+                logging.warn('EHR feature {} for patient {} is not available! All patient data may be dropped!'.format(feature, patient_id))
+                continue
+            # first feedforward vals between items
+            for iloc, val in enumerate(feature_vals):
+                cur_idx = feature_vals.index[iloc]
+                if iloc == len(feature_vals) - 1:
+                    next_idx = ehr_data.index[-1]
                 else:
-                    val = vals.iloc[-1]
-                    # this is in case of left or right censoring. But I need to figure
-                    # out what to do with this.
-                    #
-                    # For now we can just input extreme values and hope the ML classifier
-                    # learns whats happening
-                    if isinstance(val, str) and '<0.2' in val:
-                        val = 0
-                    elif isinstance(val, str) and '<6.87' in val:
-                        val = 6
-                    row.append(val)
-            ehr_obs.append(row)
+                    next_idx = feature_vals.index[iloc+1] - 1
+                if next_idx - cur_idx == 0:
+                    continue
+                # this call takes up 88% of the time in function
+                ehr_data.loc[cur_idx:next_idx, feature] = val
+
+        # add feedbackward mechanism at start
+        for feature in self.ehr_features:
+            feature_vals = ehr_data[feature].dropna()
+            if len(feature_vals) == 0:
+                continue
+            first_val = feature_vals.iloc[0]
+            # this call takes 10%
+            ehr_data.loc[ehr_data.index[0]:feature_vals.index[0], feature] = first_val
+
+        for iloc, (loc, row) in enumerate(ehr_data.iterrows()):
+            linked_vals = []
+            next_loc = loc + 1 if iloc < len(ehr_data) - 1 else None
+            # case in which there is only one recording for ehr data
+            if iloc == 0 and next_loc is None:
+                n_stacks = len(stack_times)
+            elif iloc == 0 and next_loc is not None:
+                n_stacks = len(stack_times[stack_times < ehr_data.loc[next_loc].DATA_TIME.asm8])
+            elif iloc > 0 and next_loc is not None:
+                n_stacks = len(stack_times[np.logical_and(stack_times >= row.DATA_TIME.asm8, stack_times < ehr_data.loc[next_loc].DATA_TIME.asm8)])
+            elif iloc > 0 and next_loc is None:
+                n_stacks = len(stack_times[stack_times >= row.DATA_TIME.asm8])
+
+            for feature in self.ehr_features:
+                val = row[feature]
+                if isinstance(val, str) and '<0.2' in val:
+                    val = 0
+                elif isinstance(val, str) and '<6.87' in val:
+                    val = 6
+                linked_vals.append(val)
+            ehr_obs.extend([linked_vals] * n_stacks)
+
         return np.array(ehr_obs).astype(np.float32)
 
     def _get_dataframe_colnames(self):

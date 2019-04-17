@@ -74,6 +74,7 @@ def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
             dataset = data_cls.get()
         else:
             dataset = data_cls.get_framed_from_unframed_dataset(unframed_df)
+    # XXX discontinue eval if patient data does not have the 50-50 split we want!
 
     if main_args.run_type == 'kfold':
         model_args.cross_patient_kfold = True
