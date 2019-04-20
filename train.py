@@ -694,7 +694,7 @@ class ARDSDetectionModel(object):
 
         all_rows = pd.DataFrame(all_rows, columns=new_cols)
         all_rows['preds'] = all_preds
-        to_plot = list(set(all_rows.columns).difference(set(['y', 'preds', 'patient'])))
+        to_plot = sorted(list(set(all_rows.columns).difference(set(['y', 'preds', 'patient', 'row_time']))))
         for i in range(0, len(to_plot), max_features_per_plot):
             sns.pairplot(all_rows, vars=to_plot[i:i+max_features_per_plot], hue="preds")
             plt.show()

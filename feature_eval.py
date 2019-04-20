@@ -1,3 +1,4 @@
+pat = re.compile('fs(?P<frame_size>\d+)_ff(?P<func>[a-z\+]+)_.*spNone_(?P<algo>[A-Z]+(:?_REG)?)')
 feature_results = {}
 for f in fs:
     specifics = pat.search(f).groupdict()
