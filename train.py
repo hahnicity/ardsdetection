@@ -21,7 +21,7 @@ from prettytable import PrettyTable
 import seaborn as sns
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, RandomForestClassifier
-from sklearn.feature_selection import RFE
+from sklearn.feature_selection import chi2, mutual_info_classif, RFE, SelectKBest
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
 from sklearn.model_selection import GridSearchCV, KFold, train_test_split
@@ -498,7 +498,8 @@ class ARDSDetectionModel(object):
             if self.args.grid_search:
                 self.perform_grid_search(x_train, y_train)
             elif self.args.feature_selection_method:
-                self.perform_feature_selection(x_train, y_train)
+                # sometimes x_test is modified by this func
+                x_test = self.perform_feature_selection(x_train, y_train, x_test)
             elif not self.args.load_model:
                 self.train(x_train, y_train)
 
@@ -569,10 +570,10 @@ class ARDSDetectionModel(object):
 
     def _perform_rf_grid_search(self, x_train, y_train):
         params = {
-            "n_estimators": range(10, 110, 5),
+            "n_estimators": range(5, 140, 5),
             "max_features": ['auto', 'log2', None],
             "criterion": ["entropy", 'gini'],
-            "max_depth": range(5, 30, 5) + [None],
+            "max_depth": range(1, 30, 1) + [None],
             #"criterion": ["entropy"],
         }
         self._perform_grid_search(RandomForestClassifier(random_state=1), params, x_train, y_train)
@@ -593,7 +594,7 @@ class ARDSDetectionModel(object):
         }, {
             'activation': activations,
             'solver': ['sgd', 'adam'],
-            'learning_rate_init': [.001, .01, .1],
+            'learning_rate_init': [.0001, .0005, .001, .005, .01, .05, .1],
             'hidden_layer_sizes': hiddens,
             # cut down on # params to search otherwise it will take forever
             #'alpha': [0.00001, .0001, .001, .01, .1],
@@ -603,10 +604,10 @@ class ARDSDetectionModel(object):
 
     def _perform_svm_grid_search(self, x_train, y_train):
         params = [{
-            'C': [2**i for i in range(-5, 5)],
+            'C': [i for i in range(-16, 17)],
             'kernel': ['rbf', 'linear', 'sigmoid'],
         }, {
-            'C': [2**i for i in range(-5, 5)],
+            'C': [i for i in range(-16, 17)],
             'kernel': ['poly'],
             'degree': range(2, 8),
         }]
@@ -615,7 +616,7 @@ class ARDSDetectionModel(object):
     def _perform_adaboost_grid_search(self, x_train, y_train):
         params = {
             'learning_rate': [2**i for i in range(-5, 3)],
-            'n_estimators': [20*i for i in range(1, 15)],
+            'n_estimators': [10*i for i in range(1, 30)],
             'algorithm': ['SAMME', 'SAMME.R'],
         }
         self._perform_grid_search(AdaBoostClassifier(random_state=1), params, x_train, y_train)
@@ -644,12 +645,12 @@ class ARDSDetectionModel(object):
             'penalty': ['l2'],
             'solver': ['newton-cg', 'lbfgs', 'sag'],
             'C': [2**i for i in range(-5, 5)],
-            'tol': [10**i for i in range(-8, -2)],
+            'tol': [10**i for i in range(-10, -2)],
             'max_iter': [100, 200, 300, 400],
         }, {
             'penalty': ['l1'],
             'C': [2**i for i in range(-5, 5)],
-            'tol': [10**i for i in range(-8, -2)],
+            'tol': [10**i for i in range(-10, -2)],
             'solver': ['liblinear', 'saga'],
         }]
         self._perform_grid_search(LogisticRegression(random_state=1), params, x_train, y_train)
@@ -666,13 +667,34 @@ class ARDSDetectionModel(object):
         print("Best CV score: ", clf.best_score_)
         self.models.append(clf)
 
-    def perform_feature_selection(self, x_train, y_train):
+    def perform_feature_selection(self, x_train, y_train, x_test):
         clf = self._get_hyperparameterized_model()
         if self.args.feature_selection_method == 'RFE':
-            selector = RFE(clf, self.args.rfe_features, step=1)
+            selector = RFE(clf, self.args.n_new_features, step=1)
             selector.fit(x_train, y_train)
             print('Selected features: {}'.format(list(x_train.columns[selector.support_])))
-        self.models.append(selector)
+            self.models.append(selector)
+        elif self.args.feature_selection_method == 'chi2':
+            selector = SelectKBest(chi2, k=self.args.n_new_features)
+            x_train = selector.fit_transform(x_train, y_train)
+            cols = list(x_test.columns[selector.get_support()])
+            print('Selected features: {}'.format(cols))
+            x_test = pd.DataFrame(selector.transform(x_test), columns=cols)
+            clf.fit(x_train, y_train)
+            self.models.append(clf)
+        elif self.args.feature_selection_method == 'mutual_info':
+            selector = SelectKBest(mutual_info_classif, k=self.args.n_new_features)
+            x_train = selector.fit_transform(x_train, y_train)
+            cols = list(x_test.columns[selector.get_support()])
+            print('Selected features: {}'.format(cols))
+            x_test = pd.DataFrame(selector.transform(x_test), columns=cols)
+            clf.fit(x_train, y_train)
+            self.models.append(clf)
+        elif self.args.feature_selection_method == 'gini':
+            # XXX
+            raise NotImplementedError()
+
+        return x_test
 
     def aggregate_statistics(self, y_test, predictions, model_idx):
         """
@@ -971,8 +993,8 @@ def build_parser():
     parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'majority'], default='average')
     parser.add_argument('-pdfe', '--print-dropped-frame-eval', action='store_true', help='Print evaluation of all the frames we drop')
     parser.add_argument('--load-from-unframed', action='store_true')
-    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE'], help='Feature selection method')
-    parser.add_argument('--rfe-features', type=int, help='number of features to select using recursive feature elimination', default=1)
+    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini'], help='Feature selection method')
+    parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
     return parser
 
 
