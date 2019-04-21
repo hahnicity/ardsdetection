@@ -106,6 +106,7 @@ class Dataset(object):
                  post_hour,
                  start_hour_delta,
                  frame_func,
+                 split_type,
                  test_frame_size=None,
                  test_post_hour=None,
                  test_start_hour_delta=None,
@@ -128,6 +129,7 @@ class Dataset(object):
         :param post_hour: The number of hours post ARDS diagnosis we wish to examine
         :param start_hour_delta: The hour delta that we want to start looking at data for
         :param frame_func: Function to apply on breath frames. choices: median, mean, var, mean+var, median+var, mean+std, median+std
+        :param split_type: Type of split to perform on dataset. choices: holdout, kfold, holdout_random, train_all, test_all
         :param test_frame_size: frame size to set only for testing set
         :param test_post_hour: post_hour to set only for testing set
         :param test_start_hour_delta: start delta to set only for testing set
@@ -136,25 +138,10 @@ class Dataset(object):
         :param use_demographic_features: Should we use demographic features?
         :param vent_bn_frac_missing: Define amount of sequential BNs we will allow missing from a frame
         """
-        raw_dirs = []
-        for i in experiment_num.split('+'):
-            raw_dirs.append(os.path.join(data_dir_path, 'experiment{num}/training/raw'.format(num=i)))
-        self.desc = pd.read_csv(cohort_description)
-        self.file_map = {}
+        self.data_dir_path = data_dir_path
+        self.split_type = split_type
         self.experiment_num = experiment_num
-        for dir_ in raw_dirs:
-            for patient in os.listdir(dir_):
-                files = glob(os.path.join(dir_, patient, "*.csv"))
-                # Don't include patients who have no data
-                if len(files) == 0:
-                    continue
-                # Ensure there are only duplicate files for same patient. This is
-                # bascially a sanity check.
-                if patient in self.file_map:
-                    prev_fs = [os.path.basename(f) for f in self.file_map[patient]]
-                    cur_fs = [os.path.basename(f) for f in files]
-                    assert sorted(prev_fs) == sorted(cur_fs), patient
-                self.file_map[patient] = files
+        self.desc = pd.read_csv(cohort_description)
 
         if feature_set == 'flow_time':
             self.vent_features = self.flow_time_feature_set
@@ -210,6 +197,26 @@ class Dataset(object):
             self.demographic_data = pd.read_csv(os.path.join(data_dir_path, DEMOGRAPHIC_DATA_PATH))
             self.demographic_data.loc[self.demographic_data.SEX == 'M', 'SEX'] = 0
             self.demographic_data.loc[self.demographic_data.SEX == 'F', 'SEX'] = 1
+
+    def _get_patient_file_map(self, cohort_dir):
+        raw_dirs = []
+        file_map = {}
+        for i in self.experiment_num.split('+'):
+            raw_dirs.append(os.path.join(self.data_dir_path, 'experiment{num}/{cohort_dir}/raw'.format(num=i, cohort_dir=cohort_dir)))
+        for dir_ in raw_dirs:
+            for patient in os.listdir(dir_):
+                files = glob(os.path.join(dir_, patient, "*.csv"))
+                # Don't include patients who have no data
+                if len(files) == 0:
+                    continue
+                # Ensure there are only duplicate files for same patient. This is
+                # bascially a sanity check.
+                if patient in file_map:
+                    prev_fs = [os.path.basename(f) for f in file_map[patient]]
+                    cur_fs = [os.path.basename(f) for f in files]
+                    assert sorted(prev_fs) == sorted(cur_fs), patient
+                file_map[patient] = files
+        return file_map
 
     def get(self):
         """
@@ -286,34 +293,55 @@ class Dataset(object):
     def _get_dataset(self, type_):
         df = None
         # We are using separate parameterization for both train and test
-        if self.test_post_hour or self.test_start_hour_delta or self.test_frame_size:
+        if (self.test_post_hour or self.test_start_hour_delta or self.test_frame_size) and self.split_type in ['kfold']:
             cohorts = {
                 'train': {
                     'sd': self.start_hour_delta,
                     'sp': self.post_hour,
-                    'frame_size': self.frame_size
+                    'frame_size': self.frame_size,
+                    'cohort_dir': 'all_data',
                 },
                 'test': {
                     'sd': self.test_start_hour_delta,
                     'sp': self.test_post_hour,
-                    'frame_size': self.test_frame_size
+                    'frame_size': self.test_frame_size,
+                    'cohort_dir': 'all_data',
                 },
             }
-        else:
+        elif self.split_type in ['kfold', 'holdout_random', 'train_all', 'test_all']:
             cohorts = {
                 'train_test': {
                     'sd': self.start_hour_delta,
                     'sp': self.post_hour,
-                    'frame_size': self.frame_size
+                    'frame_size': self.frame_size,
+                    'cohort_dir': 'all_data',
                 }
+            }
+        elif (self.test_post_hour or self.test_start_hour_delta or self.test_frame_size) and self.split_type in ['holdout', 'holdout_random', 'train_all', 'test_all']:
+            raise NotImplementedError('Havent implemented {} split with varying test params'.format(self.args.split_type))
+        elif self.split_type == 'holdout':
+            cohorts = {
+                'train': {
+                    'sd': self.start_hour_delta,
+                    'sp': self.post_hour,
+                    'frame_size': self.frame_size,
+                    'cohort_dir': 'training',
+                },
+                'test': {
+                    'sd': self.start_hour_delta,
+                    'sp': self.post_hour,
+                    'frame_size': self.frame_size,
+                    'cohort_dir': 'testing',
+                },
             }
 
         for cohort, params in cohorts.items():
             start_hour_delta = params['sd']
             post_hour = params['sp']
             frame_size = params['frame_size']
+            file_map = self._get_patient_file_map(params['cohort_dir'])
 
-            for patient in self.file_map:
+            for patient in file_map:
                 pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient]
                 if len(pt_row) == 0:
                     raise Exception('Found no information in patient mapping for patient: {}'.format(patient))
@@ -325,7 +353,7 @@ class Dataset(object):
 
                 patho = pt_row['Pathophysiology'].strip()
                 # Sanity check
-                files = self.file_map[patient]
+                files = file_map[patient]
 
                 if int(patient[:4]) <= 50:
                     date_fmt = r'(\d{4}-\d{2}-\d{2}__\d{2}:\d{2})'

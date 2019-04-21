@@ -63,6 +63,7 @@ def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
             main_args.post_hour,
             main_args.start_hour_delta,
             main_args.frame_func,
+            {'kfold': 'kfold', 'sequential_split': 'holdout_random'}[main_args.run_type],
             main_args.test_frame_size,
             main_args.test_post_hour,
             main_args.test_start_hour_delta,
@@ -74,7 +75,9 @@ def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
             dataset = data_cls.get()
         else:
             dataset = data_cls.get_framed_from_unframed_dataset(unframed_df)
-    # XXX discontinue eval if patient data does not have the 50-50 split we want!
+
+    if len(dataset.patient.unique()) != 100:
+        raise Exception('Unable to find 100 patients for features: {}'.format(dataset.columns))
 
     if main_args.run_type == 'kfold':
         model_args.cross_patient_kfold = True

@@ -87,7 +87,7 @@ class ARDSDetectionModel(object):
         # }
         self.patient_predictions = {}
 
-    def get_cross_patient_train_test_idx(self):
+    def get_holdout_random_idxs(self):
         """
         Split patients according to some kind of random split with proportions defined
         by CLI args.
@@ -118,6 +118,11 @@ class ARDSDetectionModel(object):
         test_patient_data = self.data.query('patient in {}'.format(patients_to_use))
         return [(train_patient_data.index, test_patient_data.index)]
 
+    def get_holdout_idxs(self):
+        train_patient_data = self.data[self.data.set_type == 'train']
+        test_patient_data = self.data[self.data.set_type == 'test']
+        return [(train_patient_data.index, test_patient_data.index)]
+
     def get_cross_patient_kfold_idxs(self, x, y, folds):
         """
         Get indexes to split dataset
@@ -128,8 +133,6 @@ class ARDSDetectionModel(object):
 
         for patient in unique_patients:
             patient_rows = x[x.patient == patient]
-            # XXX I can simpify this line, especially because y is still
-            # attached to x at this point
             type_ = self.pathos[y.loc[patient_rows.index].unique()[0]]
             mapping[type_].append(patient)
 
@@ -183,12 +186,12 @@ class ARDSDetectionModel(object):
         y = self.data.y
         x = self.data
 
-        # XXX this split function will be broken with addition of new test params
-        if self.args.split_type == "simple":
-            idxs = self.get_cross_patient_train_test_idx()
+        if self.args.split_type == "holdout_random":
+            idxs = self.get_holdout_random_idxs()
+        elif self.args.split_type == 'holdout':
+            idxs = self.get_holdout_idxs()
         elif self.args.split_type == 'kfold':
             idxs = self.get_cross_patient_kfold_idxs(x, y, self.args.folds)
-        # XXX these two if/elseif will be broken with addition of new test params
         elif self.args.split_type == 'train_all':
             idxs = [(x.index, [])]
         elif self.args.split_type == 'test_all':
@@ -888,6 +891,7 @@ def create_df(args):
         args.post_hour,
         args.start_hour_delta,
         args.frame_func,
+        args.split_type,
         args.test_frame_size,
         args.test_post_hour,
         args.test_start_hour_delta,
@@ -924,7 +928,7 @@ def build_parser():
     parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
     parser.add_argument("--grid-search", action="store_true", help='perform a grid search  for model hyperparameters')
     parser.add_argument("--grid-search-kfolds", type=int, default=3, help='number of validation kfolds to use in the grid search')
-    parser.add_argument('--split-type', choices=['simple', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
+    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
     parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
     parser.add_argument('--load-model')
     parser.add_argument('--load-scaler')
