@@ -683,7 +683,8 @@ class ARDSDetectionModel(object):
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'mutual_info':
-            selector = SelectKBest(mutual_info_classif, k=self.args.n_new_features)
+            func = lambda x, y: mutual_info_classif(x, y, discrete_features=False)
+            selector = SelectKBest(func, k=self.args.n_new_features)
             x_train = selector.fit_transform(x_train, y_train)
             cols = list(x_test.columns[selector.get_support()])
             print('Selected features: {}'.format(cols))
