@@ -142,8 +142,8 @@ class ARDSDetectionModel(object):
             train_cohort = 'train_test'
             test_cohort = 'train_test'
         elif len(x['set_type'].unique()) == 1:
-            train_cohort = 'train_test'
-            test_cohort = 'train_test'
+            train_cohort = x['set_type'].unique()[0]
+            test_cohort = x['set_type'].unique()[0]
         elif len(x['set_type'].unique()) == 2:
             train_cohort = 'train'
             test_cohort = 'test'
