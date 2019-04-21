@@ -19,11 +19,12 @@ import pandas as pd
 from pprint import pprint
 from prettytable import PrettyTable
 import seaborn as sns
-from sklearn.model_selection import GridSearchCV, KFold, train_test_split
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, RandomForestClassifier
+from sklearn.feature_selection import RFE
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
+from sklearn.model_selection import GridSearchCV, KFold, train_test_split
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler
@@ -218,7 +219,7 @@ class ARDSDetectionModel(object):
                 x_test = pd.DataFrame(scaler.transform(x_test), index=x_test.index, columns=colnames)
             yield (x_train, x_test, y_train, y_test)
 
-    def train(self, x_train, y_train):
+    def _get_hyperparameterized_model(self):
         hyperparams = self._get_hyperparameters()
         if self.args.algo == 'RF':
             clf = RandomForestClassifier(**hyperparams)
@@ -234,6 +235,10 @@ class ARDSDetectionModel(object):
             clf = GaussianNB(**hyperparams)
         elif self.args.algo == 'GBC':
             clf = GradientBoostingClassifier(**hyperparams)
+        return clf
+
+    def train(self, x_train, y_train):
+        clf = self._get_hyperparameterized_model()
         clf.fit(x_train, y_train)
         if self.args.algo == 'RF' and not self.args.no_print_results:
             print('--- OOB scores ---')
@@ -492,6 +497,8 @@ class ARDSDetectionModel(object):
 
             if self.args.grid_search:
                 self.perform_grid_search(x_train, y_train)
+            elif self.args.feature_selection_method:
+                self.perform_feature_selection(x_train, y_train)
             elif not self.args.load_model:
                 self.train(x_train, y_train)
 
@@ -658,6 +665,14 @@ class ARDSDetectionModel(object):
         print("Params: ", clf.best_params_)
         print("Best CV score: ", clf.best_score_)
         self.models.append(clf)
+
+    def perform_feature_selection(self, x_train, y_train):
+        clf = self._get_hyperparameterized_model()
+        if self.args.feature_selection_method == 'RFE':
+            selector = RFE(clf, self.args.rfe_features, step=1)
+            selector.fit(x_train, y_train)
+            print('Selected features: {}'.format(list(x_train.columns[selector.support_])))
+        self.models.append(selector)
 
     def aggregate_statistics(self, y_test, predictions, model_idx):
         """
@@ -956,6 +971,8 @@ def build_parser():
     parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'majority'], default='average')
     parser.add_argument('-pdfe', '--print-dropped-frame-eval', action='store_true', help='Print evaluation of all the frames we drop')
     parser.add_argument('--load-from-unframed', action='store_true')
+    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE'], help='Feature selection method')
+    parser.add_argument('--rfe-features', type=int, help='number of features to select using recursive feature elimination', default=1)
     return parser
 
 
