@@ -615,8 +615,8 @@ class ARDSDetectionModel(object):
 
     def _perform_adaboost_grid_search(self, x_train, y_train):
         params = {
-            'learning_rate': [2**i for i in range(-5, 3)],
-            'n_estimators': [10*i for i in range(1, 30)],
+            'learning_rate': [2**i for i in range(-15, 3)],
+            'n_estimators': [5*i for i in range(1, 60)],
             'algorithm': ['SAMME', 'SAMME.R'],
         }
         self._perform_grid_search(AdaBoostClassifier(random_state=1), params, x_train, y_train)
