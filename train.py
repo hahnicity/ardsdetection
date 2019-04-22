@@ -38,6 +38,10 @@ sns.set_style('ticks')
 sns.set_context('paper')
 
 
+class NoFeaturesSelectedError(Exception):
+    pass
+
+
 class ARDSDetectionModel(object):
 
     def __init__(self, args, data):
@@ -792,13 +796,13 @@ class ARDSDetectionModel(object):
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'gini':
-            # XXX add hyperparams
-            rf = RandomForestClassifier()
+            # XXX For now I don't want this to work non-deterministically
+            rf = RandomForestClassifier(n_estimators=25, random_state=False)
             selector = SelectFromModel(rf, threshold=self.args.select_from_model_thresh)
             selector.fit(x_train, y_train)
             self.selected_features = list(x_test.columns[selector.get_support()])
-            if len(cols) == 0:
-                raise RuntimeError('No features selected via lasso. Maybe lower --select-from-model-thresh param')
+            if len(self.selected_features) == 0:
+                raise NoFeaturesSelectedError('No features selected via gini. Maybe lower --select-from-model-thresh param')
             if not self.args.no_print_results:
                 print('Selected features: {}'.format(self.selected_features))
             x_train = selector.transform(x_train)
@@ -806,12 +810,12 @@ class ARDSDetectionModel(object):
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'lasso':
-            lasso = LassoCV(cv=5)
+            lasso = LassoCV(cv=5, random_state=False)
             selector = SelectFromModel(lasso, threshold=self.args.select_from_model_thresh)
             selector.fit(x_train, y_train)
             self.selected_features = list(x_test.columns[selector.get_support()])
-            if len(cols) == 0:
-                raise RuntimeError('No features selected via lasso. Maybe lower --select-from-model-thresh param')
+            if len(self.selected_features) == 0:
+                raise NoFeaturesSelectedError('No features selected via lasso. Maybe lower --select-from-model-thresh param')
             if not self.args.no_print_results:
                 print('Selected features: {}'.format(self.selected_features))
             x_train = selector.transform(x_train)
