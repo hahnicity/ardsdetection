@@ -21,8 +21,8 @@ from prettytable import PrettyTable
 import seaborn as sns
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, RandomForestClassifier
-from sklearn.feature_selection import chi2, mutual_info_classif, RFE, SelectKBest
-from sklearn.linear_model import LogisticRegression
+from sklearn.feature_selection import chi2, mutual_info_classif, RFE, SelectFromModel, SelectKBest
+from sklearn.linear_model import LassoCV, LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
 from sklearn.model_selection import GridSearchCV, KFold, train_test_split
 from sklearn.naive_bayes import GaussianNB
@@ -250,239 +250,329 @@ class ARDSDetectionModel(object):
             print(oob_table)
         self.models.append(clf)
 
-    def _get_hyperparameters(self):
+    def _get_hyperparameters(self, algo=None):
+        """
+        Get hyperparameters for model according to what we sent in as arguments.
+
+        :param algo: Override algo setting to get params for specific algo.
+        """
+        algo = algo if algo else self.args.algo
+        split_type = self.args.split_type if self.args.split_type in ['kfold', 'holdout'] else 'kfold'
+        frame_size = self.args.frame_size if self.args.frame_size in [20, 100] else 20
+        hyperparameter_type = self.args.hyperparameter_type if self.args.split_type != 'holdout' else 'majority'
         params = {
             "RF": {
-                20: {
-                    "average": {
-                        "random_state": 1,
-                        "max_depth": 5,
-                        "max_features": 'auto',
-                        'criterion': 'gini',
-                        'n_estimators': 33,
-                        'oob_score': True,
+                'kfold' : {
+                    20: {
+                        "average": {
+                            "random_state": 1,
+                            "max_depth": 5,
+                            "max_features": 'auto',
+                            'criterion': 'gini',
+                            'n_estimators': 33,
+                            'oob_score': True,
+                        },
+                        "majority": {
+                            "random_state": 1,
+                            "max_depth": 5,
+                            "max_features": 'auto',
+                            'criterion': 'gini',
+                            'n_estimators': 15,
+                            'oob_score': True,
+                        },
                     },
-                    "majority": {
-                        "random_state": 1,
-                        "max_depth": 5,
-                        "max_features": 'auto',
-                        'criterion': 'gini',
-                        'n_estimators': 15,
-                        'oob_score': True,
+                    100: {
+                        "average": {
+                            "random_state": 1,
+                            "max_depth": 5,
+                            "max_features": 'auto',
+                            'criterion': 'entropy',
+                            'n_estimators': 84,
+                            'oob_score': True,
+                        },
+                        "majority": {
+                            "random_state": 1,
+                            "max_depth": 5,
+                            "max_features": 'auto',
+                            'criterion': 'entropy',
+                            'n_estimators': 95,
+                            'oob_score': True,
+                        },
                     },
                 },
-                100: {
-                    "average": {
-                        "random_state": 1,
-                        "max_depth": 5,
-                        "max_features": 'auto',
-                        'criterion': 'entropy',
-                        'n_estimators': 84,
-                        'oob_score': True,
-                    },
-                    "majority": {
-                        "random_state": 1,
-                        "max_depth": 5,
-                        "max_features": 'auto',
-                        'criterion': 'entropy',
-                        'n_estimators': 95,
-                        'oob_score': True,
+                'holdout': {
+                    100: {
+                        'majority': {
+                            "random_state": 1,
+                            "max_depth": 6,
+                            "max_features": 'auto',
+                            'criterion': 'entropy',
+                            'n_estimators': 5,
+                            'oob_score': True,
+                        },
                     },
                 },
             },
             'ADA': {
-                20: {
-                    "average": {
-                        'random_state': 1,
-                        'n_estimators': 80,
-                        'learning_rate': 0.23125,
-                        'algorithm': 'SAMME.R',
+                'kfold': {
+                    20: {
+                        "average": {
+                            'random_state': 1,
+                            'n_estimators': 80,
+                            'learning_rate': 0.23125,
+                            'algorithm': 'SAMME.R',
+                        },
+                        "majority": {
+                            'random_state': 1,
+                            'n_estimators': 120,
+                            'learning_rate': 0.03125,
+                            'algorithm': 'SAMME.R',
+                        },
                     },
-                    "majority": {
-                        'random_state': 1,
-                        'n_estimators': 120,
-                        'learning_rate': 0.03125,
-                        'algorithm': 'SAMME.R',
+                    100: {
+                        "average": {
+                            'random_state': 1,
+                            'n_estimators': 164,
+                            'learning_rate': 0.3625,
+                            'algorithm': 'SAMME.R',
+                        },
+                        "majority": {
+                            'random_state': 1,
+                            # no majority found so take average of all estimators
+                            'n_estimators': 164,
+                            'learning_rate': 0.03125,
+                            'algorithm': 'SAMME.R',
+                        },
                     },
                 },
-                100: {
-                    "average": {
-                        'random_state': 1,
-                        'n_estimators': 164,
-                        'learning_rate': 0.3625,
-                        'algorithm': 'SAMME.R',
-                    },
-                    "majority": {
-                        'random_state': 1,
-                        # no majority found so take average of all estimators
-                        'n_estimators': 164,
-                        'learning_rate': 0.03125,
-                        'algorithm': 'SAMME.R',
+                'holdout': {
+                    100: {
+                        'majority': {
+                            'random_state': 1,
+                            # no majority found so take average of all estimators
+                            'n_estimators': 15,
+                            'learning_rate': 0.25,
+                            'algorithm': 'SAMME',
+                        },
                     },
                 },
             },
             'LOG_REG': {
-                20: {
-                    'average': {
-                        'random_state': 1,
-                        'penalty': 'l1',
-                        'C': 0.0875,
-                        'max_iter': 100,
-                        'tol': 0.000420004,
-                        'solver': 'liblinear',
+                'kfold': {
+                    20: {
+                        'average': {
+                            'random_state': 1,
+                            'penalty': 'l1',
+                            'C': 0.0875,
+                            'max_iter': 100,
+                            'tol': 0.000420004,
+                            'solver': 'liblinear',
+                        },
+                        'majority': {
+                            'random_state': 1,
+                            'penalty': 'l1',
+                            'C': 0.0625,
+                            'max_iter': 100,
+                            'tol': 1e-8,
+                            'solver': 'liblinear',
+                        },
                     },
-                    'majority': {
-                        'random_state': 1,
-                        'penalty': 'l1',
-                        'C': 0.0625,
-                        'max_iter': 100,
-                        'tol': 1e-8,
-                        'solver': 'liblinear',
+                    100: {
+                        'average': {
+                            'random_state': 1,
+                            'penalty': 'l1',
+                            'C': 0.05625,
+                            'max_iter': 100,
+                            'tol': 0.000202006,
+                            'solver': 'liblinear',
+                        },
+                        'majority': {
+                            'random_state': 1,
+                            'penalty': 'l1',
+                            'C': 0.03125,
+                            'max_iter': 100,
+                            'tol': 1e-08,
+                            'solver': 'liblinear',
+                        },
                     },
                 },
-                100: {
-                    'average': {
-                        'random_state': 1,
-                        'penalty': 'l1',
-                        'C': 0.05625,
-                        'max_iter': 100,
-                        'tol': 0.000202006,
-                        'solver': 'liblinear',
-                    },
-                    'majority': {
-                        'random_state': 1,
-                        'penalty': 'l1',
-                        'C': 0.03125,
-                        'max_iter': 100,
-                        'tol': 1e-08,
-                        'solver': 'liblinear',
+                'holdout': {
+                    100: {
+                        'majority': {
+                            'random_state': 1,
+                            'penalty': 'l2',
+                            'C': 0.5,
+                            'max_iter': 100,
+                            'tol': .001,
+                            'solver': 'sag',
+                        },
                     },
                 },
             },
             'SVM': {
-                20: {
-                    'average': {
-                        'C': 7,
-                        'kernel': 'sigmoid',
-                        'cache_size': 512,
-                        'random_state': 1,
+                'kfold': {
+                    20: {
+                        'average': {
+                            'C': 7,
+                            'kernel': 'sigmoid',
+                            'cache_size': 512,
+                            'random_state': 1,
+                        },
+                        'majority': {
+                            'C': 8,
+                            'kernel': 'sigmoid',
+                            'cache_size': 512,
+                            'random_state': 1,
+                        },
                     },
-                    'majority': {
-                        'C': 8,
-                        'kernel': 'sigmoid',
-                        'cache_size': 512,
-                        'random_state': 1,
+                    100: {
+                        'average': {
+                            'C': 9,
+                            'kernel': 'poly',
+                            'cache_size': 512,
+                            'random_state': 1,
+                            'degree': 2,
+                        },
+                        'majority': {
+                            'C': 16,
+                            'kernel': 'poly',
+                            'cache_size': 512,
+                            'random_state': 1,
+                            'degree': 2,
+                        },
                     },
                 },
-                100: {
-                    'average': {
-                        'C': 9,
-                        'kernel': 'poly',
-                        'cache_size': 512,
-                        'random_state': 1,
-                        'degree': 2,
-                    },
-                    'majority': {
-                        'C': 16,
-                        'kernel': 'poly',
-                        'cache_size': 512,
-                        'random_state': 1,
-                        'degree': 2,
+                'holdout': {
+                    100: {
+                        'majority': {
+                            'C': 0.03125,
+                            'kernel': 'rbf',
+                            'cache_size': 512,
+                            'random_state': 1,
+                            'gamma': 'scale',
+                            'tol': 1e-5,
+                        },
                     },
                 },
             },
             'MLP': {
-                20: {
-                    'average': {
-                        "hidden_layer_sizes": (38, 16),
-                        "solver": 'adam',
-                        'activation': 'identity',
-                        'learning_rate_init': .07525,
+                'kfold': {
+                    20: {
+                        'average': {
+                            "hidden_layer_sizes": (38, 16),
+                            "solver": 'adam',
+                            'activation': 'identity',
+                            'learning_rate_init': .07525,
+                        },
+                        'majority': {
+                            'hidden_layer_sizes': (32, 16),
+                            "solver": 'adam',
+                            'activation': 'identity',
+                            'learning_rate_init': .1,
+                        },
                     },
-                    'majority': {
-                        'hidden_layer_sizes': (32, 16),
-                        "solver": 'adam',
-                        'activation': 'identity',
-                        'learning_rate_init': .1,
+                    100: {
+                        'average': {
+                            "hidden_layer_sizes": (70, 27),
+                            "solver": 'sgd',
+                            'activation': 'identity',
+                            'learning_rate_init': .0244,
+                        },
+                        'majority': {
+                            'hidden_layer_sizes': (32, 32),
+                            "solver": 'sgd',
+                            # its even between relu and iden. choodse relu because of runs from frame size 20
+                            'activation': 'identity',
+                            'learning_rate_init': .005,  # its even between 0.01 and .001
+                        },
                     },
                 },
-                100: {
-                    'average': {
-                        "hidden_layer_sizes": (70, 27),
-                        "solver": 'sgd',
-                        'activation': 'identity',
-                        'learning_rate_init': .0244,
-                    },
-                    'majority': {
-                        'hidden_layer_sizes': (32, 32),
-                        "solver": 'sgd',
-                        # its even between relu and iden. choodse relu because of runs from frame size 20
-                        'activation': 'identity',
-                        'learning_rate_init': .005,  # its even between 0.01 and .001
+                'holdout': {
+                    100: {
+                        'majority': {
+                            "hidden_layer_sizes": (32, 64),
+                            "solver": 'sgd',
+                            'activation': 'relu',
+                            'learning_rate_init': .0005,
+                        },
                     },
                 },
             },
             'GBC': {
-                20: {
-                    'average': {
-                        'random_state': 1,
-                        'n_estimators': 180,
-                        'criterion': 'mae',
-                        'loss': 'exponential',
-                        'max_features': 'log2',
-                        'n_iter_no_change': 100,
+                'kfold': {
+                    20: {
+                        'average': {
+                            'random_state': 1,
+                            'n_estimators': 180,
+                            'criterion': 'mae',
+                            'loss': 'exponential',
+                            'max_features': 'log2',
+                            'n_iter_no_change': 100,
+                        },
+                        'majority': {
+                            'random_state': 1,
+                            'n_estimators': 50,
+                            'criterion': 'mae',
+                            'loss': 'exponential',
+                            'max_features': 'log2',
+                            'n_iter_no_change': 100,
+                        },
                     },
-                    'majority': {
-                        'random_state': 1,
-                        'n_estimators': 50,
-                        'criterion': 'mae',
-                        'loss': 'exponential',
-                        'max_features': 'log2',
-                        'n_iter_no_change': 100,
-                    },
-                },
-                100: {
-                    # technically we haven't done the runs for this and we aren't
-                    # going to do the runs for this, so just copy params from 20
-                    # to make sure the code doesn't break
-                    'average': {
-                        'random_state': 1,
-                        'n_estimators': 180,
-                        'criterion': 'mae',
-                        'loss': 'exponential',
-                        'max_features': 'log2',
-                        'n_iter_no_change': 100,
-                    },
-                    'majority': {
-                        'random_state': 1,
-                        'n_estimators': 50,
-                        'criterion': 'mae',
-                        'loss': 'exponential',
-                        'max_features': 'log2',
-                        'n_iter_no_change': 100,
+                    100: {
+                        # technically we haven't done the runs for this and we aren't
+                        # going to do the runs for this, so just copy params from 20
+                        # to make sure the code doesn't break
+                        'average': {
+                            'random_state': 1,
+                            'n_estimators': 180,
+                            'criterion': 'mae',
+                            'loss': 'exponential',
+                            'max_features': 'log2',
+                            'n_iter_no_change': 100,
+                        },
+                        'majority': {
+                            'random_state': 1,
+                            'n_estimators': 50,
+                            'criterion': 'mae',
+                            'loss': 'exponential',
+                            'max_features': 'log2',
+                            'n_iter_no_change': 100,
+                        },
                     },
                 },
             },
             'NB': {
-                20: {
-                    'average': {
-                        'var_smoothing': .244,
+                'kfold': {
+                    20: {
+                        'average': {
+                            'var_smoothing': .244,
+                        },
+                        'majority': {
+                            'var_smoothing': 0.01,
+                        },
                     },
-                    'majority': {
-                        'var_smoothing': 0.01,
+                    100: {
+                        'average': {
+                            'var_smoothing': .244,
+                        },
+                        'majority': {
+                            'var_smoothing': 0.1,
+                        },
                     },
                 },
-                100: {
-                    'average': {
-                        'var_smoothing': .244,
-                    },
-                    'majority': {
-                        'var_smoothing': 0.1,
+                'holdout': {
+                    100: {
+                        'majority': {
+                            'var_smoothing': 0.1,
+                        },
                     },
                 },
             },
         }
-        return params[self.args.algo][self.args.frame_size][self.args.hyperparameter_type]
+        try:
+            return params[algo][split_type][frame_size][hyperparameter_type]
+        except KeyError:
+            raise ValueError('We were unable to find hyperparams for choice algo: {}, split: {}, fs: {}, hyperparam type: {}. Check args or add new hyperparams'.format(algo, split_type, frame_size, hyperparameter_type))
 
     def train_and_test(self):
         """
@@ -682,28 +772,56 @@ class ARDSDetectionModel(object):
         if self.args.feature_selection_method == 'RFE':
             selector = RFE(clf, self.args.n_new_features, step=1)
             selector.fit(x_train, y_train)
-            print('Selected features: {}'.format(list(x_train.columns[selector.support_])))
+            self.selected_features = list(x_train.columns[selector.support_])
+            if not self.args.no_print_results:
+                print('Selected features: {}'.format(self.selected_features))
             self.models.append(selector)
         elif self.args.feature_selection_method == 'chi2':
             selector = SelectKBest(chi2, k=self.args.n_new_features)
             x_train = selector.fit_transform(x_train, y_train)
-            cols = list(x_test.columns[selector.get_support()])
-            print('Selected features: {}'.format(cols))
-            x_test = pd.DataFrame(selector.transform(x_test), columns=cols)
+            self.selected_features = list(x_train.columns[selector.get_support()])
+            if not self.args.no_print_results:
+                print('Selected features: {}'.format(self.selected_features))
+            x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features)
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'mutual_info':
             func = lambda x, y: mutual_info_classif(x, y, discrete_features=False)
             selector = SelectKBest(func, k=self.args.n_new_features)
             x_train = selector.fit_transform(x_train, y_train)
-            cols = list(x_test.columns[selector.get_support()])
-            print('Selected features: {}'.format(cols))
-            x_test = pd.DataFrame(selector.transform(x_test), columns=cols)
+            self.selected_features = list(x_train.columns[selector.get_support()])
+            if not self.args.no_print_results:
+                print('Selected features: {}'.format(self.selected_features))
+            x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features)
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'gini':
-            # XXX
-            raise NotImplementedError()
+            # XXX add hyperparams
+            rf = RandomForestClassifier()
+            selector = SelectFromModel(rf, threshold=self.args.select_from_model_thresh)
+            selector.fit(x_train, y_train)
+            self.selected_features = list(x_train.columns[selector.get_support()])
+            if len(cols) == 0:
+                raise RuntimeError('No features selected via lasso. Maybe lower --select-from-model-thresh param')
+            if not self.args.no_print_results:
+                print('Selected features: {}'.format(self.selected_features))
+            x_train = selector.transform(x_train)
+            x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features)
+            clf.fit(x_train, y_train)
+            self.models.append(clf)
+        elif self.args.feature_selection_method == 'lasso':
+            lasso = LassoCV(cv=5)
+            selector = SelectFromModel(lasso, threshold=self.args.select_from_model_thresh)
+            selector.fit(x_train, y_train)
+            self.selected_features = list(x_train.columns[selector.get_support()])
+            if len(cols) == 0:
+                raise RuntimeError('No features selected via lasso. Maybe lower --select-from-model-thresh param')
+            if not self.args.no_print_results:
+                print('Selected features: {}'.format(self.selected_features))
+            x_train = selector.transform(x_train)
+            x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features)
+            clf.fit(x_train, y_train)
+            self.models.append(clf)
 
         return x_test
 
@@ -1004,8 +1122,9 @@ def build_parser():
     parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'majority'], default='average')
     parser.add_argument('-pdfe', '--print-dropped-frame-eval', action='store_true', help='Print evaluation of all the frames we drop')
     parser.add_argument('--load-from-unframed', action='store_true')
-    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini'], help='Feature selection method')
+    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso'], help='Feature selection method')
     parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
+    parser.add_argument('--select-from-model-thresh', type=float, default=.2, help='Threshold to use for feature importances when using lasso and gini selection')
     return parser
 
 
