@@ -579,12 +579,6 @@ class ARDSDetectionModel(object):
         Train models and then run testing afterwards.
         """
         for model_idx, (x_train, x_test, y_train, y_test) in enumerate(self.perform_data_splits()):
-            if self.args.pca:
-                pca = PCA(n_components=self.args.pca)
-                pca.fit(x_train, y_train)
-                x_train = pd.DataFrame(pca.transform(x_train), index=x_train.index)
-                x_test = pd.DataFrame(pca.transform(x_test), index=x_test.index)
-
             if self.args.grid_search:
                 self.perform_grid_search(x_train, y_train)
             elif self.args.feature_selection_method:
@@ -775,11 +769,13 @@ class ARDSDetectionModel(object):
             self.selected_features = list(x_train.columns[selector.support_])
             if not self.args.no_print_results:
                 print('Selected features: {}'.format(self.selected_features))
+            # XXX you can simplify this block by putting it in line with the other blocks
+            # where the selector transforms the train frame
             self.models.append(selector)
         elif self.args.feature_selection_method == 'chi2':
             selector = SelectKBest(chi2, k=self.args.n_new_features)
             x_train = selector.fit_transform(x_train, y_train)
-            self.selected_features = list(x_train.columns[selector.get_support()])
+            self.selected_features = list(x_test.columns[selector.get_support()])
             if not self.args.no_print_results:
                 print('Selected features: {}'.format(self.selected_features))
             x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features)
@@ -789,7 +785,7 @@ class ARDSDetectionModel(object):
             func = lambda x, y: mutual_info_classif(x, y, discrete_features=False)
             selector = SelectKBest(func, k=self.args.n_new_features)
             x_train = selector.fit_transform(x_train, y_train)
-            self.selected_features = list(x_train.columns[selector.get_support()])
+            self.selected_features = list(x_test.columns[selector.get_support()])
             if not self.args.no_print_results:
                 print('Selected features: {}'.format(self.selected_features))
             x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features)
@@ -800,7 +796,7 @@ class ARDSDetectionModel(object):
             rf = RandomForestClassifier()
             selector = SelectFromModel(rf, threshold=self.args.select_from_model_thresh)
             selector.fit(x_train, y_train)
-            self.selected_features = list(x_train.columns[selector.get_support()])
+            self.selected_features = list(x_test.columns[selector.get_support()])
             if len(cols) == 0:
                 raise RuntimeError('No features selected via lasso. Maybe lower --select-from-model-thresh param')
             if not self.args.no_print_results:
@@ -813,13 +809,20 @@ class ARDSDetectionModel(object):
             lasso = LassoCV(cv=5)
             selector = SelectFromModel(lasso, threshold=self.args.select_from_model_thresh)
             selector.fit(x_train, y_train)
-            self.selected_features = list(x_train.columns[selector.get_support()])
+            self.selected_features = list(x_test.columns[selector.get_support()])
             if len(cols) == 0:
                 raise RuntimeError('No features selected via lasso. Maybe lower --select-from-model-thresh param')
             if not self.args.no_print_results:
                 print('Selected features: {}'.format(self.selected_features))
             x_train = selector.transform(x_train)
             x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features)
+            clf.fit(x_train, y_train)
+            self.models.append(clf)
+        elif self.args.feature_selection_method == 'PCA':
+            pca = PCA(n_components=self.args.n_new_features)
+            pca.fit(x_train, y_train)
+            x_train = pd.DataFrame(pca.transform(x_train), index=x_train.index)
+            x_test = pd.DataFrame(pca.transform(x_test), index=x_test.index)
             clf.fit(x_train, y_train)
             self.models.append(clf)
 
@@ -1091,7 +1094,6 @@ def build_parser():
     parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "flow_time_opt", "flow_time_orig", "broad", "broad_opt"])
     parser.add_argument('--no-load-intermediates', action='store_false', help='do not load from intermediate data')
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
-    parser.add_argument("--pca", type=int, help="perform PCA analysis/transform on data")
     parser.add_argument("--grid-search", action="store_true", help='perform a grid search  for model hyperparameters')
     parser.add_argument("--grid-search-kfolds", type=int, default=3, help='number of validation kfolds to use in the grid search')
     parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
@@ -1122,7 +1124,7 @@ def build_parser():
     parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'majority'], default='average')
     parser.add_argument('-pdfe', '--print-dropped-frame-eval', action='store_true', help='Print evaluation of all the frames we drop')
     parser.add_argument('--load-from-unframed', action='store_true')
-    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso'], help='Feature selection method')
+    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method')
     parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
     parser.add_argument('--select-from-model-thresh', type=float, default=.2, help='Threshold to use for feature importances when using lasso and gini selection')
     return parser
