@@ -603,13 +603,23 @@ class ARDSDetectionModel(object):
         self._perform_grid_search(MLPClassifier(random_state=1), params, x_train, y_train)
 
     def _perform_svm_grid_search(self, x_train, y_train):
+        C = [2**i for i in range(-10, 1)] + [i for i in range(2, 17)]
+        tol = [10**i for i in range(-5, -1)]
         params = [{
-            'C': [i for i in range(-16, 17)],
-            'kernel': ['rbf', 'linear', 'sigmoid'],
+            'C': C,
+            'kernel': ['rbf', 'sigmoid'],
+            'gamma': ['auto', 'scale'],
+            'tol': tol,
         }, {
-            'C': [i for i in range(-16, 17)],
+            'C': C,
+            'kernel': ['linear'],
+            'tol': tol,
+        }, {
+            'C': C,
             'kernel': ['poly'],
-            'degree': range(2, 8),
+            'gamma': ['auto', 'scale'],
+            'degree': range(1, 10),
+            'tol': tol,
         }]
         self._perform_grid_search(SVC(random_state=1, cache_size=512), params, x_train, y_train)
 
