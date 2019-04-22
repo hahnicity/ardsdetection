@@ -63,7 +63,7 @@ class ARDSDetectionModel(object):
                 "{}_tns".format(patho), "{}_fns".format(patho),
                 "{}_votes".format(patho),
             ])
-        results_cols += ["model_idx", "prediction"]
+        results_cols += ["model_idx", "prediction", 'model_auc']
         # self.results is meant to be a high level dataframe of aggregated statistics
         # from our model.
         #
@@ -593,7 +593,7 @@ class ARDSDetectionModel(object):
                 pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
 
             predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
-            results = self.aggregate_statistics(y_test, predictions, model_idx)
+            results = self.compute_model_results(y_test, predictions, model_idx)
             if not self.args.no_print_results:
                 self.print_model_stats(y_test, predictions, model_idx)
                 print("-------------------")
@@ -828,12 +828,13 @@ class ARDSDetectionModel(object):
 
         return x_test
 
-    def aggregate_statistics(self, y_test, predictions, model_idx):
+    def compute_model_results(self, y_test, predictions, model_idx):
         """
         After a group of patients is run through the model, record all necessary stats
         such as true positives, false positives, etc.
         """
         x_test = self.data.loc[y_test.index]
+
         for pt in x_test.patient.unique():
             pt_idx = len(self.patient_results)
             pt_rows = x_test[x_test.patient == pt]
@@ -850,12 +851,25 @@ class ARDSDetectionModel(object):
                 pt_results.extend([
                     get_tps(pt_actual, pt_pred, n), get_fps(pt_actual, pt_pred, n),
                     get_tns(pt_actual, pt_pred, n), get_fns(pt_actual, pt_pred, n),
-                    len(pt_pred[pt_pred == n]),
+                    len(pt_pred[pt_pred == n])
                 ])
 
             patho_pred = np.argmax([pt_results[6 + 5*k] for k in range(len(self.pathos))])
-            pt_results.extend([model_idx, patho_pred])
+            # XXX adding AUC to this is a bit awkward, but currently with the way
+            # the code the structured this is the quickest way of doing things
+            pt_results.extend([model_idx, patho_pred, np.nan])
             self.results.loc[i] = pt_results
+
+        model_pt_true = self.results[self.results.model_idx==model_idx].patho.tolist()
+        model_pt_pred = self.results[self.results.model_idx==model_idx].prediction.tolist()
+        if len(self.pathos) > 2:
+            auc = np.nan
+        elif len(self.pathos) == 2:
+            auc = round(roc_auc_score(model_pt_true, model_pt_pred), 4)
+
+        if self.args.plot_auc and self.args.split_type == 'kfold':
+            self.plot_auc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
+        self.results.loc[self.results.model_idx==model_idx, 'model_auc'] = auc
 
     def print_model_stats(self, y_test, predictions, model_idx):
         """
@@ -874,6 +888,19 @@ class ARDSDetectionModel(object):
             print("Patient {}: Prediction: {}, Actual: {}. Voting:\n{}".format(
                 row.patient, row.prediction, row.patho, row[patho_votes]
             ))
+        print('Model AUC: {}'.format(model_results.model_auc.iloc[0]))
+
+    def plot_auc_curve(self, y_test, predictions, plt_title):
+        auc = round(roc_auc_score(y_test, predictions), 4)
+        fpr, tpr, thresholds = roc_curve(y_test, predictions)
+        plt.plot(fpr, tpr, label='AUC={}'.format(auc))
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.ylim(0, 1.01)
+        plt.grid()
+        plt.title(plt_title)
+        plt.legend()
+        plt.show()
 
     def plot_predictions(self):
         """
@@ -1029,6 +1056,8 @@ class ARDSDetectionModel(object):
             aggregate_results,
             columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc']
         )
+        if self.args.plot_auc:
+            self.plot_auc_curve(self.results.patho.tolist(), self.results.prediction.tolist(), 'ROC curve for all patients')
 
     def print_aggregate_results(self):
         for n, patho in self.pathos.items():
@@ -1039,7 +1068,7 @@ class ARDSDetectionModel(object):
             print("{} patient precision: {}".format(patho, row.precision))
             print("")
 
-        print("Model AUC: {}".format(row.auc))
+        print("Patient-level AUC: {}".format(row.auc))
 
 
 def create_df(args):
@@ -1127,6 +1156,7 @@ def build_parser():
     parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method')
     parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
     parser.add_argument('--select-from-model-thresh', type=float, default=.2, help='Threshold to use for feature importances when using lasso and gini selection')
+    parser.add_argument('--plot-auc', action='store_true', help='Plot AUC curve')
     return parser
 
 
