@@ -11,7 +11,7 @@ from collate import Dataset
 from run_sequential_simple_split import run_sequential
 from train import ARDSDetectionModel, build_parser
 
-DF_DIR = 'experiment{experiment_num}/training/grid_search/{feature_set}/ehr_{ehr_features}/demo_{demo_features}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}/{algo}'
+DF_DIR = 'experiment{experiment_num}/all_data/grid_search/{feature_set}/ehr_{ehr_features}/demo_{demo_features}/{sd}-{sp}/{fs}/{ff}/{tfs}/{tsd}-{tsp}/{algo}'
 
 
 def get_all_possible_features():
