@@ -886,13 +886,14 @@ class ARDSDetectionModel(object):
         for n, patho in self.pathos.items():
             print("{} recall: {}".format(patho, recall_score(y_test, predictions, labels=[n], average='macro')))
             print("{} precision: {}".format(patho, precision_score(y_test, predictions, labels=[n], average='macro')))
+        print('Model AUC: {}\n'.format(model_results.model_auc.iloc[0]))
 
-        patho_votes = ["{}_votes".format(k) for k in self.pathos.values()]
+        table = PrettyTable()
+        table.field_names = ['patient', 'actual', 'prediction'] + ['{} Votes'.format(patho) for patho in self.pathos.values()]
+
         for idx, row in incorrect_pts.iterrows():
-            print("Patient {}: Prediction: {}, Actual: {}. Voting:\n{}".format(
-                row.patient, row.prediction, row.patho, row[patho_votes]
-            ))
-        print('Model AUC: {}'.format(model_results.model_auc.iloc[0]))
+            table.add_row([row.patient, row.patho, row.prediction] + [row['{}_votes'.format(patho)] for patho in self.pathos.values()])
+        print(table)
 
     def plot_auc_curve(self, y_test, predictions, plt_title):
         auc = round(roc_auc_score(y_test, predictions), 4)
