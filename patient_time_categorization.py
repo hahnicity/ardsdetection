@@ -28,7 +28,7 @@ def main():
     if args.from_pickle:
         df = pd.read_pickle(args.from_pickle)
     else:
-        cls = Dataset(args.data_path, args.cohort_description, 'flow_time', 20, True, args.experiment, 24, 0, 'mean')
+        cls = Dataset(args.data_path, args.cohort_description, 'flow_time', 20, True, args.experiment, 24, 0, 'mean', 'kfold')
         df = cls.get_unframed_dataset()
 
     if args.to_pickle:

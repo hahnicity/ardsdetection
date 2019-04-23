@@ -37,39 +37,24 @@ def plot_patient(idx, patient, coverage, patho, hours):
 
 def analyze_coverage(coverage, ards_patients, other_patients, hours):
     one_hr = 60 * 60
-    ards_hours_covered = []
-    for patient in ards_patients:
-        # calculate total hours of coverage for a patient.
-        seconds_covered = sum(coverage[patient]['seconds_covered'].values())
-        ards_hours_covered.append(seconds_covered / float(one_hr))
-    ards_hours_covered = np.array(ards_hours_covered)
-    threshes = [1, hours / 4.0 , hours / 2, hours / 1.5, hours - 1]
-    for thresh in threshes:
-        print('{} ARDS patients with > {} hour of data in first {} hours'.format(len(ards_hours_covered[ards_hours_covered > thresh]), thresh, hours))
-    plt.hist(ards_hours_covered, bins=hours)
-    plt.title('ARDS Coverage in {} Hours'.format(hours))
-    plt.xticks(range(hours), range(hours))
-    plt.xlabel('number hours data')
-    plt.ylabel('# patients in bin')
-    plt.show()
-
-    other_hours_covered = []
-    for patient in other_patients:
-        # calculate total hours of coverage for a patient.
-        seconds_covered = sum(coverage[patient]['seconds_covered'].values())
-        other_hours_covered.append(seconds_covered / float(one_hr))
-    other_hours_covered = np.array(other_hours_covered)
-    for thresh in threshes:
-        print('{} OTHER patients with > {} hour of data in first {} hours'.format(len(other_hours_covered[other_hours_covered > thresh]), thresh, hours))
-    plt.hist(other_hours_covered, bins=hours)
-    plt.title('OTHER Coverage in {} Hours'.format(hours))
-    plt.xticks(range(hours), range(hours))
-    plt.xlabel('number hours data')
-    plt.ylabel('# patients in bin')
-    plt.show()
+    for patho, patients in [('ARDS', np.array(ards_patients)), ('OTHER', np.array(other_patients))]:
+        hours_covered = []
+        for patient in patients:
+            # calculate total hours of coverage for a patient.
+            seconds_covered = sum(coverage[patient]['seconds_covered'].values())
+            hours_covered.append(seconds_covered / float(one_hr))
+        hours_covered = np.array(hours_covered)
+        threshes = [1, hours / 4.0 , hours / 2, hours / 1.5, hours - 1]
+        for thresh in threshes:
+            print('{} {} patients with > {} hour of data in first {} hours.\nPatient IDs: {}\n\n'.format(len(hours_covered[hours_covered > thresh]), patho, thresh, hours, patients[hours_covered > thresh]))
+        plt.hist(hours_covered, bins=hours)
+        plt.title('{} Coverage in {} Hours'.format(patho, hours))
+        plt.xticks(range(hours), range(hours))
+        plt.xlabel('number hours data')
+        plt.ylabel('# patients in bin')
+        plt.show()
 
     # Generate Hourly Coverage Reports
-
     for idx, patient in enumerate(sorted(ards_patients)):
         plot_patient(idx, patient, coverage, 'ARDS', hours)
     plt.show()
