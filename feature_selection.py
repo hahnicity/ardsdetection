@@ -3,6 +3,7 @@ import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tabulate import tabulate
 
 from train import ARDSDetectionModel, build_parser, NoFeaturesSelectedError
 
@@ -26,6 +27,8 @@ def lasso(df, model_args):
             continue
         tmp = model.aggregate_results.copy()
         tmp['n_features'] = n_selected_features
+        tmp['selection_thresh'] = thresh
+        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'])
         if fs_results is None:
             fs_results = tmp
         else:
@@ -51,6 +54,8 @@ def gini(df, model_args):
             continue
         tmp = model.aggregate_results.copy()
         tmp['n_features'] = n_selected_features
+        tmp['selection_thresh'] = thresh
+        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'], axis=1)
         if fs_results is None:
             fs_results = tmp
         else:
@@ -69,6 +74,7 @@ def pca(df, model_args):
         model.train_and_test()
         tmp = model.aggregate_results.copy()
         tmp['n_features'] = n
+        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'])
         if fs_results is None:
             fs_results = tmp
         else:
@@ -87,6 +93,7 @@ def n_feature_selection(df, model_args):
         model.train_and_test()
         tmp = model.aggregate_results.copy()
         tmp['n_features'] = n
+        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'])
         for feature in model_features:
             tmp[feature] = 1 if feature in model.selected_features else 0
 
@@ -107,6 +114,7 @@ def main():
     parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method', required=True)
     parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='holdout')
     parser.add_argument('--savefig', help='save figure to specified location instead of plotting')
+    parser.add_argument('--print-results-table', action='store_true')
     main_args = parser.parse_args()
 
     model_args = build_parser().parse_args([])
@@ -141,6 +149,8 @@ def main():
         plt.savefig(main_args.savefig)
     else:
         plt.show()
+    if main_args.print_results_table:
+        print(tabulate(results, headers='keys'))
 
 
 if __name__ == "__main__":
