@@ -28,7 +28,7 @@ def lasso(df, model_args):
         tmp = model.aggregate_results.copy()
         tmp['n_features'] = n_selected_features
         tmp['selection_thresh'] = thresh
-        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'])
+        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'], axis=1)
         if fs_results is None:
             fs_results = tmp
         else:
@@ -74,7 +74,7 @@ def pca(df, model_args):
         model.train_and_test()
         tmp = model.aggregate_results.copy()
         tmp['n_features'] = n
-        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'])
+        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'], axis=1)
         if fs_results is None:
             fs_results = tmp
         else:
@@ -93,7 +93,7 @@ def n_feature_selection(df, model_args):
         model.train_and_test()
         tmp = model.aggregate_results.copy()
         tmp['n_features'] = n
-        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'])
+        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'], axis=1)
         for feature in model_features:
             tmp[feature] = 1 if feature in model.selected_features else 0
 

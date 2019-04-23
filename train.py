@@ -882,17 +882,20 @@ class ARDSDetectionModel(object):
         model_results = self.results[self.results.model_idx == model_idx]
         incorrect_pts = model_results[model_results.patho != model_results.prediction]
 
-        print("Model accuracy: {}".format(accuracy_score(y_test, predictions)))
+        table = PrettyTable()
+        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc']
         for n, patho in self.pathos.items():
-            print("{} recall: {}".format(patho, recall_score(y_test, predictions, labels=[n], average='macro')))
-            print("{} precision: {}".format(patho, precision_score(y_test, predictions, labels=[n], average='macro')))
-        print('Model AUC: {}\n'.format(model_results.model_auc.iloc[0]))
+            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc = self._calc_patho_stats(n, model_results)
+            table.add_row([patho, accuracy, sensitivity, specificity, precision, auc])
+        print('Model Results')
+        print(table)
 
         table = PrettyTable()
         table.field_names = ['patient', 'actual', 'prediction'] + ['{} Votes'.format(patho) for patho in self.pathos.values()]
 
         for idx, row in incorrect_pts.iterrows():
             table.add_row([row.patient, row.patho, row.prediction] + [row['{}_votes'.format(patho)] for patho in self.pathos.values()])
+        print('Misclassified Patients')
         print(table)
 
     def plot_auc_curve(self, y_test, predictions, plt_title):
@@ -1028,33 +1031,37 @@ class ARDSDetectionModel(object):
             sns.pairplot(all_rows, vars=to_plot[i:i+max_features_per_plot], hue="preds")
             plt.show()
 
+    def _calc_patho_stats(self, patho_n, results):
+        tps = float(len(results[(results.patho == patho_n) & (results.prediction == patho_n)]))
+        tns = float(len(results[(results.patho != patho_n) & (results.prediction != patho_n)]))
+        fps = float(len(results[(results.patho != patho_n) & (results.prediction == patho_n)]))
+        fns = float(len(results[(results.patho == patho_n) & (results.prediction != patho_n)]))
+        accuracy = round((tps+tns) / (tps+tns+fps+fns), 4)
+        try:
+            sensitivity = round(tps / (tps+fns), 4)
+        except ZeroDivisionError:
+            sensitivity = 0
+        try:
+            specificity = round(tns / (tns+fps), 4)
+        except ZeroDivisionError:
+            specificity = 0
+        try:
+            precision = round(tps / (tps+fps), 4)
+        except ZeroDivisionError:  # Can happen when no predictions for cls are made
+            precision = 0
+        if len(self.pathos) > 2:
+            auc = np.nan
+        elif len(self.pathos) == 2:
+            auc = round(roc_auc_score(results.patho.tolist(), results.prediction.tolist()), 4)
+        return tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc
+
     def aggregate_results(self):
         """
         Aggregate final results for all patients into a friendly data frame
         """
         aggregate_results = []
         for n, patho in self.pathos.items():
-            tps = float(len(self.results[(self.results.patho == n) & (self.results.prediction == n)]))
-            tns = float(len(self.results[(self.results.patho != n) & (self.results.prediction != n)]))
-            fps = float(len(self.results[(self.results.patho != n) & (self.results.prediction == n)]))
-            fns = float(len(self.results[(self.results.patho == n) & (self.results.prediction != n)]))
-            accuracy = round((tps+tns) / (tps+tns+fps+fns), 4)
-            try:
-                sensitivity = round(tps / (tps+fns), 4)
-            except ZeroDivisionError:
-                sensitivity = 0
-            try:
-                specificity = round(tns / (tns+fps), 4)
-            except ZeroDivisionError:
-                specificity = 0
-            try:
-                precision = round(tps / (tps+fps), 4)
-            except ZeroDivisionError:  # Can happen when no predictions for cls are made
-                precision = 0
-            if len(self.pathos) > 2:
-                auc = np.nan
-            elif len(self.pathos) == 2:
-                auc = round(roc_auc_score(self.results.patho.tolist(), self.results.prediction.tolist()), 4)
+            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc = self._calc_patho_stats(n, self.results)
             aggregate_results.append([patho, tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc])
 
         self.aggregate_results = pd.DataFrame(
