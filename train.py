@@ -1164,7 +1164,7 @@ def build_parser():
     parser.add_argument('-demo', '--use-demographic-features', action='store_true', help='use demographic data in learning')
     parser.add_argument('-ht', '--hyperparameter-type', choices=['average', 'majority'], default='average')
     parser.add_argument('-pdfe', '--print-dropped-frame-eval', action='store_true', help='Print evaluation of all the frames we drop')
-    parser.add_argument('--load-from-unframed', action='store_true')
+    parser.add_argument('--load-from-unframed', help='create new framed dataset from an existing unframed one')
     parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method')
     parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
     parser.add_argument('--select-from-model-thresh', type=float, default=.2, help='Threshold to use for feature importances when using lasso and gini selection')

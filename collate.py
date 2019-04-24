@@ -228,7 +228,8 @@ class Dataset(object):
     def get_unframed_dataset(self):
         """
         Get dataset with unframed data. This is normally used for debugging
-        purposes
+        purposes but can also be used to preprocess features and load them into
+        a dataframe for future purposes
         """
         return self._get_dataset('unframed')
 
@@ -240,51 +241,56 @@ class Dataset(object):
 
         :param unframed: The pd.DataFrame instance of the unframed dataset
         """
-        # XXX also need to eventually be able to process more than just
-        # train_test set. But for now thats all we can do
-        if len(unframed.set_type.unique()) != 1:
-            raise NotImplementedError('Cannot run this method with separate train and test sets currently')
-        cols = self._get_dataframe_colnames()
         all_pts = None
-        for patient_id in unframed.patient.unique():
-            patient_rows = unframed[unframed.patient == patient_id]
-            patient_rows = patient_rows.replace([np.inf, -np.inf], np.nan)
-            desc_pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient_id].iloc[0]
-            patho = patient_rows.iloc[0].y
-            if patho != 1:
-                pt_start_time = desc_pt_row['vent_start_time']
-            else:
-                pt_start_time = desc_pt_row['Date when Berlin criteria first met (m/dd/yyy)']
-            pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M"))
-            meta = patient_rows[self.vent_features].dropna().values
-            # XXX be able to adjust for frame sizes that change in train and test
-            meta, stack_times = self.create_breath_frames(meta, self.frame_size, patient_rows.abs_time_at_BS.values, patient_id)
-            if len(meta) == 0:
-                logging.warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
-                continue
-            # XXX Add processing for EHR and Demographic data later. But for now
-            # we don't really need to compute it.
-            tmp = pd.DataFrame(meta, columns=cols)
-            tmp['patient'] = patient_id
-            tmp['row_time'] = stack_times
-            tmp['set_type'] = 'train_test'
-            tmp['y'] = patho
-            hour_row = np.zeros((len(tmp), 1))
-            for hour in range(0, 24):
-                mask = np.logical_and(
-                    (pt_start_time + np.timedelta64(hour, 'h')) <= stack_times,
-                    (pt_start_time + np.timedelta64(hour+1, 'h')) > stack_times
-                )
-                hour_row[mask] = hour
-            tmp['hour'] = hour_row
-            try:
-                tmp = tmp.drop(['dropme'], axis=1)
-            except (KeyError, ValueError):  # its possible we only have 1 feature type to use
-                pass
-            if all_pts is None:
-                all_pts = tmp
-            else:
-                all_pts = all_pts.append(tmp)
+        cohorts = self._get_data_split_params()
+        cols = self._get_dataframe_colnames()
+
+        for cohort, params in cohorts.items():
+            start_hour_delta = params['sd']
+            post_hour = params['sp']
+            frame_size = params['frame_size']
+            cohort_unframed = unframed[unframed.set_type == cohort]
+
+            for patient_id in cohort_unframed.patient.unique():
+                patient_rows = unframed[unframed.patient == patient_id]
+                patient_rows = patient_rows.replace([np.inf, -np.inf], np.nan)
+                desc_pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient_id].iloc[0]
+                patho = patient_rows.iloc[0].y
+                if patho != 1:
+                    pt_start_time = desc_pt_row['vent_start_time']
+                else:
+                    pt_start_time = desc_pt_row['Date when Berlin criteria first met (m/dd/yyy)']
+                pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M"))
+                meta = patient_rows[self.vent_features].dropna().values
+                meta, stack_times = self.create_breath_frames(meta, frame_size, patient_rows.abs_time_at_BS.values, patient_id)
+                if len(meta) == 0:
+                    logging.warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
+                    continue
+                # XXX Add processing for EHR and Demographic data.
+                #
+                # XXX This chunk of code that goes to the bottom of the for loop also has
+                # possibility to be moved to a separate place
+                tmp = pd.DataFrame(meta, columns=cols)
+                tmp['patient'] = patient_id
+                tmp['row_time'] = stack_times
+                tmp['set_type'] = cohort
+                tmp['y'] = patho
+                hour_row = np.zeros((len(tmp), 1))
+                for hour in range(0, 24):
+                    mask = np.logical_and(
+                        (pt_start_time + np.timedelta64(hour, 'h')) <= stack_times,
+                        (pt_start_time + np.timedelta64(hour+1, 'h')) > stack_times
+                    )
+                    hour_row[mask] = hour
+                tmp['hour'] = hour_row
+                try:
+                    tmp = tmp.drop(['dropme'], axis=1)
+                except (KeyError, ValueError):  # its possible we only have 1 feature type to use
+                    pass
+                if all_pts is None:
+                    all_pts = tmp
+                else:
+                    all_pts = all_pts.append(tmp)
 
         # reindex and return
         all_pts.index = range(len(all_pts))
@@ -292,48 +298,7 @@ class Dataset(object):
 
     def _get_dataset(self, type_):
         df = None
-        # We are using separate parameterization for both train and test
-        if (self.test_post_hour or self.test_start_hour_delta or self.test_frame_size) and self.split_type in ['kfold']:
-            cohorts = {
-                'train': {
-                    'sd': self.start_hour_delta,
-                    'sp': self.post_hour,
-                    'frame_size': self.frame_size,
-                    'cohort_dir': 'all_data',
-                },
-                'test': {
-                    'sd': self.test_start_hour_delta,
-                    'sp': self.test_post_hour,
-                    'frame_size': self.test_frame_size,
-                    'cohort_dir': 'all_data',
-                },
-            }
-        elif self.split_type in ['kfold', 'holdout_random', 'train_all', 'test_all']:
-            cohorts = {
-                'train_test': {
-                    'sd': self.start_hour_delta,
-                    'sp': self.post_hour,
-                    'frame_size': self.frame_size,
-                    'cohort_dir': 'all_data',
-                }
-            }
-        elif (self.test_post_hour or self.test_start_hour_delta or self.test_frame_size) and self.split_type in ['holdout', 'holdout_random', 'train_all', 'test_all']:
-            raise NotImplementedError('Havent implemented {} split with varying test params'.format(self.args.split_type))
-        elif self.split_type == 'holdout':
-            cohorts = {
-                'train': {
-                    'sd': self.start_hour_delta,
-                    'sp': self.post_hour,
-                    'frame_size': self.frame_size,
-                    'cohort_dir': 'training',
-                },
-                'test': {
-                    'sd': self.start_hour_delta,
-                    'sp': self.post_hour,
-                    'frame_size': self.frame_size,
-                    'cohort_dir': 'testing',
-                },
-            }
+        cohorts = self._get_data_split_params()
 
         for cohort, params in cohorts.items():
             start_hour_delta = params['sd']
@@ -351,19 +316,10 @@ class Dataset(object):
                 else:
                     pt_row = pt_row.iloc[0]
 
-                if start_hour_delta != 0 or post_hour != 24:
-                    # evalulate whether the patient should be included in dataset
-                    pt_avail_rowname = 'available_for_{}-{}_analytics'.format(start_hour_delta, post_hour)
-                    try:
-                        pt_row[pt_avail_rowname]
-                    except KeyError:
-                        raise Exception('No indicator row {} exists for patient {}! You must add it to your cohort description!'.format(pt_avail_rowname, patient))
-
-                    if pt_row[pt_avail_rowname] != 1:
-                        continue
+                if not self._is_patient_available_in_frame(pt_row, start_hour_delta, post_hour):
+                    continue
 
                 patho = pt_row['Pathophysiology'].strip()
-                # Sanity check
                 files = file_map[patient]
 
                 if int(patient[:4]) <= 50:
@@ -721,3 +677,61 @@ class Dataset(object):
                 ventbn_colname = 'dropme'
             cols[cols.index('{}_ventBN'.format(func.__name__))] = ventbn_colname
         return cols
+
+    def _get_data_split_params(self):
+        # In case we are using separate parameterization for both train and test
+        if (self.test_post_hour or self.test_start_hour_delta or self.test_frame_size) and self.split_type in ['kfold']:
+            cohorts = {
+                'train': {
+                    'sd': self.start_hour_delta,
+                    'sp': self.post_hour,
+                    'frame_size': self.frame_size,
+                    'cohort_dir': 'all_data',
+                },
+                'test': {
+                    'sd': self.test_start_hour_delta,
+                    'sp': self.test_post_hour,
+                    'frame_size': self.test_frame_size,
+                    'cohort_dir': 'all_data',
+                },
+            }
+        elif self.split_type in ['kfold', 'holdout_random', 'train_all', 'test_all']:
+            cohorts = {
+                'train_test': {
+                    'sd': self.start_hour_delta,
+                    'sp': self.post_hour,
+                    'frame_size': self.frame_size,
+                    'cohort_dir': 'all_data',
+                }
+            }
+        elif (self.test_post_hour or self.test_start_hour_delta or self.test_frame_size) and self.split_type in ['holdout', 'holdout_random', 'train_all', 'test_all']:
+            raise NotImplementedError('Havent implemented {} split with varying test params'.format(self.args.split_type))
+        elif self.split_type == 'holdout':
+            cohorts = {
+                'train': {
+                    'sd': self.start_hour_delta,
+                    'sp': self.post_hour,
+                    'frame_size': self.frame_size,
+                    'cohort_dir': 'training',
+                },
+                'test': {
+                    'sd': self.start_hour_delta,
+                    'sp': self.post_hour,
+                    'frame_size': self.frame_size,
+                    'cohort_dir': 'testing',
+                },
+            }
+        return cohorts
+
+    def _is_patient_available_in_frame(self, pt_row, start_hour_delta, post_hour):
+        if start_hour_delta != 0 or post_hour != 24:
+            # evalulate whether the patient should be included in dataset
+            pt_avail_rowname = 'available_for_{}-{}_analytics'.format(start_hour_delta, post_hour)
+            try:
+                pt_row[pt_avail_rowname]
+            except KeyError:
+                raise Exception('No indicator row {} exists for patient {}! You must add it to your cohort description!'.format(pt_avail_rowname, patient))
+
+            if pt_row[pt_avail_rowname] != 1:
+                return False
+        return True
