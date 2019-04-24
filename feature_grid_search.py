@@ -5,7 +5,6 @@ import os
 
 import pandas as pd
 import pickle
-from sklearn.metrics import roc_auc_score
 
 from collate import Dataset
 from run_sequential_simple_split import run_sequential
@@ -40,12 +39,12 @@ def get_all_possible_features():
 
 
 def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
-    results = {'auc': 0, 'idx': model_idx, 'run_type': main_args.run_type}
+    path = os.path.join(out_dir, 'dataset-{}.pkl'.format(model_idx))
+    results = {'auc': 0, 'dataset_path': path, 'run_type': main_args.run_type}
     if not combo:
         results['features'] = []
         return results
     results['features'] = combo
-    path = os.path.join(out_dir, 'dataset-{}.pkl'.format(model_idx))
 
     if os.path.exists(path) and main_args.load_if_exists:
         dataset = pd.read_pickle(path)
@@ -64,9 +63,9 @@ def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
             main_args.start_hour_delta,
             main_args.frame_func,
             {'kfold': 'kfold', 'sequential_split': 'holdout_random'}[main_args.run_type],
-            main_args.test_frame_size,
-            main_args.test_post_hour,
-            main_args.test_start_hour_delta,
+            test_frame_size=main_args.test_frame_size,
+            test_post_hour=main_args.test_post_hour,
+            test_start_hour_delta=main_args.test_start_hour_delta,
             custom_vent_features=combo,
             use_ehr_features=main_args.use_ehr_features,
             use_demographic_features=main_args.use_demographic_features,
@@ -80,7 +79,7 @@ def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
         raise Exception('Unable to find 100 patients for features: {}'.format(dataset.columns))
 
     if main_args.run_type == 'kfold':
-        model_args.cross_patient_kfold = True
+        model_args.split_type = 'kfold'
         # only run with 5-fold cross-validation
         model_args.folds = 5
         model = ARDSDetectionModel(model_args, dataset)
@@ -88,11 +87,11 @@ def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
             model.train_and_test()
         except:
             dataset.to_pickle('err-dataset.pkl')
-        auc = roc_auc_score(model.results.patho.tolist(), model.results.prediction.tolist())
+        auc = model.aggregate_results.auc.iloc[0]
         results['auc'] = auc
         del model  # paranoia
     elif main_args.run_type == 'sequential_split':
-        model_args.split_type = 'simple'
+        model_args.split_type = 'holdout_random'
         model_args.split_ratio = main_args.split_ratio
         results['num_runs'] = main_args.num_runs
         ctrl_results, ards_results = run_sequential(dataset, model_args, main_args.num_runs)
