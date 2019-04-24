@@ -12,10 +12,11 @@ def main():
     parser.add_argument('-t', '--to-pickle', required=True)
     parser.add_argument('-d', '--cohort-description', default='cohort-description.csv', help='Path to file describing the cohort')
     parser.add_argument('-e', '--experiment', default='1')
-    parser.add_argument('--plot-by-hour', action='store_true')
     parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
+    parser.add_argument('-tsd', '--test-start-hour-delta', default=None, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data. Only for usage in testing set')
+    parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)
     args = parser.parse_args()
 
     cls = Dataset(
@@ -27,8 +28,10 @@ def main():
         args.experiment,
         args.post_hour,
         args.start_hour_delta,
-        'mean',
-        args.split_type
+        'mean',  # It doesn't matter which function we choose here.
+        args.split_type,
+        test_post_hour=args.test_post_hour,
+        test_start_hour_delta=args.test_start_hour_delta,
     )
     df = cls.get_unframed_dataset()
     pd.to_pickle(df, args.to_pickle)

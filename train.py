@@ -24,7 +24,7 @@ from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, Ran
 from sklearn.feature_selection import chi2, mutual_info_classif, RFE, SelectFromModel, SelectKBest
 from sklearn.linear_model import LassoCV, LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
-from sklearn.model_selection import GridSearchCV, KFold, train_test_split
+from sklearn.model_selection import GridSearchCV, KFold, StratifiedKFold, train_test_split
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler
@@ -128,10 +128,7 @@ class ARDSDetectionModel(object):
         test_patient_data = self.data[self.data.set_type == 'test']
         return [(train_patient_data.index, test_patient_data.index)]
 
-    def get_cross_patient_kfold_idxs(self, x, y, folds):
-        """
-        Get indexes to split dataset
-        """
+    def _get_kfolds_when_train_test_equal(self, x, y, folds):
         idxs = []
         unique_patients = sorted(x.patient.unique())
         mapping = {patho: [] for n, patho in self.pathos.items()}
@@ -141,18 +138,6 @@ class ARDSDetectionModel(object):
             type_ = self.pathos[y.loc[patient_rows.index].unique()[0]]
             mapping[type_].append(patient)
 
-        if 'set_type' not in x.columns:
-            x['set_type'] = 'train_test'
-            train_cohort = 'train_test'
-            test_cohort = 'train_test'
-        elif len(x['set_type'].unique()) == 1:
-            train_cohort = x['set_type'].unique()[0]
-            test_cohort = x['set_type'].unique()[0]
-        elif len(x['set_type'].unique()) == 2:
-            train_cohort = 'train'
-            test_cohort = 'test'
-
-        total_test_patients = round(len(unique_patients) / float(folds))
         for i in range(folds):
             patients_to_use = []
             for k, v in mapping.items():
@@ -167,6 +152,62 @@ class ARDSDetectionModel(object):
             test_pt_data = x[(x.set_type == test_cohort) & (x.patient.isin(patients_to_use))]
             idxs.append((train_pt_data.index, test_pt_data.index))
         return idxs
+
+    def _get_kfolds_when_train_test_unequal(self, x, y, folds):
+        # This function assumes that train is larger than test and that there are no
+        # patients in the test set outside the train set
+        idxs = []
+        test_pts = sorted(x[x.set_type == 'test'].patient.unique())
+        train_pts = sorted(x[x.set_type == 'train'].patient.unique())
+        tmp_split_classes = []
+        for i, pt_set in enumerate([test_pts, set(train_pts).difference(set(test_pts))]):
+            for pt in pt_set:
+                patho = x[x.patient == pt].y.iloc[0]
+                # i*2+patho is important because it signifies which bin our patient is in.
+                # There are 4 choices:
+                # * in test and train sets and OTHER
+                # * in test and train sets and ARDS
+                # * in train only and OTHER
+                # * in train only and ARDS
+                #
+                # XXX if we want to try to do COPD recognition as well this func will need to
+                # change
+                tmp_split_classes.append([pt, i*2+patho])
+        tmp_split_classes = np.array(tmp_split_classes)
+        stratified = StratifiedKFold(n_splits=folds, shuffle=False)
+        for i, j in stratified.split(tmp_split_classes[:, 0], tmp_split_classes[:, 1]):
+            train_pts = tmp_split_classes[:, 0][i]
+            test_pts = tmp_split_classes[:, 0][j]
+            train_pt_data = x[(x.set_type == 'train') & (x.patient.isin(train_pts))]
+            test_pt_data = x[(x.set_type == 'test') & (x.patient.isin(test_pts))]
+            idxs.append((train_pt_data.index, test_pt_data.index))
+        return idxs
+
+    def get_cross_patient_kfold_idxs(self, x, y, folds):
+        """
+        Get indexes to split dataset
+        """
+        if 'set_type' not in x.columns:
+            x['set_type'] = 'train_test'
+            train_cohort = 'train_test'
+            test_cohort = 'train_test'
+        elif len(x['set_type'].unique()) == 1:
+            train_cohort = x['set_type'].unique()[0]
+            test_cohort = x['set_type'].unique()[0]
+        elif len(x['set_type'].unique()) == 2:
+            train_cohort = 'train'
+            test_cohort = 'test'
+
+        if test_cohort != train_cohort:
+            total_test_patients = len(x[x.set_type == test_cohort].patient.unique())
+            total_train_patients = len(x[x.set_type == train_cohort].patient.unique())
+        else:
+            total_test_patients = total_train_patients = len(x.patient.unique())
+
+        if total_test_patients != total_train_patients:
+            return self._get_kfolds_when_train_test_unequal(x, y, folds)
+        else:
+            return self._get_kfolds_when_train_test_equal(x, y, folds)
 
     def get_and_fit_scaler(self, x_train):
         """
