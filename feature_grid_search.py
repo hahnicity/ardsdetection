@@ -76,7 +76,7 @@ def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
         else:
             dataset = data_cls.get_framed_from_unframed_dataset(unframed_df)
 
-    if len(dataset.patient.unique()) != 100:
+    if len(dataset.patient.unique()) != 100 and (main_args.start_hour_delta == 0 and main_args.post_hour == 24):
         raise Exception('Unable to find 100 patients for features: {}'.format(dataset.columns))
 
     if main_args.run_type == 'kfold':
