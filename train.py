@@ -128,7 +128,7 @@ class ARDSDetectionModel(object):
         test_patient_data = self.data[self.data.set_type == 'test']
         return [(train_patient_data.index, test_patient_data.index)]
 
-    def _get_kfolds_when_train_test_equal(self, x, y, folds):
+    def _get_kfolds_when_train_test_equal(self, x, y, folds, train_cohort, test_cohort):
         idxs = []
         unique_patients = sorted(x.patient.unique())
         mapping = {patho: [] for n, patho in self.pathos.items()}
@@ -207,7 +207,7 @@ class ARDSDetectionModel(object):
         if total_test_patients != total_train_patients:
             return self._get_kfolds_when_train_test_unequal(x, y, folds)
         else:
-            return self._get_kfolds_when_train_test_equal(x, y, folds)
+            return self._get_kfolds_when_train_test_equal(x, y, folds, train_cohort, test_cohort)
 
     def get_and_fit_scaler(self, x_train):
         """
