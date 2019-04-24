@@ -40,7 +40,7 @@ def get_all_possible_features():
 
 def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
     path = os.path.join(out_dir, 'dataset-{}.pkl'.format(model_idx))
-    results = {'auc': 0, 'dataset_path': path, 'run_type': main_args.run_type}
+    results = {'auc': 0, 'dataset_path': path, 'run_type': main_args.run_type, 'idx': model_idx}
     if not combo:
         results['features'] = []
         return results
