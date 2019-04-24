@@ -351,6 +351,17 @@ class Dataset(object):
                 else:
                     pt_row = pt_row.iloc[0]
 
+                if start_hour_delta != 0 or post_hour != 24:
+                    # evalulate whether the patient should be included in dataset
+                    pt_avail_rowname = 'available_for_{}-{}_analytics'.format(start_hour_delta, post_hour)
+                    try:
+                        pt_row[pt_avail_rowname]
+                    except KeyError:
+                        raise Exception('No indicator row {} exists for patient {}! You must add it to your cohort description!'.format(pt_avail_rowname, patient))
+
+                    if pt_row[pt_avail_rowname] != 1:
+                        continue
+
                 patho = pt_row['Pathophysiology'].strip()
                 # Sanity check
                 files = file_map[patient]

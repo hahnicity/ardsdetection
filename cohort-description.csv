@@ -1,4 +1,4 @@
-Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,Date when Berlin criteria first met (m/dd/yyy),vent_start_time,Severity ARDS,Cause ARDS,Trach/vent POA,Transfer from OSH (unless ED to ED),Pulm Fibrosis/ ILD,Chest tube x pneumo thorax,Notes,avaialble_for_first_6hr_analytics
+Patient Unique Identifier,Potential Enrollment,experiment_group,Pathophysiology,Date when Berlin criteria first met (m/dd/yyy),vent_start_time,Severity ARDS,Cause ARDS,Trach/vent POA,Transfer from OSH (unless ED to ED),Pulm Fibrosis/ ILD,Chest tube x pneumo thorax,Notes,available_for_0-6_analytics
 0086RPI1920151120,N,1.0,ARDS,11/20/15 15:50,,3.0,Sepsis,,1,,,,0.0
 0100RPI1120151222,N,1.0,ARDS,12/21/15 20:45,,2.0,Trauma,,,,1,,0.0
 0109RPI0120160102,N,1.0,ARDS,1/1/16 1:59,,3.0,Pancreatitis,,1,,,,0.0
