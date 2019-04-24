@@ -27,52 +27,66 @@ EHR_DATA_PATH = 'ehr/pva_study_20181127_temperature_and_lab_results_no_phi.csv'
 class Dataset(object):
     # Feature sets are mapped by (feature_name, breath_meta_feature_index)
     necessities = ['ventBN']
-    flow_time_feature_set = necessities + [
-        # slope_minF_to_zero is just pef_to_zero
-        'mean_flow_from_pef',
-        'inst_RR',
-        'slope_minF_to_zero',
-        'pef_+0.16_to_zero',
-        'iTime',
-        'eTime',
-        'I:E ratio',
-        'dyn_compliance',
-        'tve:tvi ratio',
-    ]
-    flow_time_original = necessities + [
-        'mean_flow_from_pef',
-        'inst_RR',
-        'slope_minF_to_zero',
-        'pef_+0.16_to_zero',
-        'iTime',
-        'eTime',
-        'I:E ratio',
-        'dyn_compliance',
-    ]
-    flow_time_optimal = necessities + [
-        'dyn_compliance',
-        'tve:tvi ratio',
-        'mean_flow_from_pef',
-        'eTime',
-        'I:E ratio',
-    ]
-    broad_feature_set = flow_time_feature_set + [
-        'TVi',
-        'TVe',
-        'Maw',
-        'ipAUC',
-        'PIP',
-        'PEEP',
-        'epAUC',
-    ]
-    broad_optimal = necessities + [
-        'PEEP',
-        'I:E Ratio',
-        'inst_RR',
-        'TVi',
-        'PIP',
-        'iTime',
-    ]
+    vent_feature_sets = {
+        'flow_time': necessities + [
+            # slope_minF_to_zero is just pef_to_zero
+            'mean_flow_from_pef',
+            'inst_RR',
+            'slope_minF_to_zero',
+            'pef_+0.16_to_zero',
+            'iTime',
+            'eTime',
+            'I:E ratio',
+            'dyn_compliance',
+            'tve:tvi ratio',
+        ],
+        'flow_time_orig': necessities + [
+            'mean_flow_from_pef',
+            'inst_RR',
+            'slope_minF_to_zero',
+            'pef_+0.16_to_zero',
+            'iTime',
+            'eTime',
+            'I:E ratio',
+            'dyn_compliance',
+        ],
+        # XXX the whole optimality thing changes quite a bit.
+        'flow_time_opt': necessities + [
+            'dyn_compliance',
+            'tve:tvi ratio',
+            'mean_flow_from_pef',
+            'eTime',
+            'I:E ratio',
+        ],
+        # this is pertaining to a cluster of experiments performed 4/24/19 where
+        # we ran an exhaustive search on train24+test24 for the most optimal possible
+        # feature set that we could find.
+        "holdout_exhaustive_rf_search": necessities + [
+            'dyn_compliance',
+            'pef_+0.16_to_zero',
+            'slope_minF_to_zero',
+            'eTime',
+        ],
+    }
+    vent_feature_sets.update({
+        'broad': vent_feature_sets['flow_time'] + [
+            'TVi',
+            'TVe',
+            'Maw',
+            'ipAUC',
+            'PIP',
+            'PEEP',
+            'epAUC',
+        ],
+        'broad_opt': necessities + [
+            'PEEP',
+            'I:E Ratio',
+            'inst_RR',
+            'TVi',
+            'PIP',
+            'iTime',
+        ],
+    })
     ehr_features = [
         "TEMPERATURE_F",
         "WBC",
@@ -143,16 +157,8 @@ class Dataset(object):
         self.experiment_num = experiment_num
         self.desc = pd.read_csv(cohort_description)
 
-        if feature_set == 'flow_time':
-            self.vent_features = self.flow_time_feature_set
-        if feature_set == 'flow_time_orig':
-            self.vent_features = self.flow_time_original
-        elif feature_set == 'flow_time_opt':
-            self.vent_features = self.flow_time_optimal
-        elif feature_set == 'broad':
-            self.vent_features = self.broad_feature_set
-        elif feature_set == 'broad_opt':
-            self.vent_features = self.broad_optimal
+        if feature_set != 'custom':
+            self.vent_features = self.vent_feature_sets[feature_set]
         elif feature_set == 'custom':
             self.vent_features = custom_vent_features
 
