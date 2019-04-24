@@ -89,7 +89,6 @@ def run_model(model_args, main_args, combo, model_idx, out_dir, unframed_df):
             dataset.to_pickle('err-dataset.pkl')
         auc = model.aggregate_results.auc.iloc[0]
         results['auc'] = auc
-        del model  # paranoia
     elif main_args.run_type == 'sequential_split':
         model_args.split_type = 'holdout_random'
         model_args.split_ratio = main_args.split_ratio
@@ -115,7 +114,7 @@ def main():
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
     parser.add_argument('-e', '--experiment', help='Experiment number we wish to run. If you wish to mix patients from different experiments you can do <num>+<num>+... eg. 1+3  OR 1+2+3', default='1')
-    parser.add_argument("-fs", "--frame-size", default=20, type=int)
+    parser.add_argument("-fs", "--frame-size", default=20, type=int, required=True)
     parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var', 'std', 'mean+var', 'mean+std', 'median+var', 'median+std'], default='median')
     parser.add_argument('-tfs', "--test-frame-size", default=None, type=int)
     parser.add_argument('-tsd', '--test-start-hour-delta', default=None, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data. Only for usage in testing set')
@@ -140,6 +139,7 @@ def main():
     model_args.no_copd_to_ctrl = False
     model_args.no_print_results = True
     model_args.algo = main_args.algo
+    model_args.frame_size = main_args.frame_size
 
     results = {}
     feature_combos = get_all_possible_features()
