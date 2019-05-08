@@ -13,7 +13,7 @@ from add_timestamp_to_file import add_timestamp, check_if_file_already_has_times
 SERVER_NAME = 'b2c-compute'
 SERVER_DIRNAME = '/x1/data/results/backups'
 # XXX change in future to be generalizable to testing cohorts
-DATA_PATH = 'experiment{num}/training/raw'
+DATA_PATH = 'experiment{num}/all_data/raw'
 
 
 def get_first_days_data(base_data_path, patient_id, initial_dt, experiment_num):
