@@ -60,7 +60,7 @@ class ARDSDetectionModel(object):
                 "{}_tns".format(patho), "{}_fns".format(patho),
                 "{}_votes".format(patho),
             ])
-        results_cols += ["model_idx", "prediction"]
+        results_cols += ["model_idx", "prediction", 'pred_frac']
         self.results = pd.DataFrame([], columns=results_cols)
         self.patient_results = pd.DataFrame(
             [], columns=['patient'] + ["{}_votes".format(patho) for _, patho in self.pathos.items()] + ['actual']
@@ -282,7 +282,9 @@ class ARDSDetectionModel(object):
                 ])
 
             patho_pred = np.argmax([pt_results[6 + 5*k] for k in range(len(self.pathos))])
-            pt_results.extend([model_idx, patho_pred])
+            # XXX this only works for ards predictor
+            pred_frac = float(pt_results[6+5*1]) / sum([pt_results[6+5*j] for j in range(2)])
+            pt_results.extend([model_idx, patho_pred, pred_frac])
             self.results.loc[i] = pt_results
 
     def print_model_stats(self, y_test, predictions, model_idx):
@@ -385,7 +387,7 @@ class ARDSDetectionModel(object):
             if len(self.pathos) > 2:
                 auc = np.nan
             elif len(self.pathos) == 2:
-                auc = round(roc_auc_score(self.results.patho.tolist(), self.results.prediction.tolist()), 4)
+                auc = round(roc_auc_score(self.results.patho.tolist(), self.results.pred_frac.tolist()), 4)
             aggregate_results.append([patho, tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc])
 
         self.aggregate_results = pd.DataFrame(
