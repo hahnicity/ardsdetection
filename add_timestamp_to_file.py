@@ -29,7 +29,7 @@ def check_if_file_already_has_timestamp(filename):
 def add_timestamp(filename):
     match = does_file_have_no_timestamp_pat(filename)
     if not match:
-        raise Exception("no file-to-regex match")
+        raise Exception("no file-to-regex match for file: {}".format(filename))
     if check_if_file_already_has_timestamp(filename):
         return
     dict_ = match.groupdict()
