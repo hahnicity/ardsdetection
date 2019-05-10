@@ -67,7 +67,7 @@ class ARDSDetectionModel(object):
                 "{}_tns".format(patho), "{}_fns".format(patho),
                 "{}_votes".format(patho),
             ])
-        results_cols += ["model_idx", "prediction", 'model_auc']
+        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc']
         # self.results is meant to be a high level dataframe of aggregated statistics
         # from our model.
         #
@@ -900,9 +900,11 @@ class ARDSDetectionModel(object):
                 ])
 
             patho_pred = np.argmax([pt_results[6 + 5*k] for k in range(len(self.pathos))])
+            # XXX This is all just ARDS now
+            frac_votes = float(pt_results[6+5*1]) / sum([pt_results[6+5*j] for j in self.pathos.keys()])
             # XXX adding AUC to this is a bit awkward, but currently with the way
             # the code the structured this is the quickest way of doing things
-            pt_results.extend([model_idx, patho_pred, np.nan])
+            pt_results.extend([model_idx, patho_pred, frac_votes, np.nan])
             self.results.loc[i] = pt_results
 
         model_pt_true = self.results[self.results.model_idx==model_idx].patho.tolist()
