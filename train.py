@@ -618,6 +618,18 @@ class ARDSDetectionModel(object):
             },
             'ATS_MODEL': {
                 'kfold': {
+                    20: {
+                        'average': {
+                            'oob_score': True,
+                            'random_state': 1,
+                        },
+                    },
+                    100: {
+                        'average': {
+                            'oob_score': True,
+                            'random_state': 1,
+                        },
+                    },
                     400: {
                         'average': {
                             'oob_score': True,
