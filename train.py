@@ -387,7 +387,7 @@ class ARDSDetectionModel(object):
             if len(self.pathos) > 2:
                 auc = np.nan
             elif len(self.pathos) == 2:
-                auc = round(roc_auc_score(self.results.patho.tolist(), self.results.pred_frac.tolist()), 4)
+                auc = round(roc_auc_score(self.results.patho.tolist(), self.results.prediction.tolist()), 4)
             aggregate_results.append([patho, tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc])
 
         self.aggregate_results = pd.DataFrame(
