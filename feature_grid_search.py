@@ -128,7 +128,7 @@ def main():
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
     # just running 20 times is unfortunately insufficient
     parser.add_argument('-nr', '--num-runs', type=int, default=50)
-    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA'], default='RF')
+    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA', 'ATS_MODEL'], default='RF')
     parser.add_argument('--load-if-exists', action='store_true', help='load previously saved intermediate datasets')
     parser.add_argument('--load-from-unframed', help='Load a new dataset from an existing unframed dataset')
     main_args = parser.parse_args()

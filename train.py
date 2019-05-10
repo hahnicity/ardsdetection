@@ -280,6 +280,9 @@ class ARDSDetectionModel(object):
             clf = GaussianNB(**hyperparams)
         elif self.args.algo == 'GBC':
             clf = GradientBoostingClassifier(**hyperparams)
+        elif self.args.algo == 'ATS_MODEL':
+            clf = RandomForestClassifier(**hyperparams)
+
         return clf
 
     def train(self, x_train, y_train):
@@ -303,7 +306,7 @@ class ARDSDetectionModel(object):
         """
         algo = algo if algo else self.args.algo
         split_type = self.args.split_type if self.args.split_type in ['kfold', 'holdout'] else 'kfold'
-        frame_size = self.args.frame_size if self.args.frame_size in [20, 100] else 20
+        frame_size = self.args.frame_size if self.args.frame_size in [20, 100, 400] else 20
         hyperparameter_type = self.args.hyperparameter_type if self.args.split_type != 'holdout' else 'majority'
         params = {
             "RF": {
@@ -609,6 +612,28 @@ class ARDSDetectionModel(object):
                     100: {
                         'majority': {
                             'var_smoothing': 0.1,
+                        },
+                    },
+                },
+            },
+            'ATS_MODEL': {
+                'kfold': {
+                    20: {
+                        'average': {
+                            'oob_score': True,
+                            'random_state': 1,
+                        },
+                    },
+                    100: {
+                        'average': {
+                            'oob_score': True,
+                            'random_state': 1,
+                        },
+                    },
+                    400: {
+                        'average': {
+                            'oob_score': True,
+                            'random_state': 1,
                         },
                     },
                 },
@@ -1201,7 +1226,7 @@ def build_parser():
     parser.add_argument('--plot-predictions', action='store_true', help='Plot prediction bars')
     parser.add_argument('--tiled-disease-evol', action='store_true', help='Plot disease evolution in tiled manner')
     parser.add_argument('--plot-pairwise-features', action='store_true', help='Plot pairwise relationships between features to better visualize their relationships and predictions')
-    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA'], default='RF')
+    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA', 'ATS_MODEL'], default='RF')
     parser.add_argument('-gsj', '--grid-search-jobs', type=int, default=multiprocessing.cpu_count(), help='run grid search with this many cores')
     parser.add_argument('-ehr', '--use-ehr-features', action='store_true', help='use EHR data in learning')
     parser.add_argument('-demo', '--use-demographic-features', action='store_true', help='use demographic data in learning')

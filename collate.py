@@ -62,10 +62,7 @@ class Dataset(object):
         # we ran an exhaustive search on train24+test24 for the most optimal possible
         # feature set that we could find.
         "holdout_exhaustive_rf_search": necessities + [
-            'dyn_compliance',
             'pef_+0.16_to_zero',
-            'slope_minF_to_zero',
-            'eTime',
         ],
     }
     vent_feature_sets.update({
