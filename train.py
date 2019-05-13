@@ -1200,7 +1200,7 @@ def build_parser():
     parser = ArgumentParser()
     parser.add_argument('-dp', '--data-path', default='/fastdata/ardsdetection')
     parser.add_argument('--cohort-description', default='cohort-description.csv', help='path to cohort description file')
-    parser.add_argument("--feature-set", default="flow_time", choices=["flow_time", "flow_time_opt", "flow_time_orig", "broad", "broad_opt", 'holdout_exhaustive_rf_search'])
+    parser.add_argument("--feature-set", default="flow_time", choices=Dataset.vent_feature_sets)
     parser.add_argument('--no-load-intermediates', action='store_false', help='do not load from intermediate data')
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
     parser.add_argument("--grid-search", action="store_true", help='perform a grid search  for model hyperparameters')

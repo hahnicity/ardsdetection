@@ -64,6 +64,14 @@ class Dataset(object):
         "holdout_exhaustive_rf_search": necessities + [
             'pef_+0.16_to_zero',
         ],
+        # This pertains to the optimal feature set we found for our 2019 ATS submission
+        'ats_optimal': necessities + [
+            'dyn_compliance',
+            'tve:tvi ratio',
+            'mean_flow_from_pef',
+            'eTime',
+            'I:E ratio',
+        ]
     }
     vent_feature_sets.update({
         'broad': vent_feature_sets['flow_time'] + [
