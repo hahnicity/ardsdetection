@@ -951,10 +951,10 @@ class ARDSDetectionModel(object):
         incorrect_pts = model_results[model_results.patho != model_results.prediction]
 
         table = PrettyTable()
-        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc']
+        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1']
         for n, patho in self.pathos.items():
-            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc = self._calc_patho_stats(n, model_results)
-            table.add_row([patho, accuracy, sensitivity, specificity, precision, auc])
+            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1 = self._calc_patho_stats(n, model_results)
+            table.add_row([patho, accuracy, sensitivity, specificity, precision, auc, f1])
         print('Model Results')
         print(table)
 
@@ -1117,11 +1117,15 @@ class ARDSDetectionModel(object):
             precision = round(tps / (tps+fps), 4)
         except ZeroDivisionError:  # Can happen when no predictions for cls are made
             precision = 0
+        try:
+            f1 = round(2 * ((precision * sensitivity) / (precision + sensitivity)), 4)
+        except ZeroDivisionError:
+            f1 = 0
         if len(self.pathos) > 2:
             auc = np.nan
         elif len(self.pathos) == 2:
             auc = round(roc_auc_score(results.patho.tolist(), results.prediction.tolist()), 4)
-        return tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc
+        return tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1
 
     def aggregate_results(self):
         """
@@ -1129,26 +1133,24 @@ class ARDSDetectionModel(object):
         """
         aggregate_results = []
         for n, patho in self.pathos.items():
-            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc = self._calc_patho_stats(n, self.results)
-            aggregate_results.append([patho, tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc])
+            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1 = self._calc_patho_stats(n, self.results)
+            aggregate_results.append([patho, tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1])
 
         self.aggregate_results = pd.DataFrame(
             aggregate_results,
-            columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc']
+            columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc', 'f1']
         )
         if self.args.plot_auc:
             self.plot_auc_curve(self.results.patho.tolist(), self.results.prediction.tolist(), 'ROC curve for all patients')
 
     def print_aggregate_results(self):
+        print "Aggregate Stats"
+        table = PrettyTable()
+        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1']
         for n, patho in self.pathos.items():
             row = self.aggregate_results[self.aggregate_results.patho == patho].iloc[0]
-            print("{} patient accuracy: {}".format(patho, row.accuracy))
-            print("{} patient sensitivity: {}".format(patho, row.sensitivity))
-            print("{} patient specificity: {}".format(patho, row.specificity))
-            print("{} patient precision: {}".format(patho, row.precision))
-            print("")
-
-        print("Patient-level AUC: {}".format(row.auc))
+            table.add_row([patho, row.accuracy, row.sensitivity, row.specificity, row.precision, row.auc, row.f1])
+        print(table)
 
 
 def create_df(args):
