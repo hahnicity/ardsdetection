@@ -288,14 +288,21 @@ class ARDSDetectionModel(object):
     def train(self, x_train, y_train):
         clf = self._get_hyperparameterized_model()
         clf.fit(x_train, y_train)
-        if self.args.algo == 'RF' and not self.args.no_print_results:
-            print('--- OOB scores ---')
-            oob_table = PrettyTable()
-            oob_table.field_names = ['feature', 'score']
-            oob_scores = zip(x_train.columns, clf.feature_importances_)
-            for feature, score in oob_scores:
-                oob_table.add_row([feature, round(score, 4)])
-            print(oob_table)
+        if self.args.algo in ['RF'] and not self.args.no_print_results:
+            print('--- Feature OOB scores ---')
+            oob_scores = clf.feature_importances_
+            scores = sorted(oob_scores, key=lambda x: -x)
+        elif not self.args.no_print_results:
+            print('--- Feature OOB scores ---')
+            scores, pvals = chi2(x_train, y_train)
+            scores = sorted(pvals)
+
+        table = PrettyTable()
+        table.field_names = ['feature', 'score']
+        for feature, score in zip(x_train.columns, scores):
+            table.add_row([feature, round(score, 10)])
+        print(table)
+
         self.models.append(clf)
 
     def _get_hyperparameters(self, algo=None):

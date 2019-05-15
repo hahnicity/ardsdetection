@@ -115,6 +115,9 @@ def main():
     parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='holdout')
     parser.add_argument('--savefig', help='save figure to specified location instead of plotting')
     parser.add_argument('--print-results-table', action='store_true')
+    parser.add_argument('--metric', default='auc', choices=['auc', 'accuracy', 'f1'])
+    parser.add_argument('--save-results')
+    parser.add_argument('--load-results')
     main_args = parser.parse_args()
 
     model_args = build_parser().parse_args([])
@@ -125,24 +128,30 @@ def main():
     model_args.split_type = main_args.split_type
     model_args.frame_size = 100
 
-    df = pd.read_pickle(main_args.from_pickle)
+    if not main_args.load_results:
+        df = pd.read_pickle(main_args.from_pickle)
 
-    if main_args.feature_selection_method in ['RFE', 'chi2', 'mutual_info']:
-        results = n_feature_selection(df, model_args)
-    elif main_args.feature_selection_method == 'PCA':
-        results = pca(df, model_args)
-    elif model_args.feature_selection_method == 'gini':
-        results = gini(df, model_args)
-    elif model_args.feature_selection_method == 'lasso':
-        results = lasso(df, model_args)
+        if main_args.feature_selection_method in ['RFE', 'chi2', 'mutual_info']:
+            results = n_feature_selection(df, model_args)
+        elif main_args.feature_selection_method == 'PCA':
+            results = pca(df, model_args)
+        elif model_args.feature_selection_method == 'gini':
+            results = gini(df, model_args)
+        elif model_args.feature_selection_method == 'lasso':
+            results = lasso(df, model_args)
+    else:
+        results = pd.read_pickle(main_args.load_results)
+
+    if main_args.save_results:
+        results.to_pickle(main_args.save_results)
 
     ards_results = results[results.patho == 'ARDS']
-    plt.plot(ards_results['n_features'].values.astype(int), ards_results['auc'].values)
+    plt.plot(ards_results['n_features'].values.astype(int), ards_results[main_args.metric].values)
     features_min = ards_results['n_features'].min()
     features_max = ards_results['n_features'].max()
     plt.xticks(range(features_min, features_max+1))
     plt.xlabel('N features')
-    plt.ylabel('AUC')
+    plt.ylabel(main_args.metric)
     plt.grid()
     plt.title('{} with {}'.format(main_args.feature_selection_method, main_args.algo))
     if main_args.savefig:
