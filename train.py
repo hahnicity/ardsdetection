@@ -940,7 +940,7 @@ class ARDSDetectionModel(object):
             self.results.loc[i] = pt_results
 
         model_pt_true = self.results[self.results.model_idx==model_idx].patho.tolist()
-        model_pt_pred = self.results[self.results.model_idx==model_idx].prediction.tolist()
+        model_pt_pred = self.results[self.results.model_idx==model_idx].pred_frac.tolist()
         if len(self.pathos) > 2:
             auc = np.nan
         elif len(self.pathos) == 2:
@@ -1131,7 +1131,7 @@ class ARDSDetectionModel(object):
         if len(self.pathos) > 2:
             auc = np.nan
         elif len(self.pathos) == 2:
-            auc = round(roc_auc_score(results.patho.tolist(), results.prediction.tolist()), 4)
+            auc = round(roc_auc_score(results.patho.tolist(), results.pred_frac.tolist()), 4)
         return tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1
 
     def aggregate_results(self):
