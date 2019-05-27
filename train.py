@@ -42,6 +42,10 @@ class NoFeaturesSelectedError(Exception):
     pass
 
 
+class NoIndicesError(Exception):
+    pass
+
+
 class ARDSDetectionModel(object):
 
     def __init__(self, args, data):
@@ -52,6 +56,7 @@ class ARDSDetectionModel(object):
         self.args = args
         self.data = data
         self.pathos = {0: 'OTHER', 1: 'ARDS', 2: 'COPD'}
+        self.feature_ranks = {}
         if not self.args.no_copd_to_ctrl:
             self.data.loc[self.data[self.data.y == 2].index, 'y'] = 0
             del self.pathos[2]
@@ -243,6 +248,9 @@ class ARDSDetectionModel(object):
         elif self.args.split_type == 'test_all':
             idxs = [([], x.index)]
 
+        if len(idxs) == 0:
+            raise NoIndicesError('No indices were found for split. Did you enter your arguments correctly?')
+
         # try dropping cols
         for col in ['hour', 'row_time', 'y', 'patient', 'ventBN', 'set_type']:
             try:
@@ -256,7 +264,6 @@ class ARDSDetectionModel(object):
             x_test = x.loc[test_idx].dropna()
             y_train = y.loc[x_train.index]
             y_test = y.loc[x_test.index]
-
             scaler = self.get_and_fit_scaler(x_train)
             if len(x_train) != 0:
                 x_train = pd.DataFrame(scaler.transform(x_train), index=x_train.index, columns=colnames)
@@ -292,15 +299,24 @@ class ARDSDetectionModel(object):
             print('--- Feature OOB scores ---')
             oob_scores = clf.feature_importances_
             scores = sorted(oob_scores, key=lambda x: -x)
+            self.feature_score_rounding = lambda x: round(x, 4)
+            self.rank_order = -1
         elif not self.args.no_print_results:
-            print('--- Feature OOB scores ---')
+            print('--- Feature chi2 p-values ---')
             scores, pvals = chi2(x_train, y_train)
             scores = sorted(pvals)
+            self.feature_score_rounding = lambda x: round(x, 10)
+            self.rank_order = 1
 
         table = PrettyTable()
-        table.field_names = ['feature', 'score']
-        for feature, score in zip(x_train.columns, scores):
-            table.add_row([feature, round(score, 10)])
+        table.field_names = ['rank', 'feature', 'score']
+        for rank, feature, score in zip(range(1, len(scores)+1), x_train.columns, scores):
+            if feature not in self.feature_ranks:
+                self.feature_ranks[feature] = [(rank, score)]
+            else:
+                self.feature_ranks[feature].append((rank, score))
+
+            table.add_row([rank, feature, self.feature_score_rounding(score)])
         print(table)
 
         self.models.append(clf)
@@ -1158,6 +1174,19 @@ class ARDSDetectionModel(object):
             row = self.aggregate_results[self.aggregate_results.patho == patho].iloc[0]
             table.add_row([patho, row.accuracy, row.sensitivity, row.specificity, row.precision, row.auc, row.f1])
         print(table)
+
+        if len(self.feature_ranks) > 0:
+            feature_avg_scores = []
+            feature_all_ranks = {}
+            for feature in self.feature_ranks:
+                feature_avg_scores.append((feature, np.mean([x[1] for x in self.feature_ranks[feature]])))
+                feature_all_ranks[feature] = [str(x[0]) for x in self.feature_ranks[feature]]
+            table = PrettyTable()
+            table.field_names = ['feature', 'avg_score', 'rank']
+            feature_avg_scores = sorted(feature_avg_scores, key=lambda x: self.rank_order * x[1])
+            for feature, score in feature_avg_scores:
+                table.add_row([feature, self.feature_score_rounding(score), ", ".join(feature_all_ranks[feature])])
+            print(table)
 
 
 def create_df(args):
