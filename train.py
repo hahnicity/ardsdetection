@@ -72,7 +72,9 @@ class ARDSDetectionModel(object):
                 "{}_tns".format(patho), "{}_fns".format(patho),
                 "{}_votes".format(patho),
             ])
-        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc', 'prediction@55', 'prediction@60', 'prediction@65', 'prediction@70', 'prediction@75', 'prediction@80']
+        self.pred_threshes = range(50, 80+1, 5)
+        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc']
+        results_cols += ['prediction@{}'.format(i) for i in self.pred_threshes]
         # self.results is meant to be a high level dataframe of aggregated statistics
         # from our model.
         #
@@ -954,7 +956,7 @@ class ARDSDetectionModel(object):
             # the code the structured this is the quickest way of doing things
             pt_results.extend([model_idx, patho_pred, frac_votes, np.nan])
             prediction_threshes = []
-            for thresh in [.55, .60, .65, .70, .75, .80]:
+            for thresh in np.array(self.pred_threshes).astype(float) / 100:
                 patho_pred_count = np.array([pt_results[6 + 5*k] for k in range(len(self.pathos))]).astype(float)
                 if (patho_pred_count / patho_pred_count.sum())[1] >= thresh:
                     prediction_threshes.append(1)
@@ -982,7 +984,7 @@ class ARDSDetectionModel(object):
         incorrect_pts = model_results[model_results.patho != model_results.prediction]
 
         table = PrettyTable()
-        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1', 'f1@55', 'f1@60', 'f1@65', 'f1@70', 'f1@75', 'f1@80']
+        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1'] + ['f1@{}'.format(i) for i in self.pred_threshes]
         for n, patho in self.pathos.items():
             tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1s = self._calc_patho_stats(n, model_results)
             patho_stats = [patho, accuracy, sensitivity, specificity, precision, auc]
@@ -1133,7 +1135,7 @@ class ARDSDetectionModel(object):
             plt.show()
 
     def _calc_patho_stats(self, patho_n, results):
-        cols_to_int = ['patho', 'prediction', 'prediction@55', 'prediction@60', 'prediction@65', 'prediction@70', 'prediction@75', 'prediction@80']
+        cols_to_int = ['patho', 'prediction'] + ['prediction@{}'.format(i) for i in self.pred_threshes]
         for col in cols_to_int:
             results[col] = results[col].astype(int)
         tps = float(len(results[(results.patho == patho_n) & (results.prediction == patho_n)]))
@@ -1155,7 +1157,7 @@ class ARDSDetectionModel(object):
             precision = 0
 
         f1_scores = [round(f1_score(results.patho, results.prediction, pos_label=patho_n), 4)]
-        for i in [55, 60, 65, 70, 75, 80]:
+        for i in self.pred_threshes:
             f1_scores.append(round(f1_score(results.patho, results['prediction@{}'.format(i)], pos_label=patho_n), 4))
 
         if len(self.pathos) > 2:
@@ -1177,7 +1179,7 @@ class ARDSDetectionModel(object):
 
         self.aggregate_results = pd.DataFrame(
             aggregate_results,
-            columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc', 'f1', 'f1@55', 'f1@60', 'f1@65', 'f1@70', 'f1@75', 'f1@80']
+            columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc', 'f1'] + ['f1@{}'.format(i) for i in self.pred_threshes],
         )
         if self.args.plot_auc:
             self.plot_auc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
@@ -1185,10 +1187,10 @@ class ARDSDetectionModel(object):
     def print_aggregate_results(self):
         print "Aggregate Stats"
         table = PrettyTable()
-        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1', 'f1@55', 'f1@60', 'f1@65', 'f1@70', 'f1@75', 'f1@80']
+        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1'] + ['f1@{}'.format(i) for i in self.pred_threshes]
         for n, patho in self.pathos.items():
             row = self.aggregate_results[self.aggregate_results.patho == patho].iloc[0]
-            table.add_row([patho, row.accuracy, row.sensitivity, row.specificity, row.precision, row.auc, row.f1, row['f1@55'], row['f1@60'], row['f1@65'], row['f1@70'], row['f1@75'], row['f1@80']])
+            table.add_row([patho, row.accuracy, row.sensitivity, row.specificity, row.precision, row.auc, row.f1] + [row['f1@{}'.format(i)] for i in self.pred_threshes])
         print(table)
 
         if len(self.feature_ranks) > 0:
@@ -1203,6 +1205,18 @@ class ARDSDetectionModel(object):
             for feature, score in feature_avg_scores:
                 table.add_row([feature, self.feature_score_rounding(score), ", ".join(feature_all_ranks[feature])])
             print(table)
+
+        if self.args.plot_f1_sensitivity:
+            for n, patho in self.pathos.items():
+                row = self.aggregate_results[self.aggregate_results.patho == patho].iloc[0]
+                y = [row['f1@{}'.format(i)] for i in self.pred_threshes]
+                plt.plot(self.pred_threshes, y, label='{} F1-score'.format(patho))
+            plt.legend()
+            plt.title('F1-score sensitivity analysis')
+            plt.ylabel('Score')
+            plt.xlabel('Percentage ARDS votes')
+            plt.grid()
+            plt.show()
 
 
 def create_df(args):
@@ -1291,6 +1305,7 @@ def build_parser():
     parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
     parser.add_argument('--select-from-model-thresh', type=float, default=.2, help='Threshold to use for feature importances when using lasso and gini selection')
     parser.add_argument('--plot-auc', action='store_true', help='Plot AUC curve')
+    parser.add_argument('--plot-f1-sensitivity', action='store_true', help='Plot F1-score sensitivity analysis')
     return parser
 
 
