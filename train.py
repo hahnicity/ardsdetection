@@ -23,7 +23,7 @@ from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, RandomForestClassifier
 from sklearn.feature_selection import chi2, mutual_info_classif, RFE, SelectFromModel, SelectKBest
 from sklearn.linear_model import LassoCV, LogisticRegression
-from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, roc_curve
 from sklearn.model_selection import GridSearchCV, KFold, StratifiedKFold, train_test_split
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
@@ -72,7 +72,7 @@ class ARDSDetectionModel(object):
                 "{}_tns".format(patho), "{}_fns".format(patho),
                 "{}_votes".format(patho),
             ])
-        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc']
+        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc', 'prediction@55', 'prediction@60', 'prediction@65', 'prediction@70', 'prediction@75', 'prediction@80']
         # self.results is meant to be a high level dataframe of aggregated statistics
         # from our model.
         #
@@ -953,6 +953,14 @@ class ARDSDetectionModel(object):
             # XXX adding AUC to this is a bit awkward, but currently with the way
             # the code the structured this is the quickest way of doing things
             pt_results.extend([model_idx, patho_pred, frac_votes, np.nan])
+            prediction_threshes = []
+            for thresh in [.55, .60, .65, .70, .75, .80]:
+                patho_pred_count = np.array([pt_results[6 + 5*k] for k in range(len(self.pathos))]).astype(float)
+                if (patho_pred_count / patho_pred_count.sum())[1] >= thresh:
+                    prediction_threshes.append(1)
+                else:
+                    prediction_threshes.append(0)
+            pt_results.extend(prediction_threshes)
             self.results.loc[i] = pt_results
 
         model_pt_true = self.results[self.results.model_idx==model_idx].patho.tolist()
@@ -974,10 +982,12 @@ class ARDSDetectionModel(object):
         incorrect_pts = model_results[model_results.patho != model_results.prediction]
 
         table = PrettyTable()
-        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1']
+        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1', 'f1@55', 'f1@60', 'f1@65', 'f1@70', 'f1@75', 'f1@80']
         for n, patho in self.pathos.items():
-            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1 = self._calc_patho_stats(n, model_results)
-            table.add_row([patho, accuracy, sensitivity, specificity, precision, auc, f1])
+            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1s = self._calc_patho_stats(n, model_results)
+            patho_stats = [patho, accuracy, sensitivity, specificity, precision, auc]
+            patho_stats.extend(f1s)
+            table.add_row(patho_stats)
         print('Model Results')
         print(table)
 
@@ -1123,6 +1133,9 @@ class ARDSDetectionModel(object):
             plt.show()
 
     def _calc_patho_stats(self, patho_n, results):
+        cols_to_int = ['patho', 'prediction', 'prediction@55', 'prediction@60', 'prediction@65', 'prediction@70', 'prediction@75', 'prediction@80']
+        for col in cols_to_int:
+            results[col] = results[col].astype(int)
         tps = float(len(results[(results.patho == patho_n) & (results.prediction == patho_n)]))
         tns = float(len(results[(results.patho != patho_n) & (results.prediction != patho_n)]))
         fps = float(len(results[(results.patho != patho_n) & (results.prediction == patho_n)]))
@@ -1140,15 +1153,16 @@ class ARDSDetectionModel(object):
             precision = round(tps / (tps+fps), 4)
         except ZeroDivisionError:  # Can happen when no predictions for cls are made
             precision = 0
-        try:
-            f1 = round(2 * ((precision * sensitivity) / (precision + sensitivity)), 4)
-        except ZeroDivisionError:
-            f1 = 0
+
+        f1_scores = [round(f1_score(results.patho, results.prediction, pos_label=patho_n), 4)]
+        for i in [55, 60, 65, 70, 75, 80]:
+            f1_scores.append(round(f1_score(results.patho, results['prediction@{}'.format(i)], pos_label=patho_n), 4))
+
         if len(self.pathos) > 2:
             auc = np.nan
         elif len(self.pathos) == 2:
             auc = round(roc_auc_score(results.patho.tolist(), results.pred_frac.tolist()), 4)
-        return tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1
+        return tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1_scores
 
     def aggregate_results(self):
         """
@@ -1156,23 +1170,25 @@ class ARDSDetectionModel(object):
         """
         aggregate_results = []
         for n, patho in self.pathos.items():
-            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1 = self._calc_patho_stats(n, self.results)
-            aggregate_results.append([patho, tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1])
+            tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc, f1s = self._calc_patho_stats(n, self.results)
+            patho_stats = [patho, tps, tns, fps, fns, accuracy, sensitivity, specificity, precision, auc]
+            patho_stats.extend(f1s)
+            aggregate_results.append(patho_stats)
 
         self.aggregate_results = pd.DataFrame(
             aggregate_results,
-            columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc', 'f1']
+            columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc', 'f1', 'f1@55', 'f1@60', 'f1@65', 'f1@70', 'f1@75', 'f1@80']
         )
         if self.args.plot_auc:
-            self.plot_auc_curve(self.results.patho.tolist(), self.results.prediction.tolist(), 'ROC curve for all patients')
+            self.plot_auc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
 
     def print_aggregate_results(self):
         print "Aggregate Stats"
         table = PrettyTable()
-        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1']
+        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1', 'f1@55', 'f1@60', 'f1@65', 'f1@70', 'f1@75', 'f1@80']
         for n, patho in self.pathos.items():
             row = self.aggregate_results[self.aggregate_results.patho == patho].iloc[0]
-            table.add_row([patho, row.accuracy, row.sensitivity, row.specificity, row.precision, row.auc, row.f1])
+            table.add_row([patho, row.accuracy, row.sensitivity, row.specificity, row.precision, row.auc, row.f1, row['f1@55'], row['f1@60'], row['f1@65'], row['f1@70'], row['f1@75'], row['f1@80']])
         print(table)
 
         if len(self.feature_ranks) > 0:
