@@ -115,7 +115,6 @@ def main():
     parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='holdout')
     parser.add_argument('--savefig', help='save figure to specified location instead of plotting')
     parser.add_argument('--print-results-table', action='store_true')
-    parser.add_argument('--metric', default='auc', choices=['auc', 'accuracy', 'f1'])
     parser.add_argument('--save-results')
     parser.add_argument('--load-results')
     main_args = parser.parse_args()
@@ -146,12 +145,14 @@ def main():
         results.to_pickle(main_args.save_results)
 
     ards_results = results[results.patho == 'ARDS']
-    plt.plot(ards_results['n_features'].values.astype(int), ards_results[main_args.metric].values)
+    plt.plot(ards_results['n_features'].values.astype(int), ards_results.auc.values, label='AUC')
+    plt.plot(ards_results['n_features'].values.astype(int), ards_results.accuracy.values, label='Accuracy')
+    plt.plot(ards_results['n_features'].values.astype(int), ards_results.f1.values, label='ARDS F1')
     features_min = ards_results['n_features'].min()
     features_max = ards_results['n_features'].max()
     plt.xticks(range(features_min, features_max+1))
     plt.xlabel('N features')
-    plt.ylabel(main_args.metric)
+    plt.legend()
     plt.grid()
     plt.title('{} with {}'.format(main_args.feature_selection_method, main_args.algo))
     if main_args.savefig:
