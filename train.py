@@ -19,11 +19,12 @@ import pandas as pd
 from pprint import pprint
 from prettytable import PrettyTable
 import seaborn as sns
+from scipy import interp
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, RandomForestClassifier
 from sklearn.feature_selection import chi2, mutual_info_classif, RFE, SelectFromModel, SelectKBest
 from sklearn.linear_model import LassoCV, LogisticRegression
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, roc_curve
+from sklearn.metrics import accuracy_score, auc, f1_score, precision_score, recall_score, roc_auc_score, roc_curve
 from sklearn.model_selection import GridSearchCV, KFold, StratifiedKFold, train_test_split
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
@@ -704,6 +705,48 @@ class ARDSDetectionModel(object):
         if self.args.grid_search:
             self.aggregate_grid_search_results()
 
+        if self.args.plot_roc_all_folds:
+            self.plot_roc_all_folds()
+
+    def plot_roc_all_folds(self):
+        tprs = []
+        aucs = []
+        mean_fpr = np.linspace(0, 1, 100)
+
+        for model_idx in self.results.model_idx.unique():
+            fold_preds = self.results[self.results.model_idx == model_idx]
+            fpr, tpr, thresh = roc_curve(fold_preds.patho, fold_preds.pred_frac)
+            tprs.append(interp(mean_fpr, fpr, tpr))
+            tprs[-1][0] = 0.0
+            roc_auc = auc(fpr, tpr)
+            aucs.append(roc_auc)
+            plt.plot(fpr, tpr, lw=1, alpha=0.3,
+                     label='ROC fold %d (AUC = %0.2f)' % (model_idx+1, roc_auc))
+
+        plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
+                 label='Chance', alpha=.8)
+
+        mean_tpr = np.mean(tprs, axis=0)
+        mean_tpr[-1] = 1.0
+        mean_auc = auc(mean_fpr, mean_tpr)
+        std_auc = np.std(aucs)
+        plt.plot(mean_fpr, mean_tpr, color='b',
+                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+                 lw=2, alpha=.8)
+
+        std_tpr = np.std(tprs, axis=0)
+        tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+        tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+        plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+                         label=r'$\pm$ 1 std. dev.')
+
+        plt.xlim([-0.05, 1.05])
+        plt.ylim([-0.05, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.legend(loc="lower right")
+        plt.show()
+
     def aggregate_grid_search_results(self):
         print("---- Grid Search Final Results ----")
         print("----")
@@ -972,7 +1015,7 @@ class ARDSDetectionModel(object):
         elif len(self.pathos) == 2:
             auc = round(roc_auc_score(model_pt_true, model_pt_pred), 4)
 
-        if self.args.plot_auc and self.args.split_type == 'kfold':
+        if self.args.plot_roc and self.args.split_type == 'kfold':
             self.plot_auc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
         self.results.loc[self.results.model_idx==model_idx, 'model_auc'] = auc
 
@@ -1190,7 +1233,7 @@ class ARDSDetectionModel(object):
             aggregate_results,
             columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc', 'f1']
         )
-        if self.args.plot_auc:
+        if self.args.plot_roc:
             self.plot_auc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
         self.thresh_eval = pd.DataFrame(
             thresh_results,
@@ -1331,9 +1374,10 @@ def build_parser():
     parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method')
     parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
     parser.add_argument('--select-from-model-thresh', type=float, default=.2, help='Threshold to use for feature importances when using lasso and gini selection')
-    parser.add_argument('--plot-auc', action='store_true', help='Plot AUC curve')
+    parser.add_argument('--plot-roc', action='store_true', help='Plot AUC curve')
     parser.add_argument('--plot-f1-sensitivity', action='store_true', help='Plot F1-score sensitivity analysis')
     parser.add_argument('--plot-sen-spec-vs-thresh', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
+    parser.add_argument('--plot-roc-all-folds', action='store_true', help='Plot ROC curve but with individual roc curves and then an average.')
     return parser
 
 
