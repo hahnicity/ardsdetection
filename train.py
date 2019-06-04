@@ -73,7 +73,7 @@ class ARDSDetectionModel(object):
                 "{}_tns".format(patho), "{}_fns".format(patho),
                 "{}_votes".format(patho),
             ])
-        self.pred_threshes = range(0, 100+1, 2)
+        self.pred_threshes = range(2, 100+1, 2)
         results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc']
         results_cols += ['prediction@{}'.format(i) for i in self.pred_threshes]
         # self.results is meant to be a high level dataframe of aggregated statistics
