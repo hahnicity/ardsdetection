@@ -1,5 +1,5 @@
 """
-learn
+train
 ~~~~~
 
 Performs learning for our classifier
@@ -711,6 +711,47 @@ class ARDSDetectionModel(object):
         if self.args.plot_f1_sensitivity_all_folds:
             self.plot_f1_sensitivity_all_folds()
 
+        if self.args.plot_sen_spec_vs_thresh_all_folds:
+            self.plot_sen_spec_vs_thresh_all_folds()
+
+    def plot_sen_spec_vs_thresh_all_folds(self):
+        sens_other = []
+        sens_ards = []
+        specs_other = []
+        specs_ards = []
+        mean_thresh = np.linspace(self.args.thresh_interval, 100, 100-self.args.thresh_interval)
+
+        for model_idx in self.results.model_idx.unique():
+            fold_preds = self.thresh_eval[self.thresh_eval.model_idx == model_idx]
+            for n, patho in self.pathos.items():
+                row = fold_preds[fold_preds.patho == patho].iloc[0]
+                y_sen = [row['sen@{}'.format(i)] for i in self.pred_threshes]
+                y_spec = [row['spec@{}'.format(i)] for i in self.pred_threshes]
+                if patho == 'ARDS':
+                    sens = sens_ards
+                    specs = specs_ards
+                else:
+                    sens = sens_other
+                    specs = specs_other
+                sens.append(interp(mean_thresh, self.pred_threshes, y_sen))
+                specs.append(interp(mean_thresh, self.pred_threshes, y_spec))
+                plt.plot(self.pred_threshes, y_sen, lw=1, alpha=.2)
+                plt.plot(self.pred_threshes, y_spec, lw=1, alpha=.2)
+
+        mean_sens_ards = np.mean(sens_ards, axis=0)
+        mean_sens_other = np.mean(sens_other, axis=0)
+        mean_specs_ards = np.mean(specs_ards, axis=0)
+        mean_specs_other = np.mean(specs_other, axis=0)
+        plt.plot(mean_thresh, mean_sens_ards, color='b', label=r'Mean ARDS Sensitivity', lw=2, alpha=.8)
+        plt.plot(mean_thresh, mean_specs_ards, color='seagreen', label=r'Mean ARDS Specificity', lw=2, alpha=.8)
+        plt.plot(mean_thresh, mean_sens_other, color='lightcoral', label=r'Mean OTHER Sensitivity', lw=2, alpha=.8)
+        plt.plot(mean_thresh, mean_specs_other, color='lightgreen', label=r'Mean OTHER Specificity', lw=2, alpha=.8)
+        plt.legend()
+        plt.xlabel('Percentage ARDS votes')
+        plt.ylabel('score')
+        plt.title('sensitivity/specificity analysis all folds')
+        plt.show()
+
     def plot_f1_sensitivity_all_folds(self):
         f1s_other = []
         f1s_ards = []
@@ -728,10 +769,19 @@ class ARDSDetectionModel(object):
                 f1s.append(interp(mean_thresh, self.pred_threshes, y))
                 plt.plot(self.pred_threshes, y, lw=1, alpha=.3)
 
-        plt.plot(mean_thresh, np.mean(f1s_ards, axis=0), color='b',
-                 label=r'Mean ARDS F1', lw=2, alpha=.8)
-        plt.plot(mean_thresh, np.mean(f1s_other, axis=0), color='seagreen',
-                 label=r'Mean OTHER F1', lw=2, alpha=.8)
+        mean_f1s_ards = np.mean(f1s_ards, axis=0)
+        mean_f1s_other = np.mean(f1s_other, axis=0)
+        plt.plot(mean_thresh, mean_f1s_ards, color='b', label=r'Mean ARDS F1', lw=2, alpha=.8)
+        plt.plot(mean_thresh, mean_f1s_other, color='seagreen', label=r'Mean OTHER F1', lw=2, alpha=.8)
+
+        std_f1s_ards = np.std(f1s_ards, axis=0)
+        upper = np.minimum(mean_f1s_ards + std_f1s_ards, 1)
+        lower = np.maximum(mean_f1s_ards - std_f1s_ards, 0)
+        #plt.fill_between(mean_thresh, lower, upper, color='grey', alpha=.2, label=r'$\pm$ 1 std. dev.')
+        std_f1s_other = np.std(f1s_other, axis=0)
+        upper = np.minimum(mean_f1s_other + std_f1s_other, 1)
+        lower = np.maximum(mean_f1s_other - std_f1s_other, 0)
+        #plt.fill_between(mean_thresh, lower, upper, color='grey', alpha=.2, label=r'$\pm$ 1 std. dev.')
         plt.legend()
         plt.xlabel('Percentage ARDS votes')
         plt.ylabel('F1-score')
@@ -1416,8 +1466,7 @@ def build_parser():
     parser.add_argument('--plot-sen-spec-vs-thresh', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
     parser.add_argument('--plot-roc-all-folds', action='store_true', help='Plot ROC curve but with individual roc curves and then an average.')
     parser.add_argument('--plot-f1-sensitivity-all-folds', action='store_true', help='Plot F1-score sensitivity analysis')
-    # XXX TODO
-    #parser.add_argument('--plot-sen-spec-vs-thresh-all-folds', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
+    parser.add_argument('--plot-sen-spec-vs-thresh-all-folds', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
     parser.add_argument('--thresh-interval', type=int, default=25)
     return parser
 
