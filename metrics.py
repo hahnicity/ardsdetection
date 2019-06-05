@@ -2,6 +2,7 @@
 metrics
 ~~~~~~~
 """
+import numpy as np
 import pandas as pd
 
 
@@ -77,3 +78,31 @@ def sensitivity(actual, predictions, label):
     if tps == 0 and fns == 0:
         return nan
     return tps / (tps+fns)
+
+
+def janky_roc(y_true, preds):
+    # false positive rate
+    fpr = []
+    # true positive rate
+    tpr = []
+    # Iterate thresholds from 0.0, 0.01, ... 1.0
+    thresholds = np.arange(0.0, 1.0001, .0001)
+    # get number of positive and negative examples in the dataset
+    P = sum(y_true)
+    N = len(y_true) - P
+
+    # iterate through all thresholds and determine fraction of true positives
+    # and false positives found at this threshold
+    for thresh in thresholds:
+        FP=0
+        TP=0
+        for i in range(len(preds)):
+            if (preds[i] > thresh):
+                if y_true[i] == 1:
+                    TP = TP + 1
+                if y_true[i] == 0:
+                    FP = FP + 1
+        fpr.append(FP/float(N))
+        tpr.append(TP/float(P))
+
+    return fpr, tpr

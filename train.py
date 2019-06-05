@@ -73,7 +73,7 @@ class ARDSDetectionModel(object):
                 "{}_tns".format(patho), "{}_fns".format(patho),
                 "{}_votes".format(patho),
             ])
-        self.pred_threshes = range(2, 100+1, 2)
+        self.pred_threshes = range(1, 100+1, 1)
         results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc']
         results_cols += ['prediction@{}'.format(i) for i in self.pred_threshes]
         # self.results is meant to be a high level dataframe of aggregated statistics
@@ -1016,7 +1016,7 @@ class ARDSDetectionModel(object):
             auc = round(roc_auc_score(model_pt_true, model_pt_pred), 4)
 
         if self.args.plot_roc and self.args.split_type == 'kfold':
-            self.plot_auc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
+            self.plot_roc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
         self.results.loc[self.results.model_idx==model_idx, 'model_auc'] = auc
 
     def print_model_stats(self, y_test, predictions, model_idx):
@@ -1043,7 +1043,7 @@ class ARDSDetectionModel(object):
         print('Misclassified Patients')
         print(table)
 
-    def plot_auc_curve(self, y_test, predictions, plt_title):
+    def plot_roc_curve(self, y_test, predictions, plt_title):
         auc = round(roc_auc_score(y_test, predictions), 4)
         fpr, tpr, thresholds = roc_curve(y_test, predictions)
         plt.plot(fpr, tpr, label='AUC={}'.format(auc))
@@ -1234,7 +1234,7 @@ class ARDSDetectionModel(object):
             columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc', 'f1']
         )
         if self.args.plot_roc:
-            self.plot_auc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
+            self.plot_roc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
         self.thresh_eval = pd.DataFrame(
             thresh_results,
             columns=['patho'] + ['sen@{}'.format(i) for i in self.pred_threshes] + ['spec@{}'.format(i) for i in self.pred_threshes] + ['f1@{}'.format(i) for i in self.pred_threshes],
