@@ -73,7 +73,7 @@ class ARDSDetectionModel(object):
                 "{}_tns".format(patho), "{}_fns".format(patho),
                 "{}_votes".format(patho),
             ])
-        self.pred_threshes = range(1, 100+1, 1)
+        self.pred_threshes = np.arange(self.args.thresh_interval, 100 + self.args.thresh_interval, self.args.thresh_interval)
         results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc']
         results_cols += ['prediction@{}'.format(i) for i in self.pred_threshes]
         # self.results is meant to be a high level dataframe of aggregated statistics
@@ -708,6 +708,36 @@ class ARDSDetectionModel(object):
         if self.args.plot_roc_all_folds:
             self.plot_roc_all_folds()
 
+        if self.args.plot_f1_sensitivity_all_folds:
+            self.plot_f1_sensitivity_all_folds()
+
+    def plot_f1_sensitivity_all_folds(self):
+        f1s_other = []
+        f1s_ards = []
+        mean_thresh = np.linspace(self.args.thresh_interval, 100, 100-self.args.thresh_interval)
+
+        for model_idx in self.results.model_idx.unique():
+            fold_preds = self.thresh_eval[self.thresh_eval.model_idx == model_idx]
+            for n, patho in self.pathos.items():
+                row = fold_preds[fold_preds.patho == patho].iloc[0]
+                y = [row['f1@{}'.format(i)] for i in self.pred_threshes]
+                if patho == 'ARDS':
+                    f1s = f1s_ards
+                else:
+                    f1s = f1s_other
+                f1s.append(interp(mean_thresh, self.pred_threshes, y))
+                plt.plot(self.pred_threshes, y, lw=1, alpha=.3)
+
+        plt.plot(mean_thresh, np.mean(f1s_ards, axis=0), color='b',
+                 label=r'Mean ARDS F1', lw=2, alpha=.8)
+        plt.plot(mean_thresh, np.mean(f1s_other, axis=0), color='seagreen',
+                 label=r'Mean OTHER F1', lw=2, alpha=.8)
+        plt.legend()
+        plt.xlabel('Percentage ARDS votes')
+        plt.ylabel('F1-score')
+        plt.title('F1-score sensitivity analysis all folds')
+        plt.show()
+
     def plot_roc_all_folds(self):
         tprs = []
         aucs = []
@@ -1227,7 +1257,14 @@ class ARDSDetectionModel(object):
             tps, tns, fps, fns, accuracy, sens, specs, precision, auc, f1s = self._calc_patho_stats(n, self.results)
             patho_stats = [patho, tps, tns, fps, fns, accuracy, sens[0], specs[0], precision, auc, f1s[0]]
             aggregate_results.append(patho_stats)
-            thresh_results.append([patho] + sens[1:] + specs[1:] + f1s[1:])
+            thresh_results.append([patho] + sens[1:] + specs[1:] + f1s[1:] + [-1])
+
+        for fold_num in self.results.model_idx.unique():
+            for n, patho in self.pathos.items():
+                tps, tns, fps, fns, accuracy, sens, specs, precision, auc, f1s = self._calc_patho_stats(n, self.results[self.results.model_idx==fold_num])
+                patho_stats = [patho, tps, tns, fps, fns, accuracy, sens[0], specs[0], precision, auc, f1s[0]]
+                aggregate_results.append(patho_stats)
+                thresh_results.append([patho] + sens[1:] + specs[1:] + f1s[1:] + [fold_num])
 
         self.aggregate_results = pd.DataFrame(
             aggregate_results,
@@ -1237,7 +1274,7 @@ class ARDSDetectionModel(object):
             self.plot_roc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
         self.thresh_eval = pd.DataFrame(
             thresh_results,
-            columns=['patho'] + ['sen@{}'.format(i) for i in self.pred_threshes] + ['spec@{}'.format(i) for i in self.pred_threshes] + ['f1@{}'.format(i) for i in self.pred_threshes],
+            columns=['patho'] + ['sen@{}'.format(i) for i in self.pred_threshes] + ['spec@{}'.format(i) for i in self.pred_threshes] + ['f1@{}'.format(i) for i in self.pred_threshes] + ['model_idx'],
         )
 
     def print_aggregate_results(self):
@@ -1264,7 +1301,7 @@ class ARDSDetectionModel(object):
 
         if self.args.plot_f1_sensitivity:
             for n, patho in self.pathos.items():
-                row = self.thresh_eval[self.thresh_eval.patho == patho].iloc[0]
+                row = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx == -1)].iloc[0]
                 y = [row['f1@{}'.format(i)] for i in self.pred_threshes]
                 plt.plot(self.pred_threshes, y, label='{} F1-score'.format(patho))
             plt.legend()
@@ -1276,7 +1313,7 @@ class ARDSDetectionModel(object):
 
         if self.args.plot_sen_spec_vs_thresh:
             for n, patho in self.pathos.items():
-                row = self.thresh_eval[self.thresh_eval.patho == patho].iloc[0]
+                row = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx == -1)].iloc[0]
                 y1 = [row['sen@{}'.format(i)] for i in self.pred_threshes]
                 y2 = [row['spec@{}'.format(i)] for i in self.pred_threshes]
                 plt.plot(self.pred_threshes, y1, label='{} sensitivity'.format(patho))
@@ -1378,6 +1415,10 @@ def build_parser():
     parser.add_argument('--plot-f1-sensitivity', action='store_true', help='Plot F1-score sensitivity analysis')
     parser.add_argument('--plot-sen-spec-vs-thresh', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
     parser.add_argument('--plot-roc-all-folds', action='store_true', help='Plot ROC curve but with individual roc curves and then an average.')
+    parser.add_argument('--plot-f1-sensitivity-all-folds', action='store_true', help='Plot F1-score sensitivity analysis')
+    # XXX TODO
+    #parser.add_argument('--plot-sen-spec-vs-thresh-all-folds', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
+    parser.add_argument('--thresh-interval', type=int, default=25)
     return parser
 
 
