@@ -744,8 +744,8 @@ class ARDSDetectionModel(object):
         mean_specs_other = np.mean(specs_other, axis=0)
         plt.plot(mean_thresh, mean_sens_ards, color='b', label=r'Mean ARDS Sensitivity', lw=2, alpha=.8)
         plt.plot(mean_thresh, mean_specs_ards, color='seagreen', label=r'Mean ARDS Specificity', lw=2, alpha=.8)
-        plt.plot(mean_thresh, mean_sens_other, color='lightcoral', label=r'Mean OTHER Sensitivity', lw=2, alpha=.8)
-        plt.plot(mean_thresh, mean_specs_other, color='lightgreen', label=r'Mean OTHER Specificity', lw=2, alpha=.8)
+        plt.plot(mean_thresh, mean_sens_other, color='lightcoral', label=r'Mean non-ARDS Sensitivity', lw=2, alpha=.8)
+        plt.plot(mean_thresh, mean_specs_other, color='lightgreen', label=r'Mean non-ARDS Specificity', lw=2, alpha=.8)
         plt.legend()
         plt.xlabel('Percentage ARDS votes')
         plt.ylabel('score')
@@ -755,7 +755,6 @@ class ARDSDetectionModel(object):
     def plot_f1_sensitivity_all_folds(self):
         f1s_other = []
         f1s_ards = []
-        mean_thresh = np.linspace(self.args.thresh_interval, 100, 100-self.args.thresh_interval)
 
         for model_idx in self.results.model_idx.unique():
             fold_preds = self.thresh_eval[self.thresh_eval.model_idx == model_idx]
@@ -766,13 +765,26 @@ class ARDSDetectionModel(object):
                     f1s = f1s_ards
                 else:
                     f1s = f1s_other
-                f1s.append(interp(mean_thresh, self.pred_threshes, y))
+                f1s.append(np.array(y))
                 plt.plot(self.pred_threshes, y, lw=1, alpha=.3)
 
         mean_f1s_ards = np.mean(f1s_ards, axis=0)
         mean_f1s_other = np.mean(f1s_other, axis=0)
-        plt.plot(mean_thresh, mean_f1s_ards, color='b', label=r'Mean ARDS F1', lw=2, alpha=.8)
-        plt.plot(mean_thresh, mean_f1s_other, color='seagreen', label=r'Mean OTHER F1', lw=2, alpha=.8)
+        harmonic_mean = 2 * (mean_f1s_other * mean_f1s_ards) / (mean_f1s_other + mean_f1s_ards)
+        optimal_pred_frac = self.pred_threshes[np.argmax(harmonic_mean)]
+        optimal_table = PrettyTable()
+        optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec', 'f1']
+        for n, patho in self.pathos.items():
+            rows = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx != -1)]
+            mean_opt_sen = round(rows['sen@{}'.format(optimal_pred_frac)].mean(), 4)
+            mean_opt_spec = round(rows['spec@{}'.format(optimal_pred_frac)].mean(), 4)
+            mean_opt_f1 = round(rows['f1@{}'.format(optimal_pred_frac)].mean(), 4)
+            mean_opt_prec = round((mean_opt_f1 * mean_opt_sen) / (2*mean_opt_sen - mean_opt_f1), 4)
+            optimal_table.add_row([patho, optimal_pred_frac, mean_opt_sen, mean_opt_spec, mean_opt_prec, mean_opt_f1])
+        print(optimal_table)
+
+        plt.plot(self.pred_threshes, mean_f1s_ards, color='b', label=r'Mean ARDS F1', lw=2, alpha=.8)
+        plt.plot(self.pred_threshes, mean_f1s_other, color='seagreen', label=r'Mean non-ARDS F1', lw=2, alpha=.8)
 
         std_f1s_ards = np.std(f1s_ards, axis=0)
         upper = np.minimum(mean_f1s_ards + std_f1s_ards, 1)
