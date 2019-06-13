@@ -86,7 +86,7 @@ def janky_roc(y_true, preds):
     # true positive rate
     tpr = []
     # Iterate thresholds from 0.0, 0.01, ... 1.0
-    thresholds = np.arange(0.0, 1.0001, .0001)
+    thresholds = np.arange(0.0, 1.0001, .001)
     # get number of positive and negative examples in the dataset
     P = sum(y_true)
     N = len(y_true) - P
@@ -105,4 +105,4 @@ def janky_roc(y_true, preds):
         fpr.append(FP/float(N))
         tpr.append(TP/float(P))
 
-    return fpr, tpr
+    return tpr, fpr, thresholds

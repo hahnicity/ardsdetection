@@ -766,7 +766,8 @@ class ARDSDetectionModel(object):
                 else:
                     f1s = f1s_other
                 f1s.append(np.array(y))
-                plt.plot(self.pred_threshes, y, lw=1, alpha=.3)
+                if not self.args.no_plot_individual_folds:
+                    plt.plot(self.pred_threshes, y, lw=1, alpha=.3)
 
         mean_f1s_ards = np.mean(f1s_ards, axis=0)
         mean_f1s_other = np.mean(f1s_other, axis=0)
@@ -812,8 +813,9 @@ class ARDSDetectionModel(object):
             tprs[-1][0] = 0.0
             roc_auc = auc(fpr, tpr)
             aucs.append(roc_auc)
-            plt.plot(fpr, tpr, lw=1, alpha=0.3,
-                     label='ROC fold %d (AUC = %0.2f)' % (model_idx+1, roc_auc))
+            if not self.args.no_plot_individual_folds:
+                plt.plot(fpr, tpr, lw=1, alpha=0.3,
+                         label='ROC fold %d (AUC = %0.2f)' % (model_idx+1, roc_auc))
 
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
                  label='Chance', alpha=.8)
@@ -822,6 +824,25 @@ class ARDSDetectionModel(object):
         mean_tpr[-1] = 1.0
         mean_auc = auc(mean_fpr, mean_tpr)
         std_auc = np.std(aucs)
+
+        all_tpr, all_fpr, threshs = janky_roc(self.results.patho, self.results.pred_frac)
+        j_scores = np.array(all_tpr) - np.array(all_fpr)
+        ordered_j_scores = sorted(zip(j_scores, threshs))
+        youdens = ordered_j_scores[-1][1]
+        # get closest prediction thresh
+        optimal_pred_frac = self.pred_threshes[np.argmin(np.abs(youdens - (self.pred_threshes / 100.0)))]
+        optimal_table = PrettyTable()
+        optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec', 'f1']
+        for n, patho in self.pathos.items():
+            rows = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx != -1)]
+            mean_opt_sen = round(rows['sen@{}'.format(optimal_pred_frac)].mean(), 4)
+            mean_opt_spec = round(rows['spec@{}'.format(optimal_pred_frac)].mean(), 4)
+            mean_opt_f1 = round(rows['f1@{}'.format(optimal_pred_frac)].mean(), 4)
+            mean_opt_prec = round((mean_opt_f1 * mean_opt_sen) / (2*mean_opt_sen - mean_opt_f1), 4)
+            optimal_table.add_row([patho, optimal_pred_frac, mean_opt_sen, mean_opt_spec, mean_opt_prec, mean_opt_f1])
+        print('Results via Youdens threshold')
+        print(optimal_table)
+
         plt.plot(mean_fpr, mean_tpr, color='b',
                  label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
                  lw=2, alpha=.8)
@@ -829,8 +850,9 @@ class ARDSDetectionModel(object):
         std_tpr = np.std(tprs, axis=0)
         tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
         tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-        plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
-                         label=r'$\pm$ 1 std. dev.')
+        if not self.args.no_plot_individual_folds:
+            plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+                             label=r'$\pm$ 1 std. dev.')
 
         plt.xlim([-0.05, 1.05])
         plt.ylim([-0.05, 1.05])
@@ -1480,6 +1502,7 @@ def build_parser():
     parser.add_argument('--plot-f1-sensitivity-all-folds', action='store_true', help='Plot F1-score sensitivity analysis')
     parser.add_argument('--plot-sen-spec-vs-thresh-all-folds', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
     parser.add_argument('--thresh-interval', type=int, default=25)
+    parser.add_argument('--no-plot-individual-folds', action='store_true')
     return parser
 
 
