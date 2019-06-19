@@ -19,6 +19,7 @@ import pandas as pd
 from pprint import pprint
 from prettytable import PrettyTable
 import seaborn as sns
+import shap
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, RandomForestClassifier
 from sklearn.feature_selection import chi2, mutual_info_classif, RFE, SelectFromModel, SelectKBest
@@ -693,6 +694,9 @@ class ARDSDetectionModel(object):
                 self.print_model_stats(y_test, predictions, model_idx)
                 print("-------------------")
 
+            if self.args.perform_shap:
+                self.perform_shap(x_train)
+
         self.aggregate_results()
         if not self.args.no_print_results:
             self.print_aggregate_results()
@@ -703,6 +707,12 @@ class ARDSDetectionModel(object):
 
         if self.args.grid_search:
             self.aggregate_grid_search_results()
+
+    def perform_shap(self, x_train):
+        shap.initjs()
+        explainer = shap.TreeExplainer(self.models[-1])
+        vals = explainer.shap_values(x_train)
+        shap.force_plot(explainer.expected_value[0], vals[0][0,:], x_train.iloc[0,:])
 
     def aggregate_grid_search_results(self):
         print("---- Grid Search Final Results ----")
@@ -1334,6 +1344,7 @@ def build_parser():
     parser.add_argument('--plot-auc', action='store_true', help='Plot AUC curve')
     parser.add_argument('--plot-f1-sensitivity', action='store_true', help='Plot F1-score sensitivity analysis')
     parser.add_argument('--plot-sen-spec-vs-thresh', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
+    parser.add_argument('--perform-shap', action='store_true', help='perform shap analysis on failed patients')
     return parser
 
 
