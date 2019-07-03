@@ -12,6 +12,7 @@ import multiprocessing
 import operator
 from random import randint, sample
 import time
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,6 +23,7 @@ import seaborn as sns
 from scipy import interp
 from sklearn.decomposition import KernelPCA, PCA
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, RandomForestClassifier
+from sklearn.exceptions import DataConversionWarning
 from sklearn.feature_selection import chi2, mutual_info_classif, RFE, SelectFromModel, SelectKBest
 from sklearn.linear_model import LassoCV, LogisticRegression
 from sklearn.metrics import accuracy_score, auc, f1_score, precision_score, recall_score, roc_auc_score, roc_curve
@@ -37,7 +39,8 @@ from metrics import *
 sns.set()
 sns.set_style('ticks')
 sns.set_context('paper')
-
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=DataConversionWarning)
 
 class NoFeaturesSelectedError(Exception):
     pass
