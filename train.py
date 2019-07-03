@@ -694,9 +694,13 @@ class ARDSDetectionModel(object):
                 self.print_model_stats(y_test, predictions, model_idx)
                 print("-------------------")
 
-        self.aggregate_results()
+        self.aggregate_results, self.thresh_eval = self.get_aggregrate_results_and_thresh_eval(self.results, -1)
+        if self.args.plot_roc:
+            self.plot_roc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
+
         if not self.args.no_print_results:
             self.print_aggregate_results()
+            self.get_youdens_results(self.results, self.thresh_eval)
         if self.args.plot_predictions or self.args.plot_disease_evolution:
             self.plot_predictions()
         if self.args.plot_pairwise_features:
@@ -735,21 +739,22 @@ class ARDSDetectionModel(object):
                     specs = specs_other
                 sens.append(interp(mean_thresh, self.pred_threshes, y_sen))
                 specs.append(interp(mean_thresh, self.pred_threshes, y_spec))
-                plt.plot(self.pred_threshes, y_sen, lw=1, alpha=.2)
-                plt.plot(self.pred_threshes, y_spec, lw=1, alpha=.2)
+                #plt.plot(self.pred_threshes, y_sen, lw=1, alpha=.2)
+                #plt.plot(self.pred_threshes, y_spec, lw=1, alpha=.2)
 
         mean_sens_ards = np.mean(sens_ards, axis=0)
         mean_sens_other = np.mean(sens_other, axis=0)
         mean_specs_ards = np.mean(specs_ards, axis=0)
         mean_specs_other = np.mean(specs_other, axis=0)
-        plt.plot(mean_thresh, mean_sens_ards, color='b', label=r'Mean ARDS Sensitivity', lw=2, alpha=.8)
-        plt.plot(mean_thresh, mean_specs_ards, color='seagreen', label=r'Mean ARDS Specificity', lw=2, alpha=.8)
-        plt.plot(mean_thresh, mean_sens_other, color='lightcoral', label=r'Mean non-ARDS Sensitivity', lw=2, alpha=.8)
-        plt.plot(mean_thresh, mean_specs_other, color='lightgreen', label=r'Mean non-ARDS Specificity', lw=2, alpha=.8)
+        plt.plot(mean_thresh, mean_sens_ards, color='b', label=r'Mean ARDS Sensitivity', lw=2)
+        plt.plot(mean_thresh, mean_specs_ards, color='seagreen', label=r'Mean ARDS Specificity', lw=2)
+        plt.plot(mean_thresh, mean_sens_other, color='lightcoral', label=r'Mean non-ARDS Sensitivity', lw=2)
+        plt.plot(mean_thresh, mean_specs_other, color='lightgreen', label=r'Mean non-ARDS Specificity', lw=2)
+        plt.yticks(np.arange(0.0, 1.01, .1))
         plt.legend()
         plt.xlabel('Percentage ARDS votes')
         plt.ylabel('score')
-        plt.title('sensitivity/specificity analysis all folds')
+        plt.grid()
         plt.show()
 
     def plot_f1_sensitivity_all_folds(self):
@@ -817,6 +822,7 @@ class ARDSDetectionModel(object):
                 plt.plot(fpr, tpr, lw=1, alpha=0.3,
                          label='ROC fold %d (AUC = %0.2f)' % (model_idx+1, roc_auc))
 
+
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
                  label='Chance', alpha=.8)
 
@@ -824,24 +830,6 @@ class ARDSDetectionModel(object):
         mean_tpr[-1] = 1.0
         mean_auc = auc(mean_fpr, mean_tpr)
         std_auc = np.std(aucs)
-
-        all_tpr, all_fpr, threshs = janky_roc(self.results.patho, self.results.pred_frac)
-        j_scores = np.array(all_tpr) - np.array(all_fpr)
-        ordered_j_scores = sorted(zip(j_scores, threshs))
-        youdens = ordered_j_scores[-1][1]
-        # get closest prediction thresh
-        optimal_pred_frac = self.pred_threshes[np.argmin(np.abs(youdens - (self.pred_threshes / 100.0)))]
-        optimal_table = PrettyTable()
-        optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec', 'f1']
-        for n, patho in self.pathos.items():
-            rows = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx != -1)]
-            mean_opt_sen = round(rows['sen@{}'.format(optimal_pred_frac)].mean(), 4)
-            mean_opt_spec = round(rows['spec@{}'.format(optimal_pred_frac)].mean(), 4)
-            mean_opt_f1 = round(rows['f1@{}'.format(optimal_pred_frac)].mean(), 4)
-            mean_opt_prec = round((mean_opt_f1 * mean_opt_sen) / (2*mean_opt_sen - mean_opt_f1), 4)
-            optimal_table.add_row([patho, optimal_pred_frac, mean_opt_sen, mean_opt_spec, mean_opt_prec, mean_opt_f1])
-        print('Results via Youdens threshold')
-        print(optimal_table)
 
         plt.plot(mean_fpr, mean_tpr, color='b',
                  label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
@@ -860,6 +848,25 @@ class ARDSDetectionModel(object):
         plt.ylabel('True Positive Rate')
         plt.legend(loc="lower right")
         plt.show()
+
+    def get_youdens_results(self, results, thresh_eval):
+        all_tpr, all_fpr, threshs = janky_roc(results.patho.values, results.pred_frac.values)
+        j_scores = np.array(all_tpr) - np.array(all_fpr)
+        ordered_j_scores = sorted(zip(j_scores, threshs))
+        youdens = ordered_j_scores[-1][1]
+        # get closest prediction thresh
+        optimal_pred_frac = self.pred_threshes[np.argmin(np.abs(youdens - (self.pred_threshes / 100.0)))]
+        optimal_table = PrettyTable()
+        optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec', 'f1']
+        for n, patho in self.pathos.items():
+            rows = thresh_eval[(thresh_eval.patho == patho)]
+            mean_opt_sen = round(rows['sen@{}'.format(optimal_pred_frac)].mean(), 4)
+            mean_opt_spec = round(rows['spec@{}'.format(optimal_pred_frac)].mean(), 4)
+            mean_opt_f1 = round(rows['f1@{}'.format(optimal_pred_frac)].mean(), 4)
+            mean_opt_prec = round((mean_opt_f1 * mean_opt_sen) / (2*mean_opt_sen - mean_opt_f1), 4)
+            optimal_table.add_row([patho, optimal_pred_frac, mean_opt_sen, mean_opt_spec, mean_opt_prec, mean_opt_f1])
+        print('Results via Youdens threshold')
+        print(optimal_table)
 
     def aggregate_grid_search_results(self):
         print("---- Grid Search Final Results ----")
@@ -1129,9 +1136,11 @@ class ARDSDetectionModel(object):
         elif len(self.pathos) == 2:
             auc = round(roc_auc_score(model_pt_true, model_pt_pred), 4)
 
+        _, thresh_eval = self.get_aggregrate_results_and_thresh_eval(self.results[self.results.model_idx == model_idx], model_idx)
+        self.get_youdens_results(self.results[self.results.model_idx == model_idx], thresh_eval)
+        self.results.loc[self.results.model_idx==model_idx, 'model_auc'] = auc
         if self.args.plot_roc and self.args.split_type == 'kfold':
             self.plot_roc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
-        self.results.loc[self.results.model_idx==model_idx, 'model_auc'] = auc
 
     def print_model_stats(self, y_test, predictions, model_idx):
         """
@@ -1331,35 +1340,24 @@ class ARDSDetectionModel(object):
             auc = round(roc_auc_score(results.patho.tolist(), results.pred_frac.tolist()), 4)
         return tps, tns, fps, fns, accuracy, sens, specs, precision, auc, f1_scores
 
-    def aggregate_results(self):
-        """
-        Aggregate final results for all patients into a friendly data frame
-        """
-        aggregate_results = []
+    def get_aggregrate_results_and_thresh_eval(self, results, model_idx):
         thresh_results = []
+        aggregate_results = []
         for n, patho in self.pathos.items():
-            tps, tns, fps, fns, accuracy, sens, specs, precision, auc, f1s = self._calc_patho_stats(n, self.results)
+            tps, tns, fps, fns, accuracy, sens, specs, precision, auc, f1s = self._calc_patho_stats(n, results)
+            thresh_results.append([patho] + sens[1:] + specs[1:] + f1s[1:] + [model_idx])
             patho_stats = [patho, tps, tns, fps, fns, accuracy, sens[0], specs[0], precision, auc, f1s[0]]
             aggregate_results.append(patho_stats)
-            thresh_results.append([patho] + sens[1:] + specs[1:] + f1s[1:] + [-1])
 
-        for fold_num in self.results.model_idx.unique():
-            for n, patho in self.pathos.items():
-                tps, tns, fps, fns, accuracy, sens, specs, precision, auc, f1s = self._calc_patho_stats(n, self.results[self.results.model_idx==fold_num])
-                patho_stats = [patho, tps, tns, fps, fns, accuracy, sens[0], specs[0], precision, auc, f1s[0]]
-                aggregate_results.append(patho_stats)
-                thresh_results.append([patho] + sens[1:] + specs[1:] + f1s[1:] + [fold_num])
-
-        self.aggregate_results = pd.DataFrame(
-            aggregate_results,
-            columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc', 'f1']
-        )
-        if self.args.plot_roc:
-            self.plot_roc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
-        self.thresh_eval = pd.DataFrame(
+        thresh_eval = pd.DataFrame(
             thresh_results,
             columns=['patho'] + ['sen@{}'.format(i) for i in self.pred_threshes] + ['spec@{}'.format(i) for i in self.pred_threshes] + ['f1@{}'.format(i) for i in self.pred_threshes] + ['model_idx'],
         )
+        aggregate_results = pd.DataFrame(
+            aggregate_results,
+            columns=['patho', 'tps', 'tns', 'fps', 'fns', 'accuracy', 'sensitivity', 'specificity', 'precision', 'auc', 'f1']
+        )
+        return aggregate_results, thresh_eval
 
     def print_aggregate_results(self):
         print "Aggregate Stats"
