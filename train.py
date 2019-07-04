@@ -706,6 +706,9 @@ class ARDSDetectionModel(object):
         if self.args.plot_roc:
             self.plot_roc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
 
+        if not self.args.no_print_results and self.args.split_type == 'kfold':
+            self.print_fold_averages()
+
         if not self.args.no_print_results:
             self.print_aggregate_results()
             self.get_youdens_results(self.results, self.thresh_eval[self.thresh_eval.model_idx==-1])
@@ -1312,8 +1315,19 @@ class ARDSDetectionModel(object):
             sns.pairplot(all_rows, vars=to_plot[i:i+max_features_per_plot], hue="preds")
             plt.show()
 
-    def _calc_fold_averages(self, results):
-        pass
+    def print_fold_averages(self):
+        print('---Averaged statistics across all kfolds---')
+        table = PrettyTable()
+        table.field_names = ['patho', 'sensitivity', 'specificity', 'precision', 'f1', 'auc']
+        for n, patho in self.pathos.items():
+            fold_results = self.aggregate_results[(self.aggregate_results.model_idx != -1) & (self.aggregate_results.patho == patho)]
+            sen = round(fold_results.sensitivity.mean(), 4)
+            spec = round(fold_results.specificity.mean(), 4)
+            prec = round(fold_results.precision.mean(), 4)
+            f1 = round(fold_results.f1.mean(), 4)
+            auc = round(fold_results.auc.mean(), 4)
+            table.add_row([patho, sen, spec, prec, f1, auc])
+        print(table)
 
     def _calc_patho_stats(self, patho_n, results):
         cols_to_int = ['patho', 'prediction'] + ['prediction@{}'.format(i) for i in self.pred_threshes]
