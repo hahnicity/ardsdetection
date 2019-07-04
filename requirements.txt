@@ -7,3 +7,4 @@ scipy
 seaborn
 prettytable
 tabulate
+shap<0.29
