@@ -833,7 +833,7 @@ class ARDSDetectionModel(object):
             aucs.append(roc_auc)
             if not self.args.no_plot_individual_folds:
                 plt.plot(fpr, tpr, lw=1, alpha=0.3,
-                         label='ROC fold %d (AUC = %0.2f)' % (model_idx+1, roc_auc))
+                         label='ROC fold %d (AUC = %0.3f)' % (model_idx+1, roc_auc))
 
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
                  label='Chance', alpha=.8)
@@ -844,7 +844,7 @@ class ARDSDetectionModel(object):
         std_auc = np.std(aucs)
 
         plt.plot(mean_fpr, mean_tpr, color='b',
-                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+                 label=r'Mean ROC (AUC = %0.3f $\pm$ %0.3f)' % (mean_auc, std_auc),
                  lw=2, alpha=.8)
 
         std_tpr = np.std(tprs, axis=0)
