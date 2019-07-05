@@ -687,7 +687,7 @@ class ARDSDetectionModel(object):
                 self.perform_grid_search(x_train, y_train)
             elif self.args.feature_selection_method:
                 # sometimes x_test is modified by this func
-                x_test = self.perform_feature_selection(x_train, y_train, x_test)
+                x_train, x_test = self.perform_feature_selection(x_train, y_train, x_test)
             elif not self.args.load_model:
                 self.train(x_train, y_train)
 
@@ -1038,6 +1038,9 @@ class ARDSDetectionModel(object):
 
     def perform_feature_selection(self, x_train, y_train, x_test):
         clf = self._get_hyperparameterized_model()
+        orig_train_idx = x_train.index
+        orig_test_idx = x_test.index
+
         if self.args.feature_selection_method == 'RFE':
             selector = RFE(clf, self.args.n_new_features, step=1)
             selector.fit(x_train, y_train)
@@ -1051,9 +1054,10 @@ class ARDSDetectionModel(object):
             selector = SelectKBest(chi2, k=self.args.n_new_features)
             x_train = selector.fit_transform(x_train, y_train)
             self.selected_features = list(x_test.columns[selector.get_support()])
+            x_train = pd.DataFrame(x_train, columns=self.selected_features, index=orig_train_idx)
             if not self.args.no_print_results:
                 print('Selected features: {}'.format(self.selected_features))
-            x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features)
+            x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features, index=orig_test_idx)
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'mutual_info':
@@ -1101,7 +1105,7 @@ class ARDSDetectionModel(object):
             clf.fit(x_train, y_train)
             self.models.append(clf)
 
-        return x_test
+        return x_train, x_test
 
     def compute_model_results(self, y_test, predictions, model_idx):
         """
