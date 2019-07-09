@@ -327,7 +327,7 @@ class Dataset(object):
                 else:
                     pt_row = pt_row.iloc[0]
 
-                if not self._is_patient_available_in_frame(pt_row, start_hour_delta, post_hour):
+                if not self._is_patient_available_in_frame(pt_row, patient, start_hour_delta, post_hour):
                     continue
 
                 patho = pt_row['Pathophysiology'].strip()
@@ -734,7 +734,7 @@ class Dataset(object):
             }
         return cohorts
 
-    def _is_patient_available_in_frame(self, pt_row, start_hour_delta, post_hour):
+    def _is_patient_available_in_frame(self, pt_row, patient, start_hour_delta, post_hour):
         if start_hour_delta != 0 or post_hour != 24:
             # evalulate whether the patient should be included in dataset
             pt_avail_rowname = 'available_for_{}-{}_analytics'.format(start_hour_delta, post_hour)
