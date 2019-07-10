@@ -109,7 +109,7 @@ def n_feature_selection(df, model_args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--from-pickle', help='load data frame from pickle', required=True)
-    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA'], default='RF')
+    parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA', 'ATS_MODEL'], default='RF')
 
     parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method', required=True)
     parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='holdout')
@@ -144,7 +144,7 @@ def main():
     if main_args.save_results:
         results.to_pickle(main_args.save_results)
 
-    ards_results = results[results.patho == 'ARDS']
+    ards_results = results[(results.patho == 'ARDS') & (results.model_idx == -1)]
     plt.plot(ards_results['n_features'].values.astype(int), ards_results.auc.values, label='AUC')
     plt.plot(ards_results['n_features'].values.astype(int), ards_results.accuracy.values, label='Accuracy')
     plt.plot(ards_results['n_features'].values.astype(int), ards_results.f1.values, label='ARDS F1')

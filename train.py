@@ -649,6 +649,14 @@ class ARDSDetectionModel(object):
                 },
             },
             'ATS_MODEL': {
+                'holdout': {
+                    100: {
+                        'majority': {
+                            'oob_score': True,
+                            'random_state': 1,
+                        },
+                    },
+                },
                 'kfold': {
                     20: {
                         'average': {
@@ -1202,9 +1210,10 @@ class ARDSDetectionModel(object):
         """
         Plot votes on specific class was predicted for each patient.
         """
-        colors = ['viridian', 'pumpkin orange', 'eggplant']
+        colors = ['sky blue', 'deep red', 'eggplant']
         #fontname = 'Osaka'
-        cmap = sns.color_palette(sns.xkcd_palette(colors))
+        #cmap = sns.color_palette(sns.xkcd_palette(colors))
+        cmap = ['#6c89b7', '#ff919c']
         plt.rcParams['font.family'] = 'Osaka'
         plt.rcParams['legend.loc'] = 'upper right'
         if self.args.plot_predictions:
@@ -1212,6 +1221,7 @@ class ARDSDetectionModel(object):
             step_size = 10
             for i in range(0, len(self.patient_results), step_size):
                 slice = self.patient_results.loc[i:i+step_size-1]
+                slice = slice.sort_values(by='patient')
                 ind = np.arange(len(slice))
                 bottom = np.zeros(len(ind))
                 plots = []
