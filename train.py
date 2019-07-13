@@ -1243,7 +1243,7 @@ class ARDSDetectionModel(object):
         if self.args.plot_disease_evolution:
             # Plot fraction of votes for a single patient over 24 hrs.
             if not self.args.tiled_disease_evol:
-                for pt, (pt_rows, pt_preds) in self.patient_predictions.items():
+                for pt, (pt_rows, pt_preds) in sorted(self.patient_predictions.items()):
                     self.plot_disease_evolution(pt, pt_rows, pt_preds, cmap)
                     plt.show()
             else:
@@ -1287,7 +1287,7 @@ class ARDSDetectionModel(object):
             plots.append(plt.bar(range(0, 24), bar_fracs, bottom=bottom, color=cmap[n]))
             bottom = bottom + bar_fracs
 
-        plt.title(pt, fontsize=fontsize, pad=1)
+        plt.title("Patient {}".format(pt[:4]), fontsize=fontsize, pad=1)
         if xylabel:
             plt.ylabel('Fraction Predicted', fontsize=fontsize)
             plt.xlabel('Hour', fontsize=fontsize)
