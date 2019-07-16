@@ -44,6 +44,7 @@ def analyze_coverage(coverage, ards_patients, other_patients, hours):
             seconds_covered = sum(coverage[patient]['seconds_covered'].values())
             hours_covered.append(seconds_covered / float(one_hr))
         hours_covered = np.array(hours_covered)
+        print('median hours covered for {}: {}'.format(patho, np.median(hours_covered)))
         threshes = [1, hours / 4.0 , hours / 2, hours / 1.5, hours - 1]
         for thresh in threshes:
             print('{} {} patients with > {} hour of data in first {} hours.\nPatient IDs: {}\n\n'.format(len(hours_covered[hours_covered > thresh]), patho, thresh, hours, patients[hours_covered > thresh]))
