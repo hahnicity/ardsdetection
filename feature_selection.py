@@ -117,6 +117,7 @@ def main():
     parser.add_argument('--print-results-table', action='store_true')
     parser.add_argument('--save-results')
     parser.add_argument('--load-results')
+    parser.add_argument('-sp', '--post-hour', type=int, required=True)
     main_args = parser.parse_args()
 
     model_args = build_parser().parse_args([])
@@ -126,6 +127,7 @@ def main():
     model_args.algo = main_args.algo
     model_args.split_type = main_args.split_type
     model_args.frame_size = 100
+    model_args.post_hour = main_args.post_hour
 
     if not main_args.load_results:
         df = pd.read_pickle(main_args.from_pickle)
