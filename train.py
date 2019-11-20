@@ -406,6 +406,19 @@ class ARDSDetectionModel(object):
                             },
                         },
                     },
+                    # XXX these are params from 24 hr model. should be changed
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                "random_state": 1,
+                                "max_depth": 6,
+                                "max_features": 'auto',
+                                'criterion': 'entropy',
+                                'n_estimators': 5,
+                                'oob_score': True,
+                            },
+                        },
+                    },
                 },
                 12: {
                     'kfold': {
@@ -416,6 +429,19 @@ class ARDSDetectionModel(object):
                                 "max_features": 'auto',
                                 'criterion': 'gini',
                                 'n_estimators': 14,
+                                'oob_score': True,
+                            },
+                        },
+                    },
+                    # XXX these are params from 24 hr model. should be changed
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                "random_state": 1,
+                                "max_depth": 6,
+                                "max_features": 'auto',
+                                'criterion': 'entropy',
+                                'n_estimators': 5,
                                 'oob_score': True,
                             },
                         },
@@ -1394,13 +1420,14 @@ class ARDSDetectionModel(object):
         sens = [round(recall_score(results.patho, results.prediction, pos_label=patho_n), 4)]
         for i in self.pred_threshes:
             sens.append(round(recall_score(results.patho, results['prediction@{}'.format(i)], pos_label=patho_n), 4))
+
         try:
             specificity = round(tns / (tns+fps), 4)
         except ZeroDivisionError:
             specificity = 0
         specs = [specificity]
         for i in self.pred_threshes:
-            tns_thresh = float(len(results[(results.patho == patho_n) & (results['prediction@{}'.format(i)] == patho_n)]))
+            tns_thresh = float(len(results[(results.patho != patho_n) & (results['prediction@{}'.format(i)] != patho_n)]))
             fps_thresh = float(len(results[(results.patho != patho_n) & (results['prediction@{}'.format(i)] == patho_n)]))
             try:
                 specs.append(round(tns_thresh / (tns_thresh+fps_thresh), 4))
@@ -1448,6 +1475,29 @@ class ARDSDetectionModel(object):
             self.thresh_eval = thresh_eval
         else:
             self.thresh_eval = self.thresh_eval.append(thresh_eval)
+
+        if self.args.print_thresh_table:
+            table = PrettyTable()
+            table.field_names = ['patho', 'vote %', 'sen', 'spec', 'prec']
+            for thresh in range(self.args.thresh_interval, 101, self.args.thresh_interval):
+                ards_results = self.thresh_eval[(self.thresh_eval.patho == 'ARDS') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
+                other_results = self.thresh_eval[(self.thresh_eval.patho == 'OTHER') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
+                sen = 'sen@{}'.format(thresh)
+                spec = 'spec@{}'.format(thresh)
+                f1 = 'f1@{}'.format(thresh)
+                sen_ards = ards_results[sen]
+                spec_ards = ards_results[spec]
+                f1_ards = ards_results[f1]
+                prec_ards = round((f1_ards * sen_ards) / (2*sen_ards - f1_ards), 4)
+                sen_other = other_results[sen]
+                spec_other = other_results[spec]
+                f1_other = other_results[f1]
+                prec_other = round((f1_other * sen_other) / (2*sen_other - f1_other), 4)
+                row = ['ARDS', thresh, sen_ards, spec_ards, prec_ards]
+                table.add_row(row)
+                row = ['OTHER', thresh, sen_other, spec_other, prec_other]
+                table.add_row(row)
+            print(table)
 
     def print_aggregate_results(self):
         print "Aggregate Stats"
@@ -1591,6 +1641,7 @@ def build_parser():
     parser.add_argument('--plot-sen-spec-vs-thresh-all-folds', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
     parser.add_argument('--thresh-interval', type=int, default=25)
     parser.add_argument('--no-plot-individual-folds', action='store_true')
+    parser.add_argument('--print-thresh-table', action='store_true')
     return parser
 
 
