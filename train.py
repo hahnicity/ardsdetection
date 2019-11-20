@@ -301,14 +301,14 @@ class ARDSDetectionModel(object):
     def train(self, x_train, y_train):
         clf = self._get_hyperparameterized_model()
         clf.fit(x_train, y_train)
-        if self.args.algo in ['RF'] and not self.args.no_print_results:
-            print('--- Feature OOB scores ---')
+        if self.args.algo in ['RF']:
+            header = '--- Feature OOB scores ---'
             oob_scores = clf.feature_importances_
             scores = sorted(oob_scores, key=lambda x: -x)
             self.feature_score_rounding = lambda x: round(x, 4)
             self.rank_order = -1
-        elif not self.args.no_print_results:
-            print('--- Feature chi2 p-values ---')
+        else:
+            header = '--- Feature chi2 p-values ---'
             scores, pvals = chi2(x_train, y_train)
             scores = sorted(pvals)
             self.feature_score_rounding = lambda x: round(x, 10)
@@ -324,7 +324,8 @@ class ARDSDetectionModel(object):
 
             table.add_row([rank, feature, self.feature_score_rounding(score)])
 
-        if not self.args.no_print_results:
+        if self.args.print_feature_selection:
+            print(header)
             print(table)
         self.models.append(clf)
 
@@ -702,9 +703,10 @@ class ARDSDetectionModel(object):
         Train models and then run testing afterwards.
         """
         for model_idx, (x_train, x_test, y_train, y_test) in enumerate(self.perform_data_splits()):
+            if not self.args.no_print_results and self.args.split_type == 'kfold':
+                print("----Run fold {}----".format(model_idx+1))
+
             for iter_n in range(self.args.n_runs):
-                if not self.args.no_print_results and self.args.split_type == 'kfold':
-                    print("----Run fold {}----".format(model_idx+1))
                 if self.args.grid_search:
                     self.perform_grid_search(x_train, y_train)
                 elif self.args.feature_selection_method:
@@ -719,10 +721,11 @@ class ARDSDetectionModel(object):
                     pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
 
                 predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
-                results = self.compute_model_results(y_test, predictions, model_idx, iter_n)
-                if not self.args.no_print_results:
-                    self.print_model_stats(y_test, predictions, model_idx)
-                    print("-------------------")
+                results = self.compute_model_results(y_test, predictions, model_idx, iter_n, False)
+
+            if not self.args.no_print_results:
+                self.print_model_stats(y_test, predictions, model_idx)
+                print("-------------------")
 
         self.get_aggregate_results_and_thresh_eval(self.results, -1)
         if self.args.plot_roc:
@@ -733,7 +736,7 @@ class ARDSDetectionModel(object):
 
         if not self.args.no_print_results:
             self.print_aggregate_results()
-            self.get_youdens_results(self.results, self.thresh_eval[self.thresh_eval.model_idx==-1])
+            self.get_youdens_results(self.results, self.thresh_eval[self.thresh_eval.model_idx==-1], True)
         if self.args.plot_predictions or self.args.plot_disease_evolution:
             self.plot_predictions()
         if self.args.plot_pairwise_features:
@@ -881,7 +884,7 @@ class ARDSDetectionModel(object):
         plt.legend(loc="lower right")
         plt.show()
 
-    def get_youdens_results(self, results, thresh_eval):
+    def get_youdens_results(self, results, thresh_eval, at_end_of_n):
         all_tpr, all_fpr, threshs = janky_roc(results.patho.values, results.pred_frac.values)
         j_scores = np.array(all_tpr) - np.array(all_fpr)
         tmp = zip(j_scores, threshs)
@@ -901,7 +904,8 @@ class ARDSDetectionModel(object):
             mean_opt_f1 = rows['f1@{}'.format(optimal_pred_frac)].mean()
             mean_opt_prec = round((mean_opt_f1 * mean_opt_sen) / (2*mean_opt_sen - mean_opt_f1), 4)
             optimal_table.add_row([patho, optimal_pred_frac, round(mean_opt_sen, 4), mean_opt_spec, mean_opt_prec, round(mean_opt_f1, 4)])
-        if not self.args.no_print_results:
+
+        if not self.args.no_print_results and at_end_of_n:
             print('Results via Youdens threshold')
             print(optimal_table)
 
@@ -1125,7 +1129,7 @@ class ARDSDetectionModel(object):
 
         return x_train, x_test
 
-    def compute_model_results(self, y_test, predictions, model_idx, run_num):
+    def compute_model_results(self, y_test, predictions, model_idx, run_num, at_end_of_n):
         """
         After a group of patients is run through the model, record all necessary stats
         such as true positives, false positives, etc.
@@ -1172,7 +1176,7 @@ class ARDSDetectionModel(object):
             auc = round(roc_auc_score(model_pt_true, model_pt_pred), 4)
 
         self.get_aggregate_results_and_thresh_eval(self.results[(self.results.model_idx == model_idx) & (self.results.run_num == run_num)], model_idx)
-        self.get_youdens_results(self.results[self.results.model_idx == model_idx], self.thresh_eval[self.thresh_eval.model_idx==model_idx])
+        self.get_youdens_results(self.results[self.results.model_idx == model_idx], self.thresh_eval[self.thresh_eval.model_idx==model_idx], at_end_of_n)
         self.results.loc[self.results.model_idx==model_idx, 'model_auc'] = auc
         if self.args.plot_roc and self.args.split_type == 'kfold':
             self.plot_roc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
@@ -1561,6 +1565,7 @@ def build_parser():
     parser.add_argument('--thresh-interval', type=int, default=25)
     parser.add_argument('--no-plot-individual-folds', action='store_true')
     parser.add_argument('--n-runs', type=int, help='number of times to run the model', default=10)
+    parser.add_argument('--print-feature-selection', action='store_true')
     return parser
 
 
