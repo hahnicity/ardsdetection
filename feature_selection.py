@@ -112,11 +112,12 @@ def main():
     parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA', 'ATS_MODEL'], default='RF')
 
     parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method', required=True)
-    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='holdout')
+    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', required=True)
     parser.add_argument('--savefig', help='save figure to specified location instead of plotting')
     parser.add_argument('--print-results-table', action='store_true')
     parser.add_argument('--save-results')
     parser.add_argument('--load-results')
+    parser.add_argument('-sp', '--post-hour', type=int, required=True)
     main_args = parser.parse_args()
 
     model_args = build_parser().parse_args([])
@@ -126,6 +127,7 @@ def main():
     model_args.algo = main_args.algo
     model_args.split_type = main_args.split_type
     model_args.frame_size = 100
+    model_args.post_hour = main_args.post_hour
 
     if not main_args.load_results:
         df = pd.read_pickle(main_args.from_pickle)

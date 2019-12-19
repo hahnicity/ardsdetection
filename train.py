@@ -78,7 +78,7 @@ class ARDSDetectionModel(object):
                 "{}_votes".format(patho),
             ])
         self.pred_threshes = np.arange(self.args.thresh_interval, 100 + self.args.thresh_interval, self.args.thresh_interval)
-        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc']
+        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc', 'run_num']
         results_cols += ['prediction@{}'.format(i) for i in self.pred_threshes]
         # self.results is meant to be a high level dataframe of aggregated statistics
         # from our model.
@@ -183,9 +183,6 @@ class ARDSDetectionModel(object):
                 # * in test and train sets and ARDS
                 # * in train only and OTHER
                 # * in train only and ARDS
-                #
-                # XXX if we want to try to do COPD recognition as well this func will need to
-                # change
                 tmp_split_classes.append([pt, i*2+patho])
         tmp_split_classes = np.array(tmp_split_classes)
         stratified = StratifiedKFold(n_splits=folds, shuffle=False)
@@ -304,14 +301,14 @@ class ARDSDetectionModel(object):
     def train(self, x_train, y_train):
         clf = self._get_hyperparameterized_model()
         clf.fit(x_train, y_train)
-        if self.args.algo in ['RF'] and not self.args.no_print_results:
-            print('--- Feature OOB scores ---')
+        if self.args.algo in ['RF']:
+            header = '--- Feature OOB scores ---'
             oob_scores = clf.feature_importances_
             scores = sorted(oob_scores, key=lambda x: -x)
             self.feature_score_rounding = lambda x: round(x, 4)
             self.rank_order = -1
-        elif not self.args.no_print_results:
-            print('--- Feature chi2 p-values ---')
+        else:
+            header = '--- Feature chi2 p-values ---'
             scores, pvals = chi2(x_train, y_train)
             scores = sorted(pvals)
             self.feature_score_rounding = lambda x: round(x, 10)
@@ -326,8 +323,10 @@ class ARDSDetectionModel(object):
                 self.feature_ranks[feature].append((rank, score))
 
             table.add_row([rank, feature, self.feature_score_rounding(score)])
-        print(table)
 
+        if self.args.print_feature_selection:
+            print(header)
+            print(table)
         self.models.append(clf)
 
     def _get_hyperparameters(self, algo=None):
@@ -340,349 +339,390 @@ class ARDSDetectionModel(object):
         split_type = self.args.split_type if self.args.split_type in ['kfold', 'holdout'] else 'kfold'
         frame_size = self.args.frame_size if self.args.frame_size in [20, 100, 400] else 20
         hyperparameter_type = self.args.hyperparameter_type if self.args.split_type != 'holdout' else 'majority'
+        status_post = self.args.post_hour
         params = {
             "RF": {
-                'kfold' : {
-                    20: {
-                        "average": {
-                            "random_state": 1,
-                            "max_depth": 5,
-                            "max_features": 'auto',
-                            'criterion': 'gini',
-                            'n_estimators': 33,
-                            'oob_score': True,
+                24: {
+                    'kfold': {
+                        20: {
+                            "average": {
+                                "max_depth": 5,
+                                "max_features": 'auto',
+                                'criterion': 'gini',
+                                'n_estimators': 33,
+                                'oob_score': True,
+                            },
+                            "majority": {
+                                "max_depth": 5,
+                                "max_features": 'auto',
+                                'criterion': 'gini',
+                                'n_estimators': 15,
+                                'oob_score': True,
+                            },
                         },
-                        "majority": {
-                            "random_state": 1,
-                            "max_depth": 5,
-                            "max_features": 'auto',
-                            'criterion': 'gini',
-                            'n_estimators': 15,
-                            'oob_score': True,
+                        100: {
+                            "average": {
+                                "max_depth": 5,
+                                "max_features": 'auto',
+                                'criterion': 'entropy',
+                                'n_estimators': 84,
+                                'oob_score': True,
+                            },
+                            "majority": {
+                                "max_depth": 5,
+                                "max_features": 'auto',
+                                'criterion': 'entropy',
+                                'n_estimators': 95,
+                                'oob_score': True,
+                            },
                         },
                     },
-                    100: {
-                        "average": {
-                            "random_state": 1,
-                            "max_depth": 5,
-                            "max_features": 'auto',
-                            'criterion': 'entropy',
-                            'n_estimators': 84,
-                            'oob_score': True,
-                        },
-                        "majority": {
-                            "random_state": 1,
-                            "max_depth": 5,
-                            "max_features": 'auto',
-                            'criterion': 'entropy',
-                            'n_estimators': 95,
-                            'oob_score': True,
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                "max_depth": 6,
+                                "max_features": 'auto',
+                                'criterion': 'entropy',
+                                'n_estimators': 5,
+                                'oob_score': True,
+                            },
                         },
                     },
                 },
-                'holdout': {
-                    100: {
-                        'majority': {
-                            "random_state": 1,
-                            "max_depth": 6,
-                            "max_features": 'auto',
-                            'criterion': 'entropy',
-                            'n_estimators': 5,
-                            'oob_score': True,
+                6: {
+                    'kfold': {
+                        100: {
+                            "average": {
+                                "max_depth": 2,
+                                "max_features": 'auto',
+                                'criterion': 'gini',
+                                'n_estimators': 20,
+                                'oob_score': True,
+                            },
+                        },
+                    },
+                    # XXX these are params from 24 hr model. should be changed
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                "random_state": 1,
+                                "max_depth": 6,
+                                "max_features": 'auto',
+                                'criterion': 'entropy',
+                                'n_estimators': 5,
+                                'oob_score': True,
+                            },
+                        },
+                    },
+                },
+                12: {
+                    'kfold': {
+                        100: {
+                            "average": {
+                                "max_depth": 1,
+                                "max_features": 'auto',
+                                'criterion': 'gini',
+                                'n_estimators': 14,
+                                'oob_score': True,
+                            },
+                        },
+                    },
+                    # XXX these are params from 24 hr model. should be changed
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                "random_state": 1,
+                                "max_depth": 6,
+                                "max_features": 'auto',
+                                'criterion': 'entropy',
+                                'n_estimators': 5,
+                                'oob_score': True,
+                            },
                         },
                     },
                 },
             },
             'ADA': {
-                'kfold': {
-                    20: {
-                        "average": {
-                            'random_state': 1,
-                            'n_estimators': 80,
-                            'learning_rate': 0.23125,
-                            'algorithm': 'SAMME.R',
+                24: {
+                    'kfold': {
+                        20: {
+                            "average": {
+                                'n_estimators': 80,
+                                'learning_rate': 0.23125,
+                                'algorithm': 'SAMME.R',
+                            },
+                            "majority": {
+                                'n_estimators': 120,
+                                'learning_rate': 0.03125,
+                                'algorithm': 'SAMME.R',
+                            },
                         },
-                        "majority": {
-                            'random_state': 1,
-                            'n_estimators': 120,
-                            'learning_rate': 0.03125,
-                            'algorithm': 'SAMME.R',
-                        },
-                    },
-                    100: {
-                        "average": {
-                            'random_state': 1,
-                            'n_estimators': 164,
-                            'learning_rate': 0.3625,
-                            'algorithm': 'SAMME.R',
-                        },
-                        "majority": {
-                            'random_state': 1,
-                            # no majority found so take average of all estimators
-                            'n_estimators': 164,
-                            'learning_rate': 0.03125,
-                            'algorithm': 'SAMME.R',
+                        100: {
+                            "average": {
+                                'n_estimators': 164,
+                                'learning_rate': 0.3625,
+                                'algorithm': 'SAMME.R',
+                            },
+                            "majority": {
+                                # no majority found so take average of all estimators
+                                'n_estimators': 164,
+                                'learning_rate': 0.03125,
+                                'algorithm': 'SAMME.R',
+                            },
                         },
                     },
-                },
-                'holdout': {
-                    100: {
-                        'majority': {
-                            'random_state': 1,
-                            # no majority found so take average of all estimators
-                            'n_estimators': 15,
-                            'learning_rate': 0.25,
-                            'algorithm': 'SAMME',
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                # no majority found so take average of all estimators
+                                'n_estimators': 15,
+                                'learning_rate': 0.25,
+                                'algorithm': 'SAMME',
+                            },
                         },
                     },
                 },
             },
             'LOG_REG': {
-                'kfold': {
-                    20: {
-                        'average': {
-                            'random_state': 1,
-                            'penalty': 'l1',
-                            'C': 0.0875,
-                            'max_iter': 100,
-                            'tol': 0.000420004,
-                            'solver': 'liblinear',
+                24: {
+                    'kfold': {
+                        20: {
+                            'average': {
+                                'penalty': 'l1',
+                                'C': 0.0875,
+                                'max_iter': 100,
+                                'tol': 0.000420004,
+                                'solver': 'liblinear',
+                            },
+                            'majority': {
+                                'penalty': 'l1',
+                                'C': 0.0625,
+                                'max_iter': 100,
+                                'tol': 1e-8,
+                                'solver': 'liblinear',
+                            },
                         },
-                        'majority': {
-                            'random_state': 1,
-                            'penalty': 'l1',
-                            'C': 0.0625,
-                            'max_iter': 100,
-                            'tol': 1e-8,
-                            'solver': 'liblinear',
-                        },
-                    },
-                    100: {
-                        'average': {
-                            'random_state': 1,
-                            'penalty': 'l1',
-                            'C': 0.05625,
-                            'max_iter': 100,
-                            'tol': 0.000202006,
-                            'solver': 'liblinear',
-                        },
-                        'majority': {
-                            'random_state': 1,
-                            'penalty': 'l1',
-                            'C': 0.03125,
-                            'max_iter': 100,
-                            'tol': 1e-08,
-                            'solver': 'liblinear',
+                        100: {
+                            'average': {
+                                'penalty': 'l1',
+                                'C': 0.05625,
+                                'max_iter': 100,
+                                'tol': 0.000202006,
+                                'solver': 'liblinear',
+                            },
+                            'majority': {
+                                'penalty': 'l1',
+                                'C': 0.03125,
+                                'max_iter': 100,
+                                'tol': 1e-08,
+                                'solver': 'liblinear',
+                            },
                         },
                     },
-                },
-                'holdout': {
-                    100: {
-                        'majority': {
-                            'random_state': 1,
-                            'penalty': 'l2',
-                            'C': 0.5,
-                            'max_iter': 100,
-                            'tol': .001,
-                            'solver': 'sag',
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                'penalty': 'l2',
+                                'C': 0.5,
+                                'max_iter': 100,
+                                'tol': .001,
+                                'solver': 'sag',
+                            },
                         },
                     },
                 },
             },
             'SVM': {
-                'kfold': {
-                    20: {
-                        'average': {
-                            'C': 7,
-                            'kernel': 'sigmoid',
-                            'cache_size': 512,
-                            'random_state': 1,
+                24: {
+                    'kfold': {
+                        20: {
+                            'average': {
+                                'C': 7,
+                                'kernel': 'sigmoid',
+                                'cache_size': 512,
+                            },
+                            'majority': {
+                                'C': 8,
+                                'kernel': 'sigmoid',
+                                'cache_size': 512,
+                            },
                         },
-                        'majority': {
-                            'C': 8,
-                            'kernel': 'sigmoid',
-                            'cache_size': 512,
-                            'random_state': 1,
-                        },
-                    },
-                    100: {
-                        'average': {
-                            'C': 9,
-                            'kernel': 'poly',
-                            'cache_size': 512,
-                            'random_state': 1,
-                            'degree': 2,
-                        },
-                        'majority': {
-                            'C': 16,
-                            'kernel': 'poly',
-                            'cache_size': 512,
-                            'random_state': 1,
-                            'degree': 2,
+                        100: {
+                            'average': {
+                                'C': 9,
+                                'kernel': 'poly',
+                                'cache_size': 512,
+                                'degree': 2,
+                            },
+                            'majority': {
+                                'C': 16,
+                                'kernel': 'poly',
+                                'cache_size': 512,
+                                'degree': 2,
+                            },
                         },
                     },
-                },
-                'holdout': {
-                    100: {
-                        'majority': {
-                            'C': 0.03125,
-                            'kernel': 'rbf',
-                            'cache_size': 512,
-                            'random_state': 1,
-                            'gamma': 'scale',
-                            'tol': 1e-5,
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                'C': 0.03125,
+                                'kernel': 'rbf',
+                                'cache_size': 512,
+                                'gamma': 'scale',
+                                'tol': 1e-5,
+                            },
                         },
                     },
                 },
             },
             'MLP': {
-                'kfold': {
-                    20: {
-                        'average': {
-                            "hidden_layer_sizes": (38, 16),
-                            "solver": 'adam',
-                            'activation': 'identity',
-                            'learning_rate_init': .07525,
+                24: {
+                    'kfold': {
+                        20: {
+                            'average': {
+                                "hidden_layer_sizes": (38, 16),
+                                "solver": 'adam',
+                                'activation': 'identity',
+                                'learning_rate_init': .07525,
+                            },
+                            'majority': {
+                                'hidden_layer_sizes': (32, 16),
+                                "solver": 'adam',
+                                'activation': 'identity',
+                                'learning_rate_init': .1,
+                            },
                         },
-                        'majority': {
-                            'hidden_layer_sizes': (32, 16),
-                            "solver": 'adam',
-                            'activation': 'identity',
-                            'learning_rate_init': .1,
+                        100: {
+                            'average': {
+                                "hidden_layer_sizes": (70, 27),
+                                "solver": 'sgd',
+                                'activation': 'identity',
+                                'learning_rate_init': .0244,
+                            },
+                            'majority': {
+                                'hidden_layer_sizes': (32, 32),
+                                "solver": 'sgd',
+                                # its even between relu and iden. choodse relu because of runs from frame size 20
+                                'activation': 'identity',
+                                'learning_rate_init': .005,  # its even between 0.01 and .001
+                            },
                         },
                     },
-                    100: {
-                        'average': {
-                            "hidden_layer_sizes": (70, 27),
-                            "solver": 'sgd',
-                            'activation': 'identity',
-                            'learning_rate_init': .0244,
-                        },
-                        'majority': {
-                            'hidden_layer_sizes': (32, 32),
-                            "solver": 'sgd',
-                            # its even between relu and iden. choodse relu because of runs from frame size 20
-                            'activation': 'identity',
-                            'learning_rate_init': .005,  # its even between 0.01 and .001
-                        },
-                    },
-                },
-                'holdout': {
-                    100: {
-                        'majority': {
-                            "hidden_layer_sizes": (32, 64),
-                            "solver": 'sgd',
-                            'activation': 'relu',
-                            'learning_rate_init': .0005,
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                "hidden_layer_sizes": (32, 64),
+                                "solver": 'sgd',
+                                'activation': 'relu',
+                                'learning_rate_init': .0005,
+                            },
                         },
                     },
                 },
             },
             'GBC': {
-                'kfold': {
-                    20: {
-                        'average': {
-                            'random_state': 1,
-                            'n_estimators': 180,
-                            'criterion': 'mae',
-                            'loss': 'exponential',
-                            'max_features': 'log2',
-                            'n_iter_no_change': 100,
+                24: {
+                    'kfold': {
+                        20: {
+                            'average': {
+                                'n_estimators': 180,
+                                'criterion': 'mae',
+                                'loss': 'exponential',
+                                'max_features': 'log2',
+                                'n_iter_no_change': 100,
+                            },
+                            'majority': {
+                                'n_estimators': 50,
+                                'criterion': 'mae',
+                                'loss': 'exponential',
+                                'max_features': 'log2',
+                                'n_iter_no_change': 100,
+                            },
                         },
-                        'majority': {
-                            'random_state': 1,
-                            'n_estimators': 50,
-                            'criterion': 'mae',
-                            'loss': 'exponential',
-                            'max_features': 'log2',
-                            'n_iter_no_change': 100,
-                        },
-                    },
-                    100: {
-                        # technically we haven't done the runs for this and we aren't
-                        # going to do the runs for this, so just copy params from 20
-                        # to make sure the code doesn't break
-                        'average': {
-                            'random_state': 1,
-                            'n_estimators': 180,
-                            'criterion': 'mae',
-                            'loss': 'exponential',
-                            'max_features': 'log2',
-                            'n_iter_no_change': 100,
-                        },
-                        'majority': {
-                            'random_state': 1,
-                            'n_estimators': 50,
-                            'criterion': 'mae',
-                            'loss': 'exponential',
-                            'max_features': 'log2',
-                            'n_iter_no_change': 100,
+                        100: {
+                            # technically we haven't done the runs for this and we aren't
+                            # going to do the runs for this, so just copy params from 20
+                            # to make sure the code doesn't break
+                            'average': {
+                                'n_estimators': 180,
+                                'criterion': 'mae',
+                                'loss': 'exponential',
+                                'max_features': 'log2',
+                                'n_iter_no_change': 100,
+                            },
+                            'majority': {
+                                'n_estimators': 50,
+                                'criterion': 'mae',
+                                'loss': 'exponential',
+                                'max_features': 'log2',
+                                'n_iter_no_change': 100,
+                            },
                         },
                     },
                 },
             },
             'NB': {
-                'kfold': {
-                    20: {
-                        'average': {
-                            'var_smoothing': .244,
+                24: {
+                    'kfold': {
+                        20: {
+                            'average': {
+                                'var_smoothing': .244,
+                            },
+                            'majority': {
+                                'var_smoothing': 0.01,
+                            },
                         },
-                        'majority': {
-                            'var_smoothing': 0.01,
+                        100: {
+                            'average': {
+                                'var_smoothing': .244,
+                            },
+                            'majority': {
+                                'var_smoothing': 0.1,
+                            },
                         },
                     },
-                    100: {
-                        'average': {
-                            'var_smoothing': .244,
-                        },
-                        'majority': {
-                            'var_smoothing': 0.1,
-                        },
-                    },
-                },
-                'holdout': {
-                    100: {
-                        'majority': {
-                            'var_smoothing': 0.1,
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                'var_smoothing': 0.1,
+                            },
                         },
                     },
                 },
             },
             'ATS_MODEL': {
-                'holdout': {
-                    100: {
-                        'majority': {
-                            'oob_score': True,
-                            'random_state': 1,
+                24: {
+                    'holdout': {
+                        100: {
+                            'majority': {
+                                'oob_score': True,
+                            },
                         },
                     },
-                },
-                'kfold': {
-                    20: {
-                        'average': {
-                            'oob_score': True,
-                            'random_state': 1,
+                    'kfold': {
+                        20: {
+                            'average': {
+                                'oob_score': True,
+                            },
                         },
-                    },
-                    100: {
-                        'average': {
-                            'oob_score': True,
-                            'random_state': 1,
+                        100: {
+                            'average': {
+                                'oob_score': True,
+                            },
                         },
-                    },
-                    400: {
-                        'average': {
-                            'oob_score': True,
-                            'random_state': 1,
+                        400: {
+                            'average': {
+                                'oob_score': True,
+                            },
                         },
                     },
                 },
             },
         }
         try:
-            return params[algo][split_type][frame_size][hyperparameter_type]
+            return params[algo][status_post][split_type][frame_size][hyperparameter_type]
         except KeyError:
-            raise ValueError('We were unable to find hyperparams for choice algo: {}, split: {}, fs: {}, hyperparam type: {}. Check args or add new hyperparams'.format(algo, split_type, frame_size, hyperparameter_type))
+            raise ValueError('We were unable to find hyperparams for choice algo: {}, status post: {}, split: {}, fs: {}, hyperparam type: {}. Check args or add new hyperparams'.format(algo, status_post, split_type, frame_size, hyperparameter_type))
 
     def train_and_test(self):
         """
@@ -691,21 +731,24 @@ class ARDSDetectionModel(object):
         for model_idx, (x_train, x_test, y_train, y_test) in enumerate(self.perform_data_splits()):
             if not self.args.no_print_results and self.args.split_type == 'kfold':
                 print("----Run fold {}----".format(model_idx+1))
-            if self.args.grid_search:
-                self.perform_grid_search(x_train, y_train)
-            elif self.args.feature_selection_method:
-                # sometimes x_test is modified by this func
-                x_train, x_test = self.perform_feature_selection(x_train, y_train, x_test)
-            elif not self.args.load_model:
-                self.train(x_train, y_train)
 
-            if self.args.save_model_to and self.args.split_type == 'kfold':
-                raise Exception('Saving a model/scaler while in kfold is not supported!')
-            elif self.args.save_model_to:
-                pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
+            for iter_n in range(self.args.n_runs):
+                if self.args.grid_search:
+                    self.perform_grid_search(x_train, y_train)
+                elif self.args.feature_selection_method:
+                    # sometimes x_test is modified by this func
+                    x_train, x_test = self.perform_feature_selection(x_train, y_train, x_test)
+                elif not self.args.load_model:
+                    self.train(x_train, y_train)
 
-            predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
-            results = self.compute_model_results(y_test, predictions, model_idx)
+                if self.args.save_model_to and self.args.split_type == 'kfold':
+                    raise Exception('Saving a model/scaler while in kfold is not supported!')
+                elif self.args.save_model_to:
+                    pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
+
+                predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
+                results = self.compute_model_results(y_test, predictions, model_idx, iter_n, False)
+
             if not self.args.no_print_results:
                 self.print_model_stats(y_test, predictions, model_idx)
                 print("-------------------")
@@ -719,7 +762,7 @@ class ARDSDetectionModel(object):
 
         if not self.args.no_print_results:
             self.print_aggregate_results()
-            self.get_youdens_results(self.results, self.thresh_eval[self.thresh_eval.model_idx==-1])
+            self.get_youdens_results(self.results, self.thresh_eval[self.thresh_eval.model_idx==-1], True)
         if self.args.plot_predictions or self.args.plot_disease_evolution:
             self.plot_predictions()
         if self.args.plot_pairwise_features:
@@ -762,14 +805,12 @@ class ARDSDetectionModel(object):
                 #plt.plot(self.pred_threshes, y_spec, lw=1, alpha=.2)
 
         mean_sens_ards = np.mean(sens_ards, axis=0)
-        mean_sens_other = np.mean(sens_other, axis=0)
         mean_specs_ards = np.mean(specs_ards, axis=0)
-        mean_specs_other = np.mean(specs_other, axis=0)
         plt.plot(mean_thresh, mean_sens_ards, color='b', label=r'Mean ARDS Sensitivity', lw=2)
         plt.plot(mean_thresh, mean_specs_ards, color='seagreen', label=r'Mean ARDS Specificity', lw=2)
-        plt.plot(mean_thresh, mean_sens_other, color='lightcoral', label=r'Mean non-ARDS Sensitivity', lw=2)
-        plt.plot(mean_thresh, mean_specs_other, color='lightgreen', label=r'Mean non-ARDS Specificity', lw=2)
-        plt.yticks(np.arange(0.0, 1.01, .1))
+        min_point = min(mean_sens_ards) if min(mean_sens_ards) < min(mean_specs_ards) else min(mean_specs_ards)
+        remainder = round(min_point % .1, 2)
+        plt.yticks(np.arange(min_point - remainder - .1, 1.01, .1))
         plt.legend()
         plt.xlabel('Percentage ARDS votes')
         plt.ylabel('score')
@@ -869,7 +910,7 @@ class ARDSDetectionModel(object):
         plt.legend(loc="lower right")
         plt.show()
 
-    def get_youdens_results(self, results, thresh_eval):
+    def get_youdens_results(self, results, thresh_eval, at_end_of_n):
         all_tpr, all_fpr, threshs = janky_roc(results.patho.values, results.pred_frac.values)
         j_scores = np.array(all_tpr) - np.array(all_fpr)
         tmp = zip(j_scores, threshs)
@@ -889,8 +930,10 @@ class ARDSDetectionModel(object):
             mean_opt_f1 = rows['f1@{}'.format(optimal_pred_frac)].mean()
             mean_opt_prec = round((mean_opt_f1 * mean_opt_sen) / (2*mean_opt_sen - mean_opt_f1), 4)
             optimal_table.add_row([patho, optimal_pred_frac, round(mean_opt_sen, 4), mean_opt_spec, mean_opt_prec, round(mean_opt_f1, 4)])
-        print('Results via Youdens threshold')
-        print(optimal_table)
+
+        if not self.args.no_print_results and at_end_of_n:
+            print('Results via Youdens threshold')
+            print(optimal_table)
 
     def aggregate_grid_search_results(self):
         print("---- Grid Search Final Results ----")
@@ -943,7 +986,7 @@ class ARDSDetectionModel(object):
             "max_depth": range(1, 30, 1) + [None],
             #"criterion": ["entropy"],
         }
-        self._perform_grid_search(RandomForestClassifier(random_state=1), params, x_train, y_train)
+        self._perform_grid_search(RandomForestClassifier(), params, x_train, y_train)
 
     def _perform_mlp_grid_search(self, x_train, y_train):
         hiddens = [
@@ -967,7 +1010,7 @@ class ARDSDetectionModel(object):
             #'alpha': [0.00001, .0001, .001, .01, .1],
             #'batch_size': [8, 16, 32, 64, 128, 256],
         }]
-        self._perform_grid_search(MLPClassifier(random_state=1), params, x_train, y_train)
+        self._perform_grid_search(MLPClassifier(), params, x_train, y_train)
 
     def _perform_svm_grid_search(self, x_train, y_train):
         C = [2**i for i in range(-10, 1)] + [i for i in range(2, 17)]
@@ -988,7 +1031,7 @@ class ARDSDetectionModel(object):
             'degree': range(1, 10),
             'tol': tol,
         }]
-        self._perform_grid_search(SVC(random_state=1, cache_size=512), params, x_train, y_train)
+        self._perform_grid_search(SVC(cache_size=512), params, x_train, y_train)
 
     def _perform_adaboost_grid_search(self, x_train, y_train):
         params = {
@@ -996,7 +1039,7 @@ class ARDSDetectionModel(object):
             'n_estimators': [5*i for i in range(1, 60)],
             'algorithm': ['SAMME', 'SAMME.R'],
         }
-        self._perform_grid_search(AdaBoostClassifier(random_state=1), params, x_train, y_train)
+        self._perform_grid_search(AdaBoostClassifier(), params, x_train, y_train)
 
     def _perform_gbc_grid_search(self, x_train, y_train):
         # Another case where we cannot go too crazy on tuning everything
@@ -1009,7 +1052,7 @@ class ARDSDetectionModel(object):
             'max_features': [None, 'log2', 'auto'],
         }
         # implement early stopping because grid search is taking too long
-        self._perform_grid_search(GradientBoostingClassifier(random_state=1, n_iter_no_change=100), params, x_train, y_train)
+        self._perform_grid_search(GradientBoostingClassifier(n_iter_no_change=100), params, x_train, y_train)
 
     def _perform_nb_grid_search(self, x_train, y_train):
         params = {
@@ -1030,7 +1073,7 @@ class ARDSDetectionModel(object):
             'tol': [10**i for i in range(-10, -2)],
             'solver': ['liblinear', 'saga'],
         }]
-        self._perform_grid_search(LogisticRegression(random_state=1), params, x_train, y_train)
+        self._perform_grid_search(LogisticRegression(), params, x_train, y_train)
 
     def _perform_grid_search(self, cls, params, x_train, y_train):
         x_train_expanded = self.data.loc[x_train.index]
@@ -1055,8 +1098,6 @@ class ARDSDetectionModel(object):
             self.selected_features = list(x_train.columns[selector.support_])
             if not self.args.no_print_results:
                 print('Selected features: {}'.format(self.selected_features))
-            # XXX you can simplify this block by putting it in line with the other blocks
-            # where the selector transforms the train frame
             self.models.append(selector)
         elif self.args.feature_selection_method == 'chi2':
             selector = SelectKBest(chi2, k=self.args.n_new_features)
@@ -1079,8 +1120,7 @@ class ARDSDetectionModel(object):
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'gini':
-            # XXX For now I don't want this to work non-deterministically
-            rf = RandomForestClassifier(n_estimators=25, random_state=False)
+            rf = RandomForestClassifier(n_estimators=25)
             selector = SelectFromModel(rf, threshold=self.args.select_from_model_thresh)
             selector.fit(x_train, y_train)
             self.selected_features = list(x_test.columns[selector.get_support()])
@@ -1093,7 +1133,7 @@ class ARDSDetectionModel(object):
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'lasso':
-            lasso = LassoCV(cv=5, random_state=False)
+            lasso = LassoCV(cv=5)
             selector = SelectFromModel(lasso, threshold=self.args.select_from_model_thresh)
             selector.fit(x_train, y_train)
             self.selected_features = list(x_test.columns[selector.get_support()])
@@ -1115,7 +1155,7 @@ class ARDSDetectionModel(object):
 
         return x_train, x_test
 
-    def compute_model_results(self, y_test, predictions, model_idx):
+    def compute_model_results(self, y_test, predictions, model_idx, run_num, at_end_of_n):
         """
         After a group of patients is run through the model, record all necessary stats
         such as true positives, false positives, etc.
@@ -1142,11 +1182,8 @@ class ARDSDetectionModel(object):
                 ])
 
             patho_pred = np.argmax([pt_results[6 + 5*k] for k in range(len(self.pathos))])
-            # XXX This is all just ARDS now
             frac_votes = float(pt_results[6+5*1]) / sum([pt_results[6+5*j] for j in self.pathos.keys()])
-            # XXX adding AUC to this is a bit awkward, but currently with the way
-            # the code the structured this is the quickest way of doing things
-            pt_results.extend([model_idx, patho_pred, frac_votes, np.nan])
+            pt_results.extend([model_idx, patho_pred, frac_votes, np.nan, run_num])
             prediction_threshes = []
             for thresh in np.array(self.pred_threshes).astype(float) / 100:
                 patho_pred_count = np.array([pt_results[6 + 5*k] for k in range(len(self.pathos))]).astype(float)
@@ -1164,8 +1201,8 @@ class ARDSDetectionModel(object):
         elif len(self.pathos) == 2:
             auc = round(roc_auc_score(model_pt_true, model_pt_pred), 4)
 
-        self.get_aggregate_results_and_thresh_eval(self.results[self.results.model_idx == model_idx], model_idx)
-        self.get_youdens_results(self.results[self.results.model_idx == model_idx], self.thresh_eval[self.thresh_eval.model_idx==model_idx])
+        self.get_aggregate_results_and_thresh_eval(self.results[(self.results.model_idx == model_idx) & (self.results.run_num == run_num)], model_idx)
+        self.get_youdens_results(self.results[self.results.model_idx == model_idx], self.thresh_eval[self.thresh_eval.model_idx==model_idx], at_end_of_n)
         self.results.loc[self.results.model_idx==model_idx, 'model_auc'] = auc
         if self.args.plot_roc and self.args.split_type == 'kfold':
             self.plot_roc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
@@ -1243,7 +1280,7 @@ class ARDSDetectionModel(object):
         if self.args.plot_disease_evolution:
             # Plot fraction of votes for a single patient over 24 hrs.
             if not self.args.tiled_disease_evol:
-                for pt, (pt_rows, pt_preds) in self.patient_predictions.items():
+                for pt, (pt_rows, pt_preds) in sorted(self.patient_predictions.items()):
                     self.plot_disease_evolution(pt, pt_rows, pt_preds, cmap)
                     plt.show()
             else:
@@ -1287,7 +1324,7 @@ class ARDSDetectionModel(object):
             plots.append(plt.bar(range(0, 24), bar_fracs, bottom=bottom, color=cmap[n]))
             bottom = bottom + bar_fracs
 
-        plt.title(pt[:4], fontsize=fontsize, pad=1)
+        plt.title("Patient {}".format(pt[:4]), fontsize=fontsize, pad=1)
         if xylabel:
             plt.ylabel('Fraction Predicted', fontsize=fontsize)
             plt.xlabel('Hour', fontsize=fontsize)
@@ -1356,13 +1393,14 @@ class ARDSDetectionModel(object):
         sens = [round(recall_score(results.patho, results.prediction, pos_label=patho_n), 4)]
         for i in self.pred_threshes:
             sens.append(round(recall_score(results.patho, results['prediction@{}'.format(i)], pos_label=patho_n), 4))
+
         try:
             specificity = round(tns / (tns+fps), 4)
         except ZeroDivisionError:
             specificity = 0
         specs = [specificity]
         for i in self.pred_threshes:
-            tns_thresh = float(len(results[(results.patho == patho_n) & (results['prediction@{}'.format(i)] == patho_n)]))
+            tns_thresh = float(len(results[(results.patho != patho_n) & (results['prediction@{}'.format(i)] != patho_n)]))
             fps_thresh = float(len(results[(results.patho != patho_n) & (results['prediction@{}'.format(i)] == patho_n)]))
             try:
                 specs.append(round(tns_thresh / (tns_thresh+fps_thresh), 4))
@@ -1410,6 +1448,29 @@ class ARDSDetectionModel(object):
             self.thresh_eval = thresh_eval
         else:
             self.thresh_eval = self.thresh_eval.append(thresh_eval)
+
+        if self.args.print_thresh_table:
+            table = PrettyTable()
+            table.field_names = ['patho', 'vote %', 'sen', 'spec', 'prec']
+            for thresh in range(self.args.thresh_interval, 101, self.args.thresh_interval):
+                ards_results = self.thresh_eval[(self.thresh_eval.patho == 'ARDS') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
+                other_results = self.thresh_eval[(self.thresh_eval.patho == 'OTHER') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
+                sen = 'sen@{}'.format(thresh)
+                spec = 'spec@{}'.format(thresh)
+                f1 = 'f1@{}'.format(thresh)
+                sen_ards = ards_results[sen]
+                spec_ards = ards_results[spec]
+                f1_ards = ards_results[f1]
+                prec_ards = round((f1_ards * sen_ards) / (2*sen_ards - f1_ards), 4)
+                sen_other = other_results[sen]
+                spec_other = other_results[spec]
+                f1_other = other_results[f1]
+                prec_other = round((f1_other * sen_other) / (2*sen_other - f1_other), 4)
+                row = ['ARDS', thresh, sen_ards, spec_ards, prec_ards]
+                table.add_row(row)
+                row = ['OTHER', thresh, sen_other, spec_other, prec_other]
+                table.add_row(row)
+            print(table)
 
     def print_aggregate_results(self):
         print "Aggregate Stats"
@@ -1519,10 +1580,10 @@ def build_parser():
     parser.add_argument('--load-model')
     parser.add_argument('--load-scaler')
     parser.add_argument("--folds", type=int, default=5)
-    parser.add_argument('-fs', "--frame-size", default=20, type=int)
+    parser.add_argument('-fs', "--frame-size", type=int, default=100)
     parser.add_argument('-ff', '--frame-func', choices=['median', 'mean', 'var', 'std', 'mean+var', 'mean+std', 'median+var', 'median+std'], default='median')
     parser.add_argument('-sd', '--start-hour-delta', default=0, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data')
-    parser.add_argument('-sp', '--post-hour', default=24, type=int)
+    parser.add_argument('-sp', '--post-hour', type=int, default=24)
     parser.add_argument('-tfs', "--test-frame-size", default=None, type=int)
     parser.add_argument('-tsd', '--test-start-hour-delta', default=None, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data. Only for usage in testing set')
     parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)
@@ -1553,6 +1614,9 @@ def build_parser():
     parser.add_argument('--plot-sen-spec-vs-thresh-all-folds', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
     parser.add_argument('--thresh-interval', type=int, default=25)
     parser.add_argument('--no-plot-individual-folds', action='store_true')
+    parser.add_argument('--print-thresh-table', action='store_true')
+    parser.add_argument('--n-runs', type=int, help='number of times to run the model', default=10)
+    parser.add_argument('--print-feature-selection', action='store_true')
     return parser
 
 
