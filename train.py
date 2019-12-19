@@ -78,7 +78,7 @@ class ARDSDetectionModel(object):
                 "{}_votes".format(patho),
             ])
         self.pred_threshes = np.arange(self.args.thresh_interval, 100 + self.args.thresh_interval, self.args.thresh_interval)
-        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc']
+        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc', 'run_num']
         results_cols += ['prediction@{}'.format(i) for i in self.pred_threshes]
         # self.results is meant to be a high level dataframe of aggregated statistics
         # from our model.
@@ -301,14 +301,14 @@ class ARDSDetectionModel(object):
     def train(self, x_train, y_train):
         clf = self._get_hyperparameterized_model()
         clf.fit(x_train, y_train)
-        if self.args.algo in ['RF'] and not self.args.no_print_results:
-            print('--- Feature OOB scores ---')
+        if self.args.algo in ['RF']:
+            header = '--- Feature OOB scores ---'
             oob_scores = clf.feature_importances_
             scores = sorted(oob_scores, key=lambda x: -x)
             self.feature_score_rounding = lambda x: round(x, 4)
             self.rank_order = -1
-        elif not self.args.no_print_results:
-            print('--- Feature chi2 p-values ---')
+        else:
+            header = '--- Feature chi2 p-values ---'
             scores, pvals = chi2(x_train, y_train)
             scores = sorted(pvals)
             self.feature_score_rounding = lambda x: round(x, 10)
@@ -324,7 +324,8 @@ class ARDSDetectionModel(object):
 
             table.add_row([rank, feature, self.feature_score_rounding(score)])
 
-        if not self.args.no_print_results:
+        if self.args.print_feature_selection:
+            print(header)
             print(table)
         self.models.append(clf)
 
@@ -345,7 +346,6 @@ class ARDSDetectionModel(object):
                     'kfold': {
                         20: {
                             "average": {
-                                "random_state": 1,
                                 "max_depth": 5,
                                 "max_features": 'auto',
                                 'criterion': 'gini',
@@ -353,7 +353,6 @@ class ARDSDetectionModel(object):
                                 'oob_score': True,
                             },
                             "majority": {
-                                "random_state": 1,
                                 "max_depth": 5,
                                 "max_features": 'auto',
                                 'criterion': 'gini',
@@ -363,7 +362,6 @@ class ARDSDetectionModel(object):
                         },
                         100: {
                             "average": {
-                                "random_state": 1,
                                 "max_depth": 5,
                                 "max_features": 'auto',
                                 'criterion': 'entropy',
@@ -371,7 +369,6 @@ class ARDSDetectionModel(object):
                                 'oob_score': True,
                             },
                             "majority": {
-                                "random_state": 1,
                                 "max_depth": 5,
                                 "max_features": 'auto',
                                 'criterion': 'entropy',
@@ -383,7 +380,6 @@ class ARDSDetectionModel(object):
                     'holdout': {
                         100: {
                             'majority': {
-                                "random_state": 1,
                                 "max_depth": 6,
                                 "max_features": 'auto',
                                 'criterion': 'entropy',
@@ -397,7 +393,6 @@ class ARDSDetectionModel(object):
                     'kfold': {
                         100: {
                             "average": {
-                                "random_state": 1,
                                 "max_depth": 2,
                                 "max_features": 'auto',
                                 'criterion': 'gini',
@@ -424,7 +419,6 @@ class ARDSDetectionModel(object):
                     'kfold': {
                         100: {
                             "average": {
-                                "random_state": 1,
                                 "max_depth": 1,
                                 "max_features": 'auto',
                                 'criterion': 'gini',
@@ -453,13 +447,11 @@ class ARDSDetectionModel(object):
                     'kfold': {
                         20: {
                             "average": {
-                                'random_state': 1,
                                 'n_estimators': 80,
                                 'learning_rate': 0.23125,
                                 'algorithm': 'SAMME.R',
                             },
                             "majority": {
-                                'random_state': 1,
                                 'n_estimators': 120,
                                 'learning_rate': 0.03125,
                                 'algorithm': 'SAMME.R',
@@ -467,13 +459,11 @@ class ARDSDetectionModel(object):
                         },
                         100: {
                             "average": {
-                                'random_state': 1,
                                 'n_estimators': 164,
                                 'learning_rate': 0.3625,
                                 'algorithm': 'SAMME.R',
                             },
                             "majority": {
-                                'random_state': 1,
                                 # no majority found so take average of all estimators
                                 'n_estimators': 164,
                                 'learning_rate': 0.03125,
@@ -484,7 +474,6 @@ class ARDSDetectionModel(object):
                     'holdout': {
                         100: {
                             'majority': {
-                                'random_state': 1,
                                 # no majority found so take average of all estimators
                                 'n_estimators': 15,
                                 'learning_rate': 0.25,
@@ -499,7 +488,6 @@ class ARDSDetectionModel(object):
                     'kfold': {
                         20: {
                             'average': {
-                                'random_state': 1,
                                 'penalty': 'l1',
                                 'C': 0.0875,
                                 'max_iter': 100,
@@ -507,7 +495,6 @@ class ARDSDetectionModel(object):
                                 'solver': 'liblinear',
                             },
                             'majority': {
-                                'random_state': 1,
                                 'penalty': 'l1',
                                 'C': 0.0625,
                                 'max_iter': 100,
@@ -517,7 +504,6 @@ class ARDSDetectionModel(object):
                         },
                         100: {
                             'average': {
-                                'random_state': 1,
                                 'penalty': 'l1',
                                 'C': 0.05625,
                                 'max_iter': 100,
@@ -525,7 +511,6 @@ class ARDSDetectionModel(object):
                                 'solver': 'liblinear',
                             },
                             'majority': {
-                                'random_state': 1,
                                 'penalty': 'l1',
                                 'C': 0.03125,
                                 'max_iter': 100,
@@ -537,7 +522,6 @@ class ARDSDetectionModel(object):
                     'holdout': {
                         100: {
                             'majority': {
-                                'random_state': 1,
                                 'penalty': 'l2',
                                 'C': 0.5,
                                 'max_iter': 100,
@@ -556,13 +540,11 @@ class ARDSDetectionModel(object):
                                 'C': 7,
                                 'kernel': 'sigmoid',
                                 'cache_size': 512,
-                                'random_state': 1,
                             },
                             'majority': {
                                 'C': 8,
                                 'kernel': 'sigmoid',
                                 'cache_size': 512,
-                                'random_state': 1,
                             },
                         },
                         100: {
@@ -570,14 +552,12 @@ class ARDSDetectionModel(object):
                                 'C': 9,
                                 'kernel': 'poly',
                                 'cache_size': 512,
-                                'random_state': 1,
                                 'degree': 2,
                             },
                             'majority': {
                                 'C': 16,
                                 'kernel': 'poly',
                                 'cache_size': 512,
-                                'random_state': 1,
                                 'degree': 2,
                             },
                         },
@@ -588,7 +568,6 @@ class ARDSDetectionModel(object):
                                 'C': 0.03125,
                                 'kernel': 'rbf',
                                 'cache_size': 512,
-                                'random_state': 1,
                                 'gamma': 'scale',
                                 'tol': 1e-5,
                             },
@@ -646,7 +625,6 @@ class ARDSDetectionModel(object):
                     'kfold': {
                         20: {
                             'average': {
-                                'random_state': 1,
                                 'n_estimators': 180,
                                 'criterion': 'mae',
                                 'loss': 'exponential',
@@ -654,7 +632,6 @@ class ARDSDetectionModel(object):
                                 'n_iter_no_change': 100,
                             },
                             'majority': {
-                                'random_state': 1,
                                 'n_estimators': 50,
                                 'criterion': 'mae',
                                 'loss': 'exponential',
@@ -667,7 +644,6 @@ class ARDSDetectionModel(object):
                             # going to do the runs for this, so just copy params from 20
                             # to make sure the code doesn't break
                             'average': {
-                                'random_state': 1,
                                 'n_estimators': 180,
                                 'criterion': 'mae',
                                 'loss': 'exponential',
@@ -675,7 +651,6 @@ class ARDSDetectionModel(object):
                                 'n_iter_no_change': 100,
                             },
                             'majority': {
-                                'random_state': 1,
                                 'n_estimators': 50,
                                 'criterion': 'mae',
                                 'loss': 'exponential',
@@ -721,7 +696,6 @@ class ARDSDetectionModel(object):
                         100: {
                             'majority': {
                                 'oob_score': True,
-                                'random_state': 1,
                             },
                         },
                     },
@@ -729,19 +703,16 @@ class ARDSDetectionModel(object):
                         20: {
                             'average': {
                                 'oob_score': True,
-                                'random_state': 1,
                             },
                         },
                         100: {
                             'average': {
                                 'oob_score': True,
-                                'random_state': 1,
                             },
                         },
                         400: {
                             'average': {
                                 'oob_score': True,
-                                'random_state': 1,
                             },
                         },
                     },
@@ -760,21 +731,24 @@ class ARDSDetectionModel(object):
         for model_idx, (x_train, x_test, y_train, y_test) in enumerate(self.perform_data_splits()):
             if not self.args.no_print_results and self.args.split_type == 'kfold':
                 print("----Run fold {}----".format(model_idx+1))
-            if self.args.grid_search:
-                self.perform_grid_search(x_train, y_train)
-            elif self.args.feature_selection_method:
-                # sometimes x_test is modified by this func
-                x_train, x_test = self.perform_feature_selection(x_train, y_train, x_test)
-            elif not self.args.load_model:
-                self.train(x_train, y_train)
 
-            if self.args.save_model_to and self.args.split_type == 'kfold':
-                raise Exception('Saving a model/scaler while in kfold is not supported!')
-            elif self.args.save_model_to:
-                pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
+            for iter_n in range(self.args.n_runs):
+                if self.args.grid_search:
+                    self.perform_grid_search(x_train, y_train)
+                elif self.args.feature_selection_method:
+                    # sometimes x_test is modified by this func
+                    x_train, x_test = self.perform_feature_selection(x_train, y_train, x_test)
+                elif not self.args.load_model:
+                    self.train(x_train, y_train)
 
-            predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
-            results = self.compute_model_results(y_test, predictions, model_idx)
+                if self.args.save_model_to and self.args.split_type == 'kfold':
+                    raise Exception('Saving a model/scaler while in kfold is not supported!')
+                elif self.args.save_model_to:
+                    pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
+
+                predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
+                results = self.compute_model_results(y_test, predictions, model_idx, iter_n, False)
+
             if not self.args.no_print_results:
                 self.print_model_stats(y_test, predictions, model_idx)
                 print("-------------------")
@@ -788,7 +762,7 @@ class ARDSDetectionModel(object):
 
         if not self.args.no_print_results:
             self.print_aggregate_results()
-            self.get_youdens_results(self.results, self.thresh_eval[self.thresh_eval.model_idx==-1])
+            self.get_youdens_results(self.results, self.thresh_eval[self.thresh_eval.model_idx==-1], True)
         if self.args.plot_predictions or self.args.plot_disease_evolution:
             self.plot_predictions()
         if self.args.plot_pairwise_features:
@@ -831,14 +805,12 @@ class ARDSDetectionModel(object):
                 #plt.plot(self.pred_threshes, y_spec, lw=1, alpha=.2)
 
         mean_sens_ards = np.mean(sens_ards, axis=0)
-        mean_sens_other = np.mean(sens_other, axis=0)
         mean_specs_ards = np.mean(specs_ards, axis=0)
-        mean_specs_other = np.mean(specs_other, axis=0)
         plt.plot(mean_thresh, mean_sens_ards, color='b', label=r'Mean ARDS Sensitivity', lw=2)
         plt.plot(mean_thresh, mean_specs_ards, color='seagreen', label=r'Mean ARDS Specificity', lw=2)
-        plt.plot(mean_thresh, mean_sens_other, color='lightcoral', label=r'Mean non-ARDS Sensitivity', lw=2)
-        plt.plot(mean_thresh, mean_specs_other, color='lightgreen', label=r'Mean non-ARDS Specificity', lw=2)
-        plt.yticks(np.arange(0.0, 1.01, .1))
+        min_point = min(mean_sens_ards) if min(mean_sens_ards) < min(mean_specs_ards) else min(mean_specs_ards)
+        remainder = round(min_point % .1, 2)
+        plt.yticks(np.arange(min_point - remainder - .1, 1.01, .1))
         plt.legend()
         plt.xlabel('Percentage ARDS votes')
         plt.ylabel('score')
@@ -938,7 +910,7 @@ class ARDSDetectionModel(object):
         plt.legend(loc="lower right")
         plt.show()
 
-    def get_youdens_results(self, results, thresh_eval):
+    def get_youdens_results(self, results, thresh_eval, at_end_of_n):
         all_tpr, all_fpr, threshs = janky_roc(results.patho.values, results.pred_frac.values)
         j_scores = np.array(all_tpr) - np.array(all_fpr)
         tmp = zip(j_scores, threshs)
@@ -958,7 +930,8 @@ class ARDSDetectionModel(object):
             mean_opt_f1 = rows['f1@{}'.format(optimal_pred_frac)].mean()
             mean_opt_prec = round((mean_opt_f1 * mean_opt_sen) / (2*mean_opt_sen - mean_opt_f1), 4)
             optimal_table.add_row([patho, optimal_pred_frac, round(mean_opt_sen, 4), mean_opt_spec, mean_opt_prec, round(mean_opt_f1, 4)])
-        if not self.args.no_print_results:
+
+        if not self.args.no_print_results and at_end_of_n:
             print('Results via Youdens threshold')
             print(optimal_table)
 
@@ -1013,7 +986,7 @@ class ARDSDetectionModel(object):
             "max_depth": range(1, 30, 1) + [None],
             #"criterion": ["entropy"],
         }
-        self._perform_grid_search(RandomForestClassifier(random_state=1), params, x_train, y_train)
+        self._perform_grid_search(RandomForestClassifier(), params, x_train, y_train)
 
     def _perform_mlp_grid_search(self, x_train, y_train):
         hiddens = [
@@ -1037,7 +1010,7 @@ class ARDSDetectionModel(object):
             #'alpha': [0.00001, .0001, .001, .01, .1],
             #'batch_size': [8, 16, 32, 64, 128, 256],
         }]
-        self._perform_grid_search(MLPClassifier(random_state=1), params, x_train, y_train)
+        self._perform_grid_search(MLPClassifier(), params, x_train, y_train)
 
     def _perform_svm_grid_search(self, x_train, y_train):
         C = [2**i for i in range(-10, 1)] + [i for i in range(2, 17)]
@@ -1058,7 +1031,7 @@ class ARDSDetectionModel(object):
             'degree': range(1, 10),
             'tol': tol,
         }]
-        self._perform_grid_search(SVC(random_state=1, cache_size=512), params, x_train, y_train)
+        self._perform_grid_search(SVC(cache_size=512), params, x_train, y_train)
 
     def _perform_adaboost_grid_search(self, x_train, y_train):
         params = {
@@ -1066,7 +1039,7 @@ class ARDSDetectionModel(object):
             'n_estimators': [5*i for i in range(1, 60)],
             'algorithm': ['SAMME', 'SAMME.R'],
         }
-        self._perform_grid_search(AdaBoostClassifier(random_state=1), params, x_train, y_train)
+        self._perform_grid_search(AdaBoostClassifier(), params, x_train, y_train)
 
     def _perform_gbc_grid_search(self, x_train, y_train):
         # Another case where we cannot go too crazy on tuning everything
@@ -1079,7 +1052,7 @@ class ARDSDetectionModel(object):
             'max_features': [None, 'log2', 'auto'],
         }
         # implement early stopping because grid search is taking too long
-        self._perform_grid_search(GradientBoostingClassifier(random_state=1, n_iter_no_change=100), params, x_train, y_train)
+        self._perform_grid_search(GradientBoostingClassifier(n_iter_no_change=100), params, x_train, y_train)
 
     def _perform_nb_grid_search(self, x_train, y_train):
         params = {
@@ -1100,7 +1073,7 @@ class ARDSDetectionModel(object):
             'tol': [10**i for i in range(-10, -2)],
             'solver': ['liblinear', 'saga'],
         }]
-        self._perform_grid_search(LogisticRegression(random_state=1), params, x_train, y_train)
+        self._perform_grid_search(LogisticRegression(), params, x_train, y_train)
 
     def _perform_grid_search(self, cls, params, x_train, y_train):
         x_train_expanded = self.data.loc[x_train.index]
@@ -1147,7 +1120,7 @@ class ARDSDetectionModel(object):
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'gini':
-            rf = RandomForestClassifier(n_estimators=25, random_state=False)
+            rf = RandomForestClassifier(n_estimators=25)
             selector = SelectFromModel(rf, threshold=self.args.select_from_model_thresh)
             selector.fit(x_train, y_train)
             self.selected_features = list(x_test.columns[selector.get_support()])
@@ -1160,7 +1133,7 @@ class ARDSDetectionModel(object):
             clf.fit(x_train, y_train)
             self.models.append(clf)
         elif self.args.feature_selection_method == 'lasso':
-            lasso = LassoCV(cv=5, random_state=False)
+            lasso = LassoCV(cv=5)
             selector = SelectFromModel(lasso, threshold=self.args.select_from_model_thresh)
             selector.fit(x_train, y_train)
             self.selected_features = list(x_test.columns[selector.get_support()])
@@ -1182,7 +1155,7 @@ class ARDSDetectionModel(object):
 
         return x_train, x_test
 
-    def compute_model_results(self, y_test, predictions, model_idx):
+    def compute_model_results(self, y_test, predictions, model_idx, run_num, at_end_of_n):
         """
         After a group of patients is run through the model, record all necessary stats
         such as true positives, false positives, etc.
@@ -1210,7 +1183,7 @@ class ARDSDetectionModel(object):
 
             patho_pred = np.argmax([pt_results[6 + 5*k] for k in range(len(self.pathos))])
             frac_votes = float(pt_results[6+5*1]) / sum([pt_results[6+5*j] for j in self.pathos.keys()])
-            pt_results.extend([model_idx, patho_pred, frac_votes, np.nan])
+            pt_results.extend([model_idx, patho_pred, frac_votes, np.nan, run_num])
             prediction_threshes = []
             for thresh in np.array(self.pred_threshes).astype(float) / 100:
                 patho_pred_count = np.array([pt_results[6 + 5*k] for k in range(len(self.pathos))]).astype(float)
@@ -1228,8 +1201,8 @@ class ARDSDetectionModel(object):
         elif len(self.pathos) == 2:
             auc = round(roc_auc_score(model_pt_true, model_pt_pred), 4)
 
-        self.get_aggregate_results_and_thresh_eval(self.results[self.results.model_idx == model_idx], model_idx)
-        self.get_youdens_results(self.results[self.results.model_idx == model_idx], self.thresh_eval[self.thresh_eval.model_idx==model_idx])
+        self.get_aggregate_results_and_thresh_eval(self.results[(self.results.model_idx == model_idx) & (self.results.run_num == run_num)], model_idx)
+        self.get_youdens_results(self.results[self.results.model_idx == model_idx], self.thresh_eval[self.thresh_eval.model_idx==model_idx], at_end_of_n)
         self.results.loc[self.results.model_idx==model_idx, 'model_auc'] = auc
         if self.args.plot_roc and self.args.split_type == 'kfold':
             self.plot_roc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
@@ -1642,6 +1615,8 @@ def build_parser():
     parser.add_argument('--thresh-interval', type=int, default=25)
     parser.add_argument('--no-plot-individual-folds', action='store_true')
     parser.add_argument('--print-thresh-table', action='store_true')
+    parser.add_argument('--n-runs', type=int, help='number of times to run the model', default=10)
+    parser.add_argument('--print-feature-selection', action='store_true')
     return parser
 
 
