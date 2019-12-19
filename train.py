@@ -1287,7 +1287,7 @@ class ARDSDetectionModel(object):
             plots.append(plt.bar(range(0, 24), bar_fracs, bottom=bottom, color=cmap[n]))
             bottom = bottom + bar_fracs
 
-        plt.title(pt, fontsize=fontsize, pad=1)
+        plt.title(pt[:4], fontsize=fontsize, pad=1)
         if xylabel:
             plt.ylabel('Fraction Predicted', fontsize=fontsize)
             plt.xlabel('Hour', fontsize=fontsize)
