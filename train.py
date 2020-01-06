@@ -990,13 +990,12 @@ class ARDSDetectionModel(object):
 
     def _perform_mlp_grid_search(self, x_train, y_train):
         hiddens = [
-            (16,), (32,), (64,), (128,),
-            (16, 16), (16, 32), (16, 64), (16, 128),
-            (32, 16), (32, 32), (32, 64), (32, 128),
-            (64, 16), (64, 32), (64, 64), (64, 128),
-            (128, 16), (128, 32), (128, 64), (128, 128),
+            (16,), (32,), (64,),
+            (16, 16), (16, 32), (16, 64),
+            (32, 16), (32, 32), (32, 64),
+            (64, 16), (64, 32), (64, 64),
         ]
-        activations = ['relu', 'tanh', 'logistic', 'identity']
+        activations = ['relu', 'tanh', 'logistic']
         params = [{
             'activation': activations,
             'solver': ['lbfgs'],
@@ -1004,7 +1003,7 @@ class ARDSDetectionModel(object):
         }, {
             'activation': activations,
             'solver': ['sgd', 'adam'],
-            'learning_rate_init': [.0001, .0005, .001, .005, .01, .05, .1],
+            'learning_rate_init': [.0001, .0005, .001, .005, .01],
             'hidden_layer_sizes': hiddens,
             # cut down on # params to search otherwise it will take forever
             #'alpha': [0.00001, .0001, .001, .01, .1],
