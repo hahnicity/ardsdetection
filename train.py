@@ -362,17 +362,17 @@ class ARDSDetectionModel(object):
                         },
                         100: {
                             "average": {
-                                "max_depth": 5,
+                                "max_depth": 2,
                                 "max_features": 'auto',
-                                'criterion': 'entropy',
-                                'n_estimators': 84,
+                                'criterion': 'gini',
+                                'n_estimators': 33,
                                 'oob_score': True,
                             },
                             "majority": {
-                                "max_depth": 5,
+                                "max_depth": 1,
                                 "max_features": 'auto',
-                                'criterion': 'entropy',
-                                'n_estimators': 95,
+                                'criterion': 'gini',
+                                'n_estimators': 5,
                                 'oob_score': True,
                             },
                         },
@@ -459,13 +459,13 @@ class ARDSDetectionModel(object):
                         },
                         100: {
                             "average": {
-                                'n_estimators': 164,
-                                'learning_rate': 0.3625,
+                                'n_estimators': 105,
+                                'learning_rate': 0.11337890625,
                                 'algorithm': 'SAMME.R',
                             },
                             "majority": {
                                 # no majority found so take average of all estimators
-                                'n_estimators': 164,
+                                'n_estimators': 15,
                                 'learning_rate': 0.03125,
                                 'algorithm': 'SAMME.R',
                             },
@@ -505,16 +505,16 @@ class ARDSDetectionModel(object):
                         100: {
                             'average': {
                                 'penalty': 'l1',
-                                'C': 0.05625,
-                                'max_iter': 100,
-                                'tol': 0.000202006,
+                                'C': 0.0675,
+                                'max_iter': 230,
+                                'tol': 0.00053800003,
                                 'solver': 'liblinear',
                             },
                             'majority': {
                                 'penalty': 'l1',
-                                'C': 0.03125,
+                                'C': 0.0625,
                                 'max_iter': 100,
-                                'tol': 1e-08,
+                                'tol': 1e-3,
                                 'solver': 'liblinear',
                             },
                         },
@@ -549,16 +549,20 @@ class ARDSDetectionModel(object):
                         },
                         100: {
                             'average': {
-                                'C': 9,
+                                'C': 2.2130859375,
                                 'kernel': 'poly',
                                 'cache_size': 512,
                                 'degree': 2,
+                                'gamma': 'scale',
+                                'tol': 0.004006,
                             },
                             'majority': {
-                                'C': 16,
+                                'C': 0.03125,
                                 'kernel': 'poly',
                                 'cache_size': 512,
                                 'degree': 2,
+                                'gamma': 'scale',
+                                'tol': 1e-5,
                             },
                         },
                     },
@@ -677,7 +681,7 @@ class ARDSDetectionModel(object):
                                 'var_smoothing': .244,
                             },
                             'majority': {
-                                'var_smoothing': 0.1,
+                                'var_smoothing': 0.01,
                             },
                         },
                     },
@@ -990,13 +994,12 @@ class ARDSDetectionModel(object):
 
     def _perform_mlp_grid_search(self, x_train, y_train):
         hiddens = [
-            (16,), (32,), (64,), (128,),
-            (16, 16), (16, 32), (16, 64), (16, 128),
-            (32, 16), (32, 32), (32, 64), (32, 128),
-            (64, 16), (64, 32), (64, 64), (64, 128),
-            (128, 16), (128, 32), (128, 64), (128, 128),
+            (16,), (32,), (64,),
+            (16, 16), (16, 32), (16, 64),
+            (32, 16), (32, 32), (32, 64),
+            (64, 16), (64, 32), (64, 64),
         ]
-        activations = ['relu', 'tanh', 'logistic', 'identity']
+        activations = ['relu', 'tanh', 'logistic']
         params = [{
             'activation': activations,
             'solver': ['lbfgs'],
@@ -1004,7 +1007,7 @@ class ARDSDetectionModel(object):
         }, {
             'activation': activations,
             'solver': ['sgd', 'adam'],
-            'learning_rate_init': [.0001, .0005, .001, .005, .01, .05, .1],
+            'learning_rate_init': [.0001, .0005, .001, .005, .01],
             'hidden_layer_sizes': hiddens,
             # cut down on # params to search otherwise it will take forever
             #'alpha': [0.00001, .0001, .001, .01, .1],
