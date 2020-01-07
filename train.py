@@ -77,7 +77,7 @@ class ARDSDetectionModel(object):
                 "{}_tns".format(patho), "{}_fns".format(patho),
                 "{}_votes".format(patho),
             ])
-        self.pred_threshes = np.arange(self.args.thresh_interval, 100 + self.args.thresh_interval, self.args.thresh_interval)
+        self.pred_threshes = np.arange(0, 100+self.args.thresh_interval, self.args.thresh_interval)
         results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc', 'run_num']
         results_cols += ['prediction@{}'.format(i) for i in self.pred_threshes]
         # self.results is meant to be a high level dataframe of aggregated statistics
@@ -764,7 +764,12 @@ class ARDSDetectionModel(object):
                 self.print_model_stats(y_test, predictions, model_idx)
                 print("-------------------")
 
+            if self.args.print_thresh_table:
+                self.print_thresh_table(model_idx)
+
         self.get_aggregate_results_and_thresh_eval(self.results, -1)
+
+
         if self.args.plot_roc:
             self.plot_roc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
 
@@ -796,7 +801,7 @@ class ARDSDetectionModel(object):
         sens_ards = []
         specs_other = []
         specs_ards = []
-        mean_thresh = np.linspace(self.args.thresh_interval, 100, 100-self.args.thresh_interval)
+        mean_thresh = np.linspace(0, 100, 100-self.args.thresh_interval)
 
         for model_idx in self.results.model_idx.unique():
             fold_preds = self.thresh_eval[self.thresh_eval.model_idx == model_idx]
@@ -1459,28 +1464,29 @@ class ARDSDetectionModel(object):
         else:
             self.thresh_eval = self.thresh_eval.append(thresh_eval)
 
-        if self.args.print_thresh_table:
-            table = PrettyTable()
-            table.field_names = ['patho', 'vote %', 'sen', 'spec', 'prec']
-            for thresh in range(self.args.thresh_interval, 101, self.args.thresh_interval):
-                ards_results = self.thresh_eval[(self.thresh_eval.patho == 'ARDS') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
-                other_results = self.thresh_eval[(self.thresh_eval.patho == 'OTHER') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
-                sen = 'sen@{}'.format(thresh)
-                spec = 'spec@{}'.format(thresh)
-                f1 = 'f1@{}'.format(thresh)
-                sen_ards = ards_results[sen]
-                spec_ards = ards_results[spec]
-                f1_ards = ards_results[f1]
-                prec_ards = round((f1_ards * sen_ards) / (2*sen_ards - f1_ards), 4)
-                sen_other = other_results[sen]
-                spec_other = other_results[spec]
-                f1_other = other_results[f1]
-                prec_other = round((f1_other * sen_other) / (2*sen_other - f1_other), 4)
-                row = ['ARDS', thresh, sen_ards, spec_ards, prec_ards]
-                table.add_row(row)
-                row = ['OTHER', thresh, sen_other, spec_other, prec_other]
-                table.add_row(row)
-            print(table)
+    def print_thresh_table(self, model_idx):
+        # XXX doesn't actually work with multiple runs now because of the iloc[0]. need to fix
+        table = PrettyTable()
+        table.field_names = ['patho', 'vote %', 'sen', 'spec', 'prec']
+        for thresh in range(0, 100+self.args.thresh_interval, self.args.thresh_interval):
+            ards_results = self.thresh_eval[(self.thresh_eval.patho == 'ARDS') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
+            other_results = self.thresh_eval[(self.thresh_eval.patho == 'OTHER') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
+            sen = 'sen@{}'.format(thresh)
+            spec = 'spec@{}'.format(thresh)
+            f1 = 'f1@{}'.format(thresh)
+            sen_ards = ards_results[sen]
+            spec_ards = ards_results[spec]
+            f1_ards = ards_results[f1]
+            prec_ards = round((f1_ards * sen_ards) / (2*sen_ards - f1_ards), 4)
+            sen_other = other_results[sen]
+            spec_other = other_results[spec]
+            f1_other = other_results[f1]
+            prec_other = round((f1_other * sen_other) / (2*sen_other - f1_other), 4)
+            row = ['ARDS', thresh, sen_ards, spec_ards, prec_ards]
+            table.add_row(row)
+            row = ['OTHER', thresh, sen_other, spec_other, prec_other]
+            table.add_row(row)
+        print(table)
 
     def print_aggregate_results(self):
         print "Aggregate Stats"
