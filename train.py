@@ -419,10 +419,17 @@ class ARDSDetectionModel(object):
                     'kfold': {
                         100: {
                             "average": {
-                                "max_depth": 1,
+                                "max_depth": 2,
                                 "max_features": 'auto',
                                 'criterion': 'gini',
-                                'n_estimators': 14,
+                                'n_estimators': 24,
+                                'oob_score': True,
+                            },
+                            "majority": {
+                                "max_depth": 2,
+                                "max_features": 'auto',
+                                'criterion': 'gini',
+                                'n_estimators': 5,
                                 'oob_score': True,
                             },
                         },
