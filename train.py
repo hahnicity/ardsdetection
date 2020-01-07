@@ -882,7 +882,7 @@ class ARDSDetectionModel(object):
             aucs.append(roc_auc)
             if not self.args.no_plot_individual_folds:
                 plt.plot(fpr, tpr, lw=1, alpha=0.3,
-                         label='ROC fold %d (AUC = %0.3f)' % (model_idx+1, roc_auc))
+                         label='ROC fold %d (AUC = %0.2f)' % (model_idx+1, roc_auc))
 
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
                  label='Chance', alpha=.8)
@@ -893,7 +893,7 @@ class ARDSDetectionModel(object):
         std_auc = np.std(aucs)
 
         plt.plot(mean_fpr, mean_tpr, color='b',
-                 label=r'Mean ROC (AUC = %0.3f $\pm$ %0.3f)' % (mean_auc, std_auc),
+                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
                  lw=2, alpha=.8)
 
         std_tpr = np.std(tprs, axis=0)
@@ -1507,16 +1507,18 @@ class ARDSDetectionModel(object):
             plt.show()
 
         if self.args.plot_sen_spec_vs_thresh:
-            for n, patho in self.pathos.items():
-                row = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx == -1)].iloc[0]
-                y1 = [row['sen@{}'.format(i)] for i in self.pred_threshes]
-                y2 = [row['spec@{}'.format(i)] for i in self.pred_threshes]
-                plt.plot(self.pred_threshes, y1, label='{} sensitivity'.format(patho))
-                plt.plot(self.pred_threshes, y2, label='{} specificity'.format(patho))
-            plt.legend()
+            patho = 'ARDS'
+            row = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx == -1)].iloc[0]
+            y1 = [row['sen@{}'.format(i)] for i in self.pred_threshes]
+            y2 = [row['spec@{}'.format(i)] for i in self.pred_threshes]
+            plt.plot(self.pred_threshes, y1, label='{} sensitivity'.format(patho))
+            plt.plot(self.pred_threshes, y2, label='{} specificity'.format(patho))
+            plt.legend(loc='lower right')
             plt.title('Sensitivity v Specificity analysis')
             plt.ylabel('Score')
             plt.xlabel('Percentage ARDS votes')
+            plt.ylim(0.0, 1.01)
+            plt.yticks(np.arange(0, 1.01, .1))
             plt.grid()
             plt.show()
 
@@ -1574,7 +1576,7 @@ def build_parser():
     parser.add_argument('--no-load-intermediates', action='store_false', help='do not load from intermediate data')
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
     parser.add_argument("--grid-search", action="store_true", help='perform a grid search  for model hyperparameters')
-    parser.add_argument("--grid-search-kfolds", type=int, default=3, help='number of validation kfolds to use in the grid search')
+    parser.add_argument("--grid-search-kfolds", type=int, default=4, help='number of validation kfolds to use in the grid search')
     parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
     parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
     parser.add_argument('--load-model')
