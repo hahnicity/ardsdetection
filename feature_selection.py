@@ -118,6 +118,7 @@ def main():
     parser.add_argument('--save-results')
     parser.add_argument('--load-results')
     parser.add_argument('-sp', '--post-hour', type=int, required=True)
+    parser.add_argument('--n-runs', type=int, default=10)
     main_args = parser.parse_args()
 
     model_args = build_parser().parse_args([])
@@ -127,6 +128,7 @@ def main():
     model_args.algo = main_args.algo
     model_args.split_type = main_args.split_type
     model_args.frame_size = 100
+    model_args.n_runs = main_args.n_runs
     model_args.post_hour = main_args.post_hour
 
     if not main_args.load_results:

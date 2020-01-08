@@ -394,9 +394,16 @@ class ARDSDetectionModel(object):
                         100: {
                             "average": {
                                 "max_depth": 2,
-                                "max_features": 'auto',
-                                'criterion': 'gini',
-                                'n_estimators': 20,
+                                "max_features": 'log2',
+                                'criterion': 'entropy',
+                                'n_estimators': 16,
+                                'oob_score': True,
+                            },
+                            "majority": {
+                                "max_depth": 1,
+                                "max_features": 'log2',
+                                'criterion': 'entropy',
+                                'n_estimators': 5,
                                 'oob_score': True,
                             },
                         },
