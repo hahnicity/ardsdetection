@@ -142,10 +142,23 @@ class ARDSDetectionModel(object):
         test_patient_data = self.data[self.data.set_type == 'test']
         return [(train_patient_data.index, test_patient_data.index)]
 
-    def _get_kfolds_when_train_test_equal(self, x, y, folds, train_cohort, test_cohort):
+    def _get_kfolds_when_train_test_equal(self, x, y, folds, train_cohort, test_cohort, is_random):
+        """
+        Get indices for train and test kfold data assuming that number of patients in the training
+        cohort is equivalent to number of patients in testing. For cases in normal kfold where we
+        are just iterating over the entire dataset this will be true.
+
+        Gathers a list of patients and splits them by pathophysiology. Then just takes a continuous
+        kfold split of them.
+        """
         idxs = []
-        unique_patients = sorted(x.patient.unique())
         mapping = {patho: [] for n, patho in self.pathos.items()}
+
+        if is_random:
+            unique_patients = x.patient.unique()
+            np.random.shuffle(unique_patients)
+        else:
+            unique_patients = sorted(x.patient.unique())
 
         for patient in unique_patients:
             patient_rows = x[x.patient == patient]
@@ -167,12 +180,19 @@ class ARDSDetectionModel(object):
             idxs.append((train_pt_data.index, test_pt_data.index))
         return idxs
 
-    def _get_kfolds_when_train_test_unequal(self, x, y, folds):
+    def _get_kfolds_when_train_test_unequal(self, x, y, folds, is_random):
         # This function assumes that train is larger than test and that there are no
         # patients in the test set outside the train set
         idxs = []
-        test_pts = sorted(x[x.set_type == 'test'].patient.unique())
-        train_pts = sorted(x[x.set_type == 'train'].patient.unique())
+        if is_random:
+            test_pts = x[x.set_type == 'test'].patient.unique()
+            train_pts = x[x.set_type == 'train'].patient.unique()
+            np.random.shuffle(train_pts)
+            np.random.shuffle(test_pts)
+        else:
+            test_pts = sorted(x[x.set_type == 'test'].patient.unique())
+            train_pts = sorted(x[x.set_type == 'train'].patient.unique())
+
         tmp_split_classes = []
         for i, pt_set in enumerate([test_pts, set(train_pts).difference(set(test_pts))]):
             for pt in pt_set:
@@ -194,7 +214,7 @@ class ARDSDetectionModel(object):
             idxs.append((train_pt_data.index, test_pt_data.index))
         return idxs
 
-    def get_cross_patient_kfold_idxs(self, x, y, folds):
+    def get_cross_patient_kfold_idxs(self, x, y, folds, is_random):
         """
         Get indexes to split dataset
         """
@@ -216,9 +236,9 @@ class ARDSDetectionModel(object):
             total_test_patients = total_train_patients = len(x.patient.unique())
 
         if total_test_patients != total_train_patients:
-            return self._get_kfolds_when_train_test_unequal(x, y, folds)
+            return self._get_kfolds_when_train_test_unequal(x, y, folds, is_random)
         else:
-            return self._get_kfolds_when_train_test_equal(x, y, folds, train_cohort, test_cohort)
+            return self._get_kfolds_when_train_test_equal(x, y, folds, train_cohort, test_cohort, is_random)
 
     def get_and_fit_scaler(self, x_train):
         """
@@ -232,7 +252,7 @@ class ARDSDetectionModel(object):
         else:
             scaler = pd.read_pickle(self.args.load_scaler)
 
-        if self.args.save_model_to and self.args.split_type == 'kfold':
+        if self.args.save_model_to and 'kfold' in self.args.split_type:
             raise Exception('Saving a model/scaler while in kfold is not supported!')
         elif self.args.save_model_to:
             pd.to_pickle(scaler, "scaler-" + self.args.save_model_to)
@@ -248,7 +268,9 @@ class ARDSDetectionModel(object):
         elif self.args.split_type == 'holdout':
             idxs = self.get_holdout_idxs()
         elif self.args.split_type == 'kfold':
-            idxs = self.get_cross_patient_kfold_idxs(x, y, self.args.folds)
+            idxs = self.get_cross_patient_kfold_idxs(x, y, self.args.folds, False)
+        elif self.args.split_type == 'kfold_random':
+            idxs = self.get_cross_patient_kfold_idxs(x, y, self.args.folds, True)
         elif self.args.split_type == 'train_all':
             idxs = [(x.index, [])]
         elif self.args.split_type == 'test_all':
@@ -745,7 +767,7 @@ class ARDSDetectionModel(object):
         Train models and then run testing afterwards.
         """
         for model_idx, (x_train, x_test, y_train, y_test) in enumerate(self.perform_data_splits()):
-            if not self.args.no_print_results and self.args.split_type == 'kfold':
+            if not self.args.no_print_results and 'kfold' in self.args.split_type:
                 print("----Run fold {}----".format(model_idx+1))
 
             for iter_n in range(self.args.n_runs):
@@ -757,7 +779,7 @@ class ARDSDetectionModel(object):
                 elif not self.args.load_model:
                     self.train(x_train, y_train)
 
-                if self.args.save_model_to and self.args.split_type == 'kfold':
+                if self.args.save_model_to and 'kfold' in self.args.split_type:
                     raise Exception('Saving a model/scaler while in kfold is not supported!')
                 elif self.args.save_model_to:
                     pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
@@ -777,7 +799,7 @@ class ARDSDetectionModel(object):
         if self.args.plot_roc:
             self.plot_roc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
 
-        if not self.args.no_print_results and self.args.split_type == 'kfold':
+        if not self.args.no_print_results and 'kfold' in self.args.split_type:
             self.print_fold_averages()
 
         if not self.args.no_print_results:
@@ -1225,7 +1247,7 @@ class ARDSDetectionModel(object):
         self.get_aggregate_results_and_thresh_eval(self.results[(self.results.model_idx == model_idx) & (self.results.run_num == run_num)], model_idx)
         self.get_youdens_results(self.results[self.results.model_idx == model_idx], self.thresh_eval[self.thresh_eval.model_idx==model_idx], at_end_of_n)
         self.results.loc[self.results.model_idx==model_idx, 'model_auc'] = auc
-        if self.args.plot_roc and self.args.split_type == 'kfold':
+        if self.args.plot_roc and 'kfold' in self.args.split_type:
             self.plot_roc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
 
     def print_model_stats(self, y_test, predictions, model_idx):
@@ -1615,7 +1637,7 @@ def build_parser():
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
     parser.add_argument("--grid-search", action="store_true", help='perform a grid search  for model hyperparameters')
     parser.add_argument("--grid-search-kfolds", type=int, default=4, help='number of validation kfolds to use in the grid search')
-    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
+    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'kfold_random', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
     parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
     parser.add_argument('--load-model')
     parser.add_argument('--load-scaler')
