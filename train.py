@@ -405,7 +405,6 @@ class ARDSDetectionModel(object):
                     'holdout': {
                         100: {
                             'majority': {
-                                "random_state": 1,
                                 "max_depth": 6,
                                 "max_features": 'auto',
                                 'criterion': 'entropy',
@@ -438,7 +437,6 @@ class ARDSDetectionModel(object):
                     'holdout': {
                         100: {
                             'majority': {
-                                "random_state": 1,
                                 "max_depth": 6,
                                 "max_features": 'auto',
                                 'criterion': 'entropy',
@@ -769,7 +767,6 @@ class ARDSDetectionModel(object):
 
         self.get_aggregate_results_and_thresh_eval(self.results, -1)
 
-
         if self.args.plot_roc:
             self.plot_roc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
 
@@ -908,8 +905,10 @@ class ARDSDetectionModel(object):
         mean_auc = auc(mean_fpr, mean_tpr)
         std_auc = np.std(aucs)
 
+        # 1.96 is a constant for normal distribution and 95% CI
+        ci = 1.96 * (std_auc / len(aucs))
         plt.plot(mean_fpr, mean_tpr, color='b',
-                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, ci),
                  lw=2, alpha=.8)
 
         std_tpr = np.std(tprs, axis=0)
@@ -1227,17 +1226,27 @@ class ARDSDetectionModel(object):
         Perform majority rules voting on what disease subtype that a patient has
         """
         model_results = self.results[self.results.model_idx == model_idx]
-        incorrect_pts = model_results[model_results.patho != model_results.prediction]
 
         table = PrettyTable()
         table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1']
         for n, patho in self.pathos.items():
-            tps, tns, fps, fns, accuracy, sens, specs, precision, auc, f1s = self._calc_patho_stats(n, model_results)
-            patho_stats = [patho, accuracy, sens[0], specs[0], precision, auc, f1s[0]]
+            means = self.aggregate_results[(self.aggregate_results.model_idx == model_idx) & (self.aggregate_results.patho == patho)].mean().round(2)
+            stds = self.aggregate_results[(self.aggregate_results.model_idx == model_idx) & (self.aggregate_results.patho == patho)].std()
+            cis = (1.96 * (stds / len(stds))).round(3)
+            patho_stats = [
+                patho,
+                u"{}\u00B1{}".format(means.accuracy, cis.accuracy),
+                u"{}\u00B1{}".format(means.sensitivity, cis.sensitivity),
+                u"{}\u00B1{}".format(means.specificity, cis.specificity),
+                u"{}\u00B1{}".format(means.precision, cis.precision),
+                u"{}\u00B1{}".format(means.auc, cis.auc),
+                u"{}\u00B1{}".format(means.f1, cis.f1),
+            ]
             table.add_row(patho_stats)
         print('Model Results')
         print(table)
 
+        incorrect_pts = model_results[model_results.patho != model_results.prediction]
         table = PrettyTable()
         table.field_names = ['patient', 'actual', 'prediction'] + ['{} Votes'.format(patho) for patho in self.pathos.values()]
 
@@ -1387,12 +1396,18 @@ class ARDSDetectionModel(object):
         table.field_names = ['patho', 'sensitivity', 'specificity', 'precision', 'f1', 'auc']
         for n, patho in self.pathos.items():
             fold_results = self.aggregate_results[(self.aggregate_results.model_idx != -1) & (self.aggregate_results.patho == patho)]
-            sen = round(fold_results.sensitivity.mean(), 4)
-            spec = round(fold_results.specificity.mean(), 4)
-            prec = round(fold_results.precision.mean(), 4)
-            f1 = round(fold_results.f1.mean(), 4)
-            auc = round(fold_results.auc.mean(), 4)
-            table.add_row([patho, sen, spec, prec, f1, auc])
+            means = fold_results.mean().round(2)
+            stds = fold_results.std()
+            # 1.96 is a constant for normal distribution and 95% CI
+            cis = (1.96 * (stds / sqrt(len(stds)))).round(3)
+            table.add_row([
+                patho,
+                u"{}\u00B1{}".format(means.sensitivity, cis.sensitivity),
+                u"{}\u00B1{}".format(means.specificity, cis.specificity),
+                u"{}\u00B1{}".format(means.precision, cis.precision),
+                u"{}\u00B1{}".format(means.f1, cis.f1),
+                u"{}\u00B1{}".format(means.auc, cis.auc),
+            ])
         print(table)
 
     def _calc_patho_stats(self, patho_n, results):
