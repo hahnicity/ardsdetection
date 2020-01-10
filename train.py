@@ -632,17 +632,16 @@ class ARDSDetectionModel(object):
                         },
                         100: {
                             'average': {
-                                "hidden_layer_sizes": (70, 27),
+                                "hidden_layer_sizes": (32, 32),
                                 "solver": 'sgd',
                                 'activation': 'identity',
-                                'learning_rate_init': .0244,
+                                'learning_rate_init': .025058,
                             },
                             'majority': {
                                 'hidden_layer_sizes': (32, 32),
                                 "solver": 'sgd',
-                                # its even between relu and iden. choodse relu because of runs from frame size 20
                                 'activation': 'identity',
-                                'learning_rate_init': .005,  # its even between 0.01 and .001
+                                'learning_rate_init': .0005,
                             },
                         },
                     },
