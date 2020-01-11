@@ -373,6 +373,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'gini',
                                 'n_estimators': 33,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                             "majority": {
                                 "max_depth": 5,
@@ -380,6 +381,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'gini',
                                 'n_estimators': 15,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                         100: {
@@ -389,6 +391,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'gini',
                                 'n_estimators': 33,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                             "majority": {
                                 "max_depth": 1,
@@ -396,6 +399,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'gini',
                                 'n_estimators': 5,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -407,6 +411,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'entropy',
                                 'n_estimators': 5,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -420,6 +425,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'entropy',
                                 'n_estimators': 16,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                             "majority": {
                                 "max_depth": 1,
@@ -427,6 +433,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'entropy',
                                 'n_estimators': 5,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -439,6 +446,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'entropy',
                                 'n_estimators': 5,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -452,6 +460,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'gini',
                                 'n_estimators': 24,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                             "majority": {
                                 "max_depth": 2,
@@ -459,6 +468,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'gini',
                                 'n_estimators': 5,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -471,6 +481,7 @@ class ARDSDetectionModel(object):
                                 'criterion': 'entropy',
                                 'n_estimators': 5,
                                 'oob_score': True,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -484,11 +495,13 @@ class ARDSDetectionModel(object):
                                 'n_estimators': 80,
                                 'learning_rate': 0.23125,
                                 'algorithm': 'SAMME.R',
+                                'random_state': np.random.RandomState(),
                             },
                             "majority": {
                                 'n_estimators': 120,
                                 'learning_rate': 0.03125,
                                 'algorithm': 'SAMME.R',
+                                'random_state': np.random.RandomState(),
                             },
                         },
                         100: {
@@ -496,12 +509,14 @@ class ARDSDetectionModel(object):
                                 'n_estimators': 105,
                                 'learning_rate': 0.11337890625,
                                 'algorithm': 'SAMME.R',
+                                'random_state': np.random.RandomState(),
                             },
                             "majority": {
                                 # no majority found so take average of all estimators
                                 'n_estimators': 15,
                                 'learning_rate': 0.03125,
                                 'algorithm': 'SAMME.R',
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -512,6 +527,7 @@ class ARDSDetectionModel(object):
                                 'n_estimators': 15,
                                 'learning_rate': 0.25,
                                 'algorithm': 'SAMME',
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -527,6 +543,7 @@ class ARDSDetectionModel(object):
                                 'max_iter': 100,
                                 'tol': 0.000420004,
                                 'solver': 'liblinear',
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'penalty': 'l1',
@@ -534,6 +551,7 @@ class ARDSDetectionModel(object):
                                 'max_iter': 100,
                                 'tol': 1e-8,
                                 'solver': 'liblinear',
+                                'random_state': np.random.RandomState(),
                             },
                         },
                         100: {
@@ -543,6 +561,7 @@ class ARDSDetectionModel(object):
                                 'max_iter': 230,
                                 'tol': 0.00053800003,
                                 'solver': 'liblinear',
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'penalty': 'l1',
@@ -550,6 +569,7 @@ class ARDSDetectionModel(object):
                                 'max_iter': 100,
                                 'tol': 1e-3,
                                 'solver': 'liblinear',
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -561,6 +581,7 @@ class ARDSDetectionModel(object):
                                 'max_iter': 100,
                                 'tol': .001,
                                 'solver': 'sag',
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -574,11 +595,13 @@ class ARDSDetectionModel(object):
                                 'C': 7,
                                 'kernel': 'sigmoid',
                                 'cache_size': 512,
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'C': 8,
                                 'kernel': 'sigmoid',
                                 'cache_size': 512,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                         100: {
@@ -589,6 +612,7 @@ class ARDSDetectionModel(object):
                                 'degree': 2,
                                 'gamma': 'scale',
                                 'tol': 0.004006,
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'C': 0.03125,
@@ -597,6 +621,7 @@ class ARDSDetectionModel(object):
                                 'degree': 2,
                                 'gamma': 'scale',
                                 'tol': 1e-5,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -608,6 +633,7 @@ class ARDSDetectionModel(object):
                                 'cache_size': 512,
                                 'gamma': 'scale',
                                 'tol': 1e-5,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -622,12 +648,14 @@ class ARDSDetectionModel(object):
                                 "solver": 'adam',
                                 'activation': 'identity',
                                 'learning_rate_init': .07525,
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'hidden_layer_sizes': (32, 16),
                                 "solver": 'adam',
                                 'activation': 'identity',
                                 'learning_rate_init': .1,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                         100: {
@@ -636,12 +664,14 @@ class ARDSDetectionModel(object):
                                 "solver": 'sgd',
                                 'activation': 'identity',
                                 'learning_rate_init': .025058,
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'hidden_layer_sizes': (32, 32),
                                 "solver": 'sgd',
                                 'activation': 'identity',
                                 'learning_rate_init': .0005,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -652,6 +682,7 @@ class ARDSDetectionModel(object):
                                 "solver": 'sgd',
                                 'activation': 'relu',
                                 'learning_rate_init': .0005,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -667,6 +698,7 @@ class ARDSDetectionModel(object):
                                 'loss': 'exponential',
                                 'max_features': 'log2',
                                 'n_iter_no_change': 100,
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'n_estimators': 50,
@@ -674,18 +706,17 @@ class ARDSDetectionModel(object):
                                 'loss': 'exponential',
                                 'max_features': 'log2',
                                 'n_iter_no_change': 100,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                         100: {
-                            # technically we haven't done the runs for this and we aren't
-                            # going to do the runs for this, so just copy params from 20
-                            # to make sure the code doesn't break
                             'average': {
                                 'n_estimators': 180,
                                 'criterion': 'mae',
                                 'loss': 'exponential',
                                 'max_features': 'log2',
                                 'n_iter_no_change': 100,
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'n_estimators': 50,
@@ -693,6 +724,7 @@ class ARDSDetectionModel(object):
                                 'loss': 'exponential',
                                 'max_features': 'log2',
                                 'n_iter_no_change': 100,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -704,17 +736,21 @@ class ARDSDetectionModel(object):
                         20: {
                             'average': {
                                 'var_smoothing': .244,
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'var_smoothing': 0.01,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                         100: {
                             'average': {
                                 'var_smoothing': .244,
+                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'var_smoothing': 0.01,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -722,6 +758,7 @@ class ARDSDetectionModel(object):
                         100: {
                             'majority': {
                                 'var_smoothing': 0.1,
+                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -772,22 +809,24 @@ class ARDSDetectionModel(object):
             for iter_n in range(self.args.n_runs):
                 if self.args.grid_search:
                     self.perform_grid_search(x_train, y_train)
+                    prediction_set = x_test
                 elif self.args.feature_selection_method:
                     # sometimes x_test is modified by this func
-                    x_train, x_test = self.perform_feature_selection(x_train, y_train, x_test)
+                    prediction_set = self.perform_feature_selection(x_train, y_train, x_test)
                 elif not self.args.load_model:
                     self.train(x_train, y_train)
+                    prediction_set = x_test
 
                 if self.args.save_model_to and 'kfold' in self.args.split_type:
                     raise Exception('Saving a model/scaler while in kfold is not supported!')
                 elif self.args.save_model_to:
                     pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
 
-                predictions = pd.Series(self.models[-1].predict(x_test), index=y_test.index)
+                predictions = pd.Series(self.models[-1].predict(prediction_set), index=y_test.index)
                 results = self.compute_model_results(y_test, predictions, model_idx, iter_n, False)
 
             if not self.args.no_print_results:
-                self.print_model_stats(y_test, predictions, model_idx)
+                self.print_model_stats(model_idx)
                 print("-------------------")
 
             if self.args.print_thresh_table:
@@ -1171,6 +1210,7 @@ class ARDSDetectionModel(object):
             if not self.args.no_print_results:
                 print('Selected features: {}'.format(self.selected_features))
             x_train = selector.transform(x_train)
+            x_train = pd.DataFrame(x_train, columns=self.selected_features, index=orig_train_idx)
             x_test = pd.DataFrame(selector.transform(x_test), columns=self.selected_features)
             clf.fit(x_train, y_train)
             self.models.append(clf)
@@ -1195,7 +1235,7 @@ class ARDSDetectionModel(object):
             clf.fit(x_train, y_train)
             self.models.append(clf)
 
-        return x_train, x_test
+        return x_test
 
     def compute_model_results(self, y_test, predictions, model_idx, run_num, at_end_of_n):
         """
@@ -1249,7 +1289,7 @@ class ARDSDetectionModel(object):
         if self.args.plot_roc and 'kfold' in self.args.split_type:
             self.plot_roc_curve(model_pt_true, model_pt_pred, 'ROC curve for Fold {}'.format(model_idx+1))
 
-    def print_model_stats(self, y_test, predictions, model_idx):
+    def print_model_stats(self, model_idx):
         """
         Perform majority rules voting on what disease subtype that a patient has
         """
@@ -1260,6 +1300,8 @@ class ARDSDetectionModel(object):
         for n, patho in self.pathos.items():
             means = self.aggregate_results[(self.aggregate_results.model_idx == model_idx) & (self.aggregate_results.patho == patho)].mean().round(2)
             stds = self.aggregate_results[(self.aggregate_results.model_idx == model_idx) & (self.aggregate_results.patho == patho)].std()
+            # XXX results aren't necessarily normally distributed. Is there a way to find
+            # confidence interval for these cases??
             cis = (1.96 * (stds / len(stds))).round(3)
             patho_stats = [
                 patho,
@@ -1441,7 +1483,7 @@ class ARDSDetectionModel(object):
     def _calc_patho_stats(self, patho_n, results):
         cols_to_int = ['patho', 'prediction'] + ['prediction@{}'.format(i) for i in self.pred_threshes]
         for col in cols_to_int:
-            results[col] = results[col].astype(int)
+            results.loc[:, col] = results[col].astype(int)
         tps = float(len(results[(results.patho == patho_n) & (results.prediction == patho_n)]))
         tns = float(len(results[(results.patho != patho_n) & (results.prediction != patho_n)]))
         fps = float(len(results[(results.patho != patho_n) & (results.prediction == patho_n)]))
