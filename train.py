@@ -736,21 +736,17 @@ class ARDSDetectionModel(object):
                         20: {
                             'average': {
                                 'var_smoothing': .244,
-                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'var_smoothing': 0.01,
-                                'random_state': np.random.RandomState(),
                             },
                         },
                         100: {
                             'average': {
                                 'var_smoothing': .244,
-                                'random_state': np.random.RandomState(),
                             },
                             'majority': {
                                 'var_smoothing': 0.01,
-                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
@@ -758,7 +754,6 @@ class ARDSDetectionModel(object):
                         100: {
                             'majority': {
                                 'var_smoothing': 0.1,
-                                'random_state': np.random.RandomState(),
                             },
                         },
                     },
