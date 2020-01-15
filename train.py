@@ -1262,9 +1262,9 @@ class ARDSDetectionModel(object):
             frac_votes = float(pt_results[6+5*1]) / sum([pt_results[6+5*j] for j in self.pathos.keys()])
             pt_results.extend([model_idx, patho_pred, frac_votes, np.nan, run_num])
             prediction_threshes = []
-            for thresh in np.array(self.pred_threshes).astype(float) / 100:
+            for thresh in np.array(self.pred_threshes) / 100.0:
                 patho_pred_count = np.array([pt_results[6 + 5*k] for k in range(len(self.pathos))]).astype(float)
-                if (patho_pred_count / patho_pred_count.sum())[1] >= thresh:
+                if (patho_pred_count[1] / patho_pred_count.sum()) >= thresh:
                     prediction_threshes.append(1)
                 else:
                     prediction_threshes.append(0)
@@ -1458,7 +1458,7 @@ class ARDSDetectionModel(object):
     def print_fold_averages(self):
         print('---Averaged statistics across all kfolds---')
         table = PrettyTable()
-        table.field_names = ['patho', 'sensitivity', 'specificity', 'precision', 'f1', 'auc']
+        table.field_names = ['patho', 'sensitivity', 'specificity', 'precision', 'f1']
         for n, patho in self.pathos.items():
             fold_results = self.aggregate_results[(self.aggregate_results.model_idx != -1) & (self.aggregate_results.patho == patho)]
             means = fold_results.mean().round(2)
@@ -1471,7 +1471,6 @@ class ARDSDetectionModel(object):
                 u"{}\u00B1{}".format(means.specificity, cis.specificity),
                 u"{}\u00B1{}".format(means.precision, cis.precision),
                 u"{}\u00B1{}".format(means.f1, cis.f1),
-                u"{}\u00B1{}".format(means.auc, cis.auc),
             ])
         print(table)
 
@@ -1571,10 +1570,10 @@ class ARDSDetectionModel(object):
     def print_aggregate_results(self):
         print "Aggregate Stats"
         table = PrettyTable()
-        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'auc', 'f1']
+        table.field_names = ['patho', 'accuracy', 'recall', 'specificity', 'precision', 'f1']
         for n, patho in self.pathos.items():
             row = self.aggregate_results[(self.aggregate_results.patho == patho) & (self.aggregate_results.model_idx==-1)].iloc[0]
-            table.add_row([patho, row.accuracy, row.sensitivity, row.specificity, row.precision, row.auc, row.f1])
+            table.add_row([patho, row.accuracy, row.sensitivity, row.specificity, row.precision, row.f1])
         print(table)
 
         if len(self.feature_ranks) > 0:
