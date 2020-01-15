@@ -35,6 +35,7 @@ from sklearn.svm import SVC
 
 from collate import Dataset
 from metrics import *
+from results import ModelCollection
 
 sns.set()
 sns.set_style('ticks')
@@ -70,27 +71,7 @@ class ARDSDetectionModel(object):
         if self.args.load_model:
             self.models.append(pd.read_pickle(self.args.load_model))
 
-        results_cols = ["patient", "patho"]
-        for n, patho in self.pathos.items():
-            results_cols.extend([
-                "{}_tps".format(patho), "{}_fps".format(patho),
-                "{}_tns".format(patho), "{}_fns".format(patho),
-                "{}_votes".format(patho),
-            ])
-        self.pred_threshes = np.arange(0, 100+self.args.thresh_interval, self.args.thresh_interval)
-        results_cols += ["model_idx", "prediction", 'pred_frac', 'model_auc', 'run_num']
-        results_cols += ['prediction@{}'.format(i) for i in self.pred_threshes]
-        # self.results is meant to be a high level dataframe of aggregated statistics
-        # from our model.
-        #
-        # self.patient_results is redundant with self.results. We should probably find
-        # a way to consolidate the two
-        self.results = pd.DataFrame([], columns=results_cols)
-        self.aggregate_results = None
-        self.thresh_eval = None
-        self.patient_results = pd.DataFrame(
-            [], columns=['patient'] + ["{}_votes".format(patho) for _, patho in self.pathos.items()] + ['actual']
-        )
+        self.results = ModelCollection()
         # self.patient_predictions is a dictionary of low level data for each patient that
         # consists of x, y, and prediction frames for each patient. The format is like so:
         #
@@ -818,28 +799,26 @@ class ARDSDetectionModel(object):
                     pd.to_pickle(self.models[-1], "model-" + self.args.save_model_to)
 
                 predictions = pd.Series(self.models[-1].predict(prediction_set), index=y_test.index)
-                results = self.compute_model_results(y_test, predictions, model_idx, iter_n, False)
+                self.results.add_model(y_test, predictions, self.data.loc[y_test.index], model_idx)
 
             if not self.args.no_print_results:
-                self.print_model_stats(model_idx)
+                self.results.calc_fold_stats(.5, model_idx)
                 print("-------------------")
 
             if self.args.print_thresh_table:
                 self.print_thresh_table(model_idx)
 
-        self.get_aggregate_results_and_thresh_eval(self.results, -1)
+        self.results.calc_aggregate_stats(.5)
 
         if self.args.plot_roc:
             self.plot_roc_curve(self.results.patho.tolist(), self.results.pred_frac.tolist(), 'ROC curve for all patients')
 
-        if not self.args.no_print_results and 'kfold' in self.args.split_type:
-            self.print_fold_averages()
-
         if not self.args.no_print_results:
-            self.print_aggregate_results()
-            self.get_youdens_results(self.results, self.thresh_eval[self.thresh_eval.model_idx==-1], True)
+            self.results.get_youdens_results()
+
         if self.args.plot_predictions or self.args.plot_disease_evolution:
             self.plot_predictions()
+
         if self.args.plot_pairwise_features:
             self.plot_pairwise_feature_visualizations()
 
@@ -848,9 +827,6 @@ class ARDSDetectionModel(object):
 
         if self.args.plot_roc_all_folds:
             self.plot_roc_all_folds()
-
-        if self.args.plot_f1_sensitivity_all_folds:
-            self.plot_f1_sensitivity_all_folds()
 
         if self.args.plot_sen_spec_vs_thresh_all_folds:
             self.plot_sen_spec_vs_thresh_all_folds()
@@ -891,126 +867,6 @@ class ARDSDetectionModel(object):
         plt.ylabel('score')
         plt.grid()
         plt.show()
-
-    def plot_f1_sensitivity_all_folds(self):
-        f1s_other = []
-        f1s_ards = []
-
-        for model_idx in self.results.model_idx.unique():
-            fold_preds = self.thresh_eval[self.thresh_eval.model_idx == model_idx]
-            for n, patho in self.pathos.items():
-                row = fold_preds[fold_preds.patho == patho].iloc[0]
-                y = [row['f1@{}'.format(i)] for i in self.pred_threshes]
-                if patho == 'ARDS':
-                    f1s = f1s_ards
-                else:
-                    f1s = f1s_other
-                f1s.append(np.array(y))
-                if not self.args.no_plot_individual_folds:
-                    plt.plot(self.pred_threshes, y, lw=1, alpha=.3)
-
-        mean_f1s_ards = np.mean(f1s_ards, axis=0)
-        mean_f1s_other = np.mean(f1s_other, axis=0)
-        harmonic_mean = 2 * (mean_f1s_other * mean_f1s_ards) / (mean_f1s_other + mean_f1s_ards)
-        optimal_pred_frac = self.pred_threshes[np.argmax(harmonic_mean)]
-        optimal_table = PrettyTable()
-        optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec', 'f1']
-        for n, patho in self.pathos.items():
-            rows = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx != -1)]
-            mean_opt_sen = round(rows['sen@{}'.format(optimal_pred_frac)].mean(), 4)
-            mean_opt_spec = round(rows['spec@{}'.format(optimal_pred_frac)].mean(), 4)
-            mean_opt_f1 = round(rows['f1@{}'.format(optimal_pred_frac)].mean(), 4)
-            mean_opt_prec = round((mean_opt_f1 * mean_opt_sen) / (2*mean_opt_sen - mean_opt_f1), 4)
-            optimal_table.add_row([patho, optimal_pred_frac, mean_opt_sen, mean_opt_spec, mean_opt_prec, mean_opt_f1])
-        print(optimal_table)
-
-        plt.plot(self.pred_threshes, mean_f1s_ards, color='b', label=r'Mean ARDS F1', lw=2, alpha=.8)
-        plt.plot(self.pred_threshes, mean_f1s_other, color='seagreen', label=r'Mean non-ARDS F1', lw=2, alpha=.8)
-
-        std_f1s_ards = np.std(f1s_ards, axis=0)
-        upper = np.minimum(mean_f1s_ards + std_f1s_ards, 1)
-        lower = np.maximum(mean_f1s_ards - std_f1s_ards, 0)
-        #plt.fill_between(mean_thresh, lower, upper, color='grey', alpha=.2, label=r'$\pm$ 1 std. dev.')
-        std_f1s_other = np.std(f1s_other, axis=0)
-        upper = np.minimum(mean_f1s_other + std_f1s_other, 1)
-        lower = np.maximum(mean_f1s_other - std_f1s_other, 0)
-        #plt.fill_between(mean_thresh, lower, upper, color='grey', alpha=.2, label=r'$\pm$ 1 std. dev.')
-        plt.legend()
-        plt.xlabel('Percentage ARDS votes')
-        plt.ylabel('F1-score')
-        plt.title('F1-score sensitivity analysis all folds')
-        plt.show()
-
-    def plot_roc_all_folds(self):
-        tprs = []
-        aucs = []
-        threshes = set()
-        mean_fpr = np.linspace(0, 1, 100)
-
-        for model_idx in self.results.model_idx.unique():
-            fold_preds = self.results[self.results.model_idx == model_idx]
-            fpr, tpr, thresh = roc_curve(fold_preds.patho, fold_preds.pred_frac)
-            threshes.update(thresh)
-            tprs.append(interp(mean_fpr, fpr, tpr))
-            tprs[-1][0] = 0.0
-            roc_auc = auc(fpr, tpr)
-            aucs.append(roc_auc)
-            if not self.args.no_plot_individual_folds:
-                plt.plot(fpr, tpr, lw=1, alpha=0.3,
-                         label='ROC fold %d (AUC = %0.2f)' % (model_idx+1, roc_auc))
-
-        plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
-                 label='Chance', alpha=.8)
-
-        mean_tpr = np.mean(tprs, axis=0)
-        mean_tpr[-1] = 1.0
-        mean_auc = auc(mean_fpr, mean_tpr)
-        std_auc = np.std(aucs)
-
-        # 1.96 is a constant for normal distribution and 95% CI
-        ci = 1.96 * (std_auc / len(aucs))
-        plt.plot(mean_fpr, mean_tpr, color='b',
-                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, ci),
-                 lw=2, alpha=.8)
-
-        std_tpr = np.std(tprs, axis=0)
-        tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
-        tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-        if not self.args.no_plot_individual_folds:
-            plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
-                             label=r'$\pm$ 1 std. dev.')
-
-        plt.xlim([-0.05, 1.05])
-        plt.ylim([-0.05, 1.05])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.legend(loc="lower right")
-        plt.show()
-
-    def get_youdens_results(self, results, thresh_eval, at_end_of_n):
-        all_tpr, all_fpr, threshs = janky_roc(results.patho.values, results.pred_frac.values)
-        j_scores = np.array(all_tpr) - np.array(all_fpr)
-        tmp = zip(j_scores, threshs)
-        ordered_j_scores = []
-        for score, thresh in tmp:
-            if thresh in self.pred_threshes / 100.0:
-                ordered_j_scores.append((score, thresh))
-        ordered_j_scores = sorted(ordered_j_scores, key=lambda x: (x[0], -x[1]))
-        optimal_pred_frac = int(ordered_j_scores[-1][1] * 100)
-        # get closest prediction thresh
-        optimal_table = PrettyTable()
-        optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec', 'f1']
-        for n, patho in self.pathos.items():
-            rows = thresh_eval[(thresh_eval.patho == patho)]
-            mean_opt_sen = rows['sen@{}'.format(optimal_pred_frac)].mean()
-            mean_opt_spec = round(rows['spec@{}'.format(optimal_pred_frac)].mean(), 4)
-            mean_opt_f1 = rows['f1@{}'.format(optimal_pred_frac)].mean()
-            mean_opt_prec = round((mean_opt_f1 * mean_opt_sen) / (2*mean_opt_sen - mean_opt_f1), 4)
-            optimal_table.add_row([patho, optimal_pred_frac, round(mean_opt_sen, 4), mean_opt_spec, mean_opt_prec, round(mean_opt_f1, 4)])
-
-        if not self.args.no_print_results and at_end_of_n:
-            print('Results via Youdens threshold')
-            print(optimal_table)
 
     def aggregate_grid_search_results(self):
         print("---- Grid Search Final Results ----")
@@ -1589,18 +1445,6 @@ class ARDSDetectionModel(object):
                 table.add_row([feature, self.feature_score_rounding(score), ", ".join(feature_all_ranks[feature])])
             print(table)
 
-        if self.args.plot_f1_sensitivity:
-            for n, patho in self.pathos.items():
-                row = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx == -1)].iloc[0]
-                y = [row['f1@{}'.format(i)] for i in self.pred_threshes]
-                plt.plot(self.pred_threshes, y, label='{} F1-score'.format(patho))
-            plt.legend()
-            plt.title('F1-score sensitivity analysis')
-            plt.ylabel('Score')
-            plt.xlabel('Percentage ARDS votes')
-            plt.grid()
-            plt.show()
-
         if self.args.plot_sen_spec_vs_thresh:
             patho = 'ARDS'
             row = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.model_idx == -1)].iloc[0]
@@ -1704,7 +1548,6 @@ def build_parser():
     parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
     parser.add_argument('--select-from-model-thresh', type=float, default=.2, help='Threshold to use for feature importances when using lasso and gini selection')
     parser.add_argument('--plot-roc', action='store_true', help='Plot AUC curve')
-    parser.add_argument('--plot-f1-sensitivity', action='store_true', help='Plot F1-score sensitivity analysis')
     parser.add_argument('--plot-sen-spec-vs-thresh', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
     parser.add_argument('--plot-roc-all-folds', action='store_true', help='Plot ROC curve but with individual roc curves and then an average.')
     parser.add_argument('--plot-f1-sensitivity-all-folds', action='store_true', help='Plot F1-score sensitivity analysis')
