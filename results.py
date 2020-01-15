@@ -1,17 +1,21 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
+from scipy import interp
+from sklearn.metrics import auc, roc_curve
 
 from metrics import janky_roc
 
 
 class PatientResults(object):
-    def __init__(self, patient_id, ground_truth):
+    def __init__(self, patient_id, ground_truth, fold_idx):
         self.patient_id = patient_id
         self.other_votes = 0
         self.ards_votes = 0
         self.ground_truth = ground_truth
         self.majority_prediction = np.nan
+        self.fold_idx = fold_idx
 
     def set_results(self, predictions):
         for i in predictions:
@@ -30,8 +34,9 @@ class PatientResults(object):
             self.ards_votes,
             self.ards_votes / (float(self.other_votes) + self.ards_votes),
             self.majority_prediction,
+            self.fold_idx,
             self.ground_truth,
-        ]
+        ], ['other_votes', 'ards_votes', 'frac_votes', 'prediction', 'fold_idx', 'ground_truth']
 
     def get_patient_id(self):
         return self.patient_id
@@ -50,14 +55,22 @@ class ModelResults(object):
             pt_gt = y_test.loc[pt_rows.index]
             pt_predictions = predictions.loc[pt_rows.index]
             ground_truth_label = pt_gt.iloc[0]
-            results = PatientResults(pt, ground_truth_label)
+            results = PatientResults(pt, ground_truth_label, self.fold_idx)
             results.set_results(pt_predictions.values)
             self.all_patient_results.append(results)
 
-    def get_patient_results(self):
+    def get_patient_results_dataframe(self):
         tmp = []
         for result in self.all_patient_results:
-            tmp.append(result.to_list())
+            lst, cols = result.to_list()
+            tmp.append(lst)
+        return pd.DataFrame(tmp, columns=cols)
+
+    def get_patient_results_np_array(self):
+        tmp = []
+        for result in self.all_patient_results:
+            lst, cols = result.to_list()
+            tmp.append(lst)
         return np.array(tmp)
 
     def count_predictions(self, threshold):
@@ -74,7 +87,7 @@ class ModelResults(object):
             ])
         stat_cols += ['fold_idx']
 
-        patient_results = self.get_patient_results()
+        patient_results = self.get_patient_results_np_array()
         stat_results = []
         for patho in [0, 1]:
             # The 2 idx is the prediction fraction from the patient results class
@@ -108,7 +121,7 @@ class ModelCollection(object):
         model.set_results(y_test, predictions, x_test)
         self.models.append(model)
 
-    def get_aggregate_results_dataframe(self, threshold):
+    def get_aggregate_predictions_dataframe(self, threshold):
         """
         Get aggregated results of all the dataframes
         """
@@ -118,18 +131,25 @@ class ModelCollection(object):
             tmp.append(results)
         return pd.DataFrame(tmp, columns=cols)
 
-    def get_all_patient_results(self):
-        tmp = [model.get_patient_results() for model in self.models]
+    def get_all_patient_results_np_array(self):
+        tmp = [model.get_patient_results_np_array() for model in self.models]
         return np.concatenate(tmp, axis=0)
 
+    def get_all_patient_results_dataframe(self):
+        tmp = [model.get_patient_results_dataframe() for model in self.models]
+        return pd.concat(tmp, axis=0)
+
     def get_all_patient_results_in_fold(self, fold_idx):
-        tmp = [model.get_patient_results() for model in self.models if model.fold_idx == fold_idx]
+        # if you don't want to reconstitute this all the time you
+        # can probably keep a boolean variable that tells you when you need to remake
+        # and then can store as a global var
+        tmp = [model.get_patient_results_np_array() for model in self.models if model.fold_idx == fold_idx]
         return np.concatenate(tmp, axis=0)
 
     def calc_fold_stats(self, threshold, fold_idx):
         if threshold > 1:
             threshold = threshold / 100.0
-        df = self.get_aggregate_results_dataframe(threshold)
+        df = self.get_aggregate_predictions_dataframe(threshold)
         fold_results = df[df.fold_idx == fold_idx]
         patient_results = self.get_all_patient_results_in_fold(fold_idx)
         self.print_results_table(fold_results, threshold)
@@ -137,8 +157,8 @@ class ModelCollection(object):
     def calc_aggregate_stats(self, threshold):
         if threshold > 1:
             threshold = threshold / 100.0
-        df = self.get_aggregate_results_dataframe(threshold)
-        patient_results = self.get_all_patient_results()
+        df = self.get_aggregate_predictions_dataframe(threshold)
+        patient_results = self.get_all_patient_results_np_array()
         print('---Aggregate Results---')
         self.print_results_table(df, threshold)
 
@@ -149,6 +169,8 @@ class ModelCollection(object):
             stats = self.get_summary_statistics_from_frame(dataframe, patho, threshold)
             cis = (1.96 * stats.std() / np.sqrt(len(stats))).round(3)
             means = stats.mean().round(2)
+            # XXX need to add auc somehow
+            #auc = round(roc_auc_score(results.patho.tolist(), results.pred_frac.tolist()), 4)
             patho_stats = [
                 patho,
                 u"{}\u00B1{}".format(means[0], cis[0]),
@@ -159,22 +181,25 @@ class ModelCollection(object):
         print(table)
 
     def plot_roc_all_folds(self):
+        # I might be able to find confidence std using p(1-p). Nah. we actually cant do
+        # this because polling is using the identity of std from a binomial distribution. So
+        # in order to have conf interval we need some kind of observable std.
         tprs = []
         aucs = []
         threshes = set()
         mean_fpr = np.linspace(0, 1, 100)
+        results = self.get_all_patient_results_dataframe()
 
-        for model_idx in self.results.model_idx.unique():
-            fold_preds = self.results[self.results.model_idx == model_idx]
-            fpr, tpr, thresh = roc_curve(fold_preds.patho, fold_preds.pred_frac)
+        for fold_idx in results.fold_idx.unique():
+            fold_preds = results[results.fold_idx == fold_idx]
+            fpr, tpr, thresh = roc_curve(fold_preds.ground_truth, fold_preds.frac_votes)
             threshes.update(thresh)
             tprs.append(interp(mean_fpr, fpr, tpr))
             tprs[-1][0] = 0.0
             roc_auc = auc(fpr, tpr)
             aucs.append(roc_auc)
-            if not self.args.no_plot_individual_folds:
-                plt.plot(fpr, tpr, lw=1, alpha=0.3,
-                         label='ROC fold %d (AUC = %0.2f)' % (model_idx+1, roc_auc))
+            plt.plot(fpr, tpr, lw=1, alpha=0.3,
+                     label='ROC fold %d (AUC = %0.2f)' % (fold_idx+1, roc_auc))
 
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
                  label='Chance', alpha=.8)
@@ -185,7 +210,9 @@ class ModelCollection(object):
         std_auc = np.std(aucs)
 
         # 1.96 is a constant for normal distribution and 95% CI
-        ci = 1.96 * (std_auc / len(aucs))
+        #
+        # XXX I am doing this inconsistently with where I compute aucs elsewhere.
+        ci = 1.96 * (std_auc / np.sqrt(len(aucs)))
         plt.plot(mean_fpr, mean_tpr, color='b',
                  label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, ci),
                  lw=2, alpha=.8)
@@ -193,9 +220,8 @@ class ModelCollection(object):
         std_tpr = np.std(tprs, axis=0)
         tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
         tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-        if not self.args.no_plot_individual_folds:
-            plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
-                             label=r'$\pm$ 1 std. dev.')
+        plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+                         label=r'$\pm$ 1 std. dev.')
 
         plt.xlim([-0.05, 1.05])
         plt.ylim([-0.05, 1.05])
@@ -204,11 +230,28 @@ class ModelCollection(object):
         plt.legend(loc="lower right")
         plt.show()
 
+    def plot_sen_spec_vs_thresh(self):
+        # XXX need to fix this one up after I finish the ROC work
+        patho = 'ARDS'
+        row = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.fold_idx == -1)].iloc[0]
+        y1 = [row['sen@{}'.format(i)] for i in self.pred_threshes]
+        y2 = [row['spec@{}'.format(i)] for i in self.pred_threshes]
+        plt.plot(self.pred_threshes, y1, label='{} sensitivity'.format(patho))
+        plt.plot(self.pred_threshes, y2, label='{} specificity'.format(patho))
+        plt.legend(loc='lower right')
+        plt.title('Sensitivity v Specificity analysis')
+        plt.ylabel('Score')
+        plt.xlabel('Percentage ARDS votes')
+        plt.ylim(0.0, 1.01)
+        plt.yticks(np.arange(0, 1.01, .1))
+        plt.grid()
+        plt.show()
+
     def get_youdens_results(self):
         """
         Get Youden results for all models derived
         """
-        results = self.get_all_patient_results()
+        results = self.get_all_patient_results_np_array()
         # -1 stands for the ground truth idx, and 2 stands for prediction frac idx
         all_tpr, all_fpr, threshs = janky_roc(results[:, -1], results[:, 2])
         j_scores = np.array(all_tpr) - np.array(all_fpr)
@@ -219,7 +262,7 @@ class ModelCollection(object):
                 ordered_j_scores.append((score, thresh))
         ordered_j_scores = sorted(ordered_j_scores, key=lambda x: (x[0], -x[1]))
         optimal_pred_frac = ordered_j_scores[-1][1]
-        data_at_frac = self.get_aggregate_results_dataframe(optimal_pred_frac)
+        data_at_frac = self.get_aggregate_predictions_dataframe(optimal_pred_frac)
         # get closest prediction thresh
         optimal_table = PrettyTable()
         optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec']
