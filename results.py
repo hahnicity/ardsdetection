@@ -36,7 +36,7 @@ class PatientResults(object):
             self.majority_prediction,
             self.fold_idx,
             self.ground_truth,
-        ], ['other_votes', 'ards_votes', 'frac_votes', 'prediction', 'fold_idx', 'ground_truth']
+        ], ['other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'ground_truth']
 
     def get_patient_id(self):
         return self.patient_id
@@ -141,7 +141,9 @@ class ModelCollection(object):
 
     def get_all_patient_results_dataframe(self):
         tmp = [model.get_patient_results_dataframe() for model in self.models]
-        return pd.concat(tmp, axis=0)
+        df = pd.concat(tmp, axis=0)
+        df.index = range(len(df))
+        return df
 
     def get_all_patient_results_in_fold(self, fold_idx):
         # if you don't want to reconstitute this all the time you
