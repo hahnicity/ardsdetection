@@ -115,6 +115,10 @@ class ModelResults(object):
 class ModelCollection(object):
     def __init__(self):
         self.models = []
+        self.model_results = {
+            'folds': {},
+            'aggregate': None,
+        }
 
     def add_model(self, y_test, predictions, x_test, fold_idx):
         model = ModelResults(fold_idx)
@@ -146,38 +150,59 @@ class ModelCollection(object):
         tmp = [model.get_patient_results_np_array() for model in self.models if model.fold_idx == fold_idx]
         return np.concatenate(tmp, axis=0)
 
-    def calc_fold_stats(self, threshold, fold_idx):
-        if threshold > 1:
+    def calc_fold_stats(self, threshold, fold_idx, print_results=True):
+        if threshold > 1:  # threshold is a percentage
             threshold = threshold / 100.0
         df = self.get_aggregate_predictions_dataframe(threshold)
         fold_results = df[df.fold_idx == fold_idx]
         patient_results = self.get_all_patient_results_in_fold(fold_idx)
-        self.print_results_table(fold_results, threshold)
+        results_df = self.calc_results(fold_results, threshold)
+        self.model_results['folds'][fold_idx] = results_df
+        if print_results:
+            self.print_results_table(results_df)
 
-    def calc_aggregate_stats(self, threshold):
-        if threshold > 1:
+    def calc_aggregate_stats(self, threshold, print_results=True):
+        if threshold > 1:  # threshold is a percentage
             threshold = threshold / 100.0
         df = self.get_aggregate_predictions_dataframe(threshold)
         patient_results = self.get_all_patient_results_np_array()
-        print('---Aggregate Results---')
-        self.print_results_table(df, threshold)
+        results_df = self.calc_results(df, threshold)
+        self.model_results['aggregate'] = results_df
+        if print_results:
+            print('---Aggregate Results---')
+            self.print_results_table(results_df)
 
-    def print_results_table(self, dataframe, threshold):
-        table = PrettyTable()
-        table.field_names = ['patho', 'recall', 'specificity', 'precision']
+    def calc_results(self, dataframe, threshold):
+        columns = ['patho', 'recall', 'spec', 'prec', 'recall_ci', 'spec_ci', 'prec_ci']
+        stats_tmp = []
         for patho in ['other', 'ards']:
             stats = self.get_summary_statistics_from_frame(dataframe, patho, threshold)
             cis = (1.96 * stats.std() / np.sqrt(len(stats))).round(3)
             means = stats.mean().round(2)
             # XXX need to add auc somehow
             #auc = round(roc_auc_score(results.patho.tolist(), results.pred_frac.tolist()), 4)
-            patho_stats = [
+            stats_tmp.append([
                 patho,
-                u"{}\u00B1{}".format(means[0], cis[0]),
-                u"{}\u00B1{}".format(means[1], cis[1]),
-                u"{}\u00B1{}".format(means[2], cis[2]),
+                means[0],
+                means[1],
+                means[2],
+                cis[0],
+                cis[1],
+                cis[2]
+            ])
+        return pd.DataFrame(stats_tmp, columns=columns)
+
+    def print_results_table(self, results_df):
+        table = PrettyTable()
+        table.field_names = ['patho', 'sensitivity', 'specificity', 'precision']
+        for i, row in results_df.iterrows():
+            results_row = [
+                row.patho,
+                u"{}\u00B1{}".format(row.recall, row.recall_ci),
+                u"{}\u00B1{}".format(row.spec, row.spec_ci),
+                u"{}\u00B1{}".format(row.prec, row.prec_ci),
             ]
-            table.add_row(patho_stats)
+            table.add_row(results_row)
         print(table)
 
     def plot_roc_all_folds(self):
