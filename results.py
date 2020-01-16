@@ -9,13 +9,14 @@ from metrics import janky_roc
 
 
 class PatientResults(object):
-    def __init__(self, patient_id, ground_truth, fold_idx):
+    def __init__(self, patient_id, ground_truth, fold_idx, model_idx):
         self.patient_id = patient_id
         self.other_votes = 0
         self.ards_votes = 0
         self.ground_truth = ground_truth
         self.majority_prediction = np.nan
         self.fold_idx = fold_idx
+        self.model_idx = model_idx
 
     def set_results(self, predictions):
         for i in predictions:
@@ -35,17 +36,19 @@ class PatientResults(object):
             self.ards_votes / (float(self.other_votes) + self.ards_votes),
             self.majority_prediction,
             self.fold_idx,
+            self.model_idx,
             self.ground_truth,
-        ], ['other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'ground_truth']
+        ], ['other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'model_idx', 'ground_truth']
 
     def get_patient_id(self):
         return self.patient_id
 
 
 class ModelResults(object):
-    def __init__(self, fold_idx):
+    def __init__(self, fold_idx, model_idx):
         self.fold_idx = fold_idx
         self.all_patient_results = []
+        self.model_idx = model_idx
 
     def set_results(self, y_test, predictions, x_test):
         """
@@ -55,7 +58,7 @@ class ModelResults(object):
             pt_gt = y_test.loc[pt_rows.index]
             pt_predictions = predictions.loc[pt_rows.index]
             ground_truth_label = pt_gt.iloc[0]
-            results = PatientResults(pt, ground_truth_label, self.fold_idx)
+            results = PatientResults(pt, ground_truth_label, self.fold_idx, self.model_idx)
             results.set_results(pt_predictions.values)
             self.all_patient_results.append(results)
 
@@ -119,11 +122,13 @@ class ModelCollection(object):
             'folds': {},
             'aggregate': None,
         }
+        self.model_idx = 0
 
     def add_model(self, y_test, predictions, x_test, fold_idx):
-        model = ModelResults(fold_idx)
+        model = ModelResults(fold_idx, self.model_idx)
         model.set_results(y_test, predictions, x_test)
         self.models.append(model)
+        self.model_idx += 1
 
     def get_aggregate_predictions_dataframe(self, threshold):
         """
@@ -141,24 +146,29 @@ class ModelCollection(object):
 
     def get_all_patient_results_dataframe(self):
         tmp = [model.get_patient_results_dataframe() for model in self.models]
-        df = pd.concat(tmp, axis=0)
-        df.index = range(len(df))
-        return df
+        return pd.concat(tmp, axis=0, ignore_index=True)
 
-    def get_all_patient_results_in_fold(self, fold_idx):
+    def get_all_patient_results_in_fold_np_array(self, fold_idx):
         # if you don't want to reconstitute this all the time you
         # can probably keep a boolean variable that tells you when you need to remake
         # and then can store as a global var
         tmp = [model.get_patient_results_np_array() for model in self.models if model.fold_idx == fold_idx]
         return np.concatenate(tmp, axis=0)
 
+    def get_all_patient_results_in_fold_dataframe(self, fold_idx):
+        # if you don't want to reconstitute this all the time you
+        # can probably keep a boolean variable that tells you when you need to remake
+        # and then can store as a global var
+        tmp = [model.get_patient_results_dataframe() for model in self.models if model.fold_idx == fold_idx]
+        return pd.concat(tmp, axis=0, ignore_index=True)
+
     def calc_fold_stats(self, threshold, fold_idx, print_results=True):
         if threshold > 1:  # threshold is a percentage
             threshold = threshold / 100.0
         df = self.get_aggregate_predictions_dataframe(threshold)
         fold_results = df[df.fold_idx == fold_idx]
-        patient_results = self.get_all_patient_results_in_fold(fold_idx)
-        results_df = self.calc_results(fold_results, threshold)
+        patient_results = self.get_all_patient_results_in_fold_dataframe(fold_idx)
+        results_df = self.calc_results(fold_results, threshold, patient_results)
         self.model_results['folds'][fold_idx] = results_df
         if print_results:
             self.print_results_table(results_df)
@@ -167,42 +177,45 @@ class ModelCollection(object):
         if threshold > 1:  # threshold is a percentage
             threshold = threshold / 100.0
         df = self.get_aggregate_predictions_dataframe(threshold)
-        patient_results = self.get_all_patient_results_np_array()
-        results_df = self.calc_results(df, threshold)
+        patient_results = self.get_all_patient_results_dataframe()
+        results_df = self.calc_results(df, threshold, patient_results)
         self.model_results['aggregate'] = results_df
         if print_results:
             print('---Aggregate Results---')
             self.print_results_table(results_df)
 
-    def calc_results(self, dataframe, threshold):
-        columns = ['patho', 'recall', 'spec', 'prec', 'recall_ci', 'spec_ci', 'prec_ci']
+    def calc_results(self, dataframe, threshold, patient_results):
+        columns = ['patho', 'recall', 'spec', 'prec', 'auc', 'recall_ci', 'spec_ci', 'prec_ci', 'auc_ci']
         stats_tmp = []
+        aucs = self.get_auc_results(patient_results)
+        auc_ci = (1.96 * aucs.std() / np.sqrt(len(aucs))).round(3)
         for patho in ['other', 'ards']:
             stats = self.get_summary_statistics_from_frame(dataframe, patho, threshold)
             cis = (1.96 * stats.std() / np.sqrt(len(stats))).round(3)
             means = stats.mean().round(2)
-            # XXX need to add auc somehow
-            #auc = round(roc_auc_score(results.patho.tolist(), results.pred_frac.tolist()), 4)
             stats_tmp.append([
                 patho,
                 means[0],
                 means[1],
                 means[2],
+                aucs.mean().round(2),
                 cis[0],
                 cis[1],
-                cis[2]
+                cis[2],
+                auc_ci,
             ])
         return pd.DataFrame(stats_tmp, columns=columns)
 
     def print_results_table(self, results_df):
         table = PrettyTable()
-        table.field_names = ['patho', 'sensitivity', 'specificity', 'precision']
+        table.field_names = ['patho', 'sensitivity', 'specificity', 'precision', 'auc']
         for i, row in results_df.iterrows():
             results_row = [
                 row.patho,
                 u"{}\u00B1{}".format(row.recall, row.recall_ci),
                 u"{}\u00B1{}".format(row.spec, row.spec_ci),
                 u"{}\u00B1{}".format(row.prec, row.prec_ci),
+                u"{}\u00B1{}".format(row.auc, row.auc_ci),
             ]
             table.add_row(results_row)
         print(table)
@@ -315,3 +328,11 @@ class ModelCollection(object):
         precs = dataframe[tps] / (dataframe[fps] + dataframe[tps])
         stats = pd.concat([sens, specs, precs], axis=1)
         return stats
+
+    def get_auc_results(self, patient_results):
+        group = patient_results.groupby('model_idx')
+        aucs = []
+        for i, model_pts in group:
+            fpr, tpr, thresholds = roc_curve(model_pts.ground_truth, model_pts.frac_votes, pos_label=1)
+            aucs.append(auc(fpr, tpr))
+        return np.array(aucs)
