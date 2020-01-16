@@ -271,7 +271,6 @@ class ModelCollection(object):
         plt.show()
 
     def plot_sen_spec_vs_thresh(self, thresh_interval):
-        # XXX need to fix this one up after I finish the ROC work
         y1 = []
         y2 = []
         pred_threshes = range(0, 100+thresh_interval, thresh_interval)
@@ -283,14 +282,15 @@ class ModelCollection(object):
             y1.append(means[0])
             y2.append(means[1])
         patho = 'ARDS'
-        plt.plot(pred_threshes, y1, label='{} sensitivity'.format(patho))
-        plt.plot(pred_threshes, y2, label='{} specificity'.format(patho))
+        plt.plot(pred_threshes, y1, label='{} sensitivity'.format(patho), lw=2)
+        plt.plot(pred_threshes, y2, label='{} specificity'.format(patho), lw=2)
         plt.legend(loc='lower right')
         plt.title('Sensitivity v Specificity analysis')
         plt.ylabel('Score')
         plt.xlabel('Percentage ARDS votes')
         plt.ylim(0.0, 1.01)
         plt.yticks(np.arange(0, 1.01, .1))
+        plt.xticks(np.arange(0, 101, 10))
         plt.grid()
         plt.show()
 
