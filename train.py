@@ -825,6 +825,9 @@ class ARDSDetectionModel(object):
         if self.args.plot_roc_all_folds:
             self.results.plot_roc_all_folds()
 
+        if self.args.plot_sen_spec_vs_thresh:
+            self.results.plot_sen_spec_vs_thresh(self.args.thresh_interval)
+
     def aggregate_grid_search_results(self):
         print("---- Grid Search Final Results ----")
         print("----")

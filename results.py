@@ -232,6 +232,8 @@ class ModelCollection(object):
 
         for fold_idx in results.fold_idx.unique():
             fold_preds = results[results.fold_idx == fold_idx]
+            model_aucs = self.get_auc_results(fold_preds)
+            auc_ci = 1.96 * model_aucs.std() / np.sqrt(len(model_aucs))
             fpr, tpr, thresh = roc_curve(fold_preds.ground_truth, fold_preds.frac_votes)
             threshes.update(thresh)
             tprs.append(interp(mean_fpr, fpr, tpr))
@@ -239,7 +241,7 @@ class ModelCollection(object):
             roc_auc = auc(fpr, tpr)
             aucs.append(roc_auc)
             plt.plot(fpr, tpr, lw=1, alpha=0.3,
-                     label='ROC fold %d (AUC = %0.2f)' % (fold_idx+1, roc_auc))
+                     label='ROC fold %d (AUC = %0.2f $\pm$ %0.2f)' % (fold_idx+1, roc_auc, auc_ci))
 
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
                  label='Chance', alpha=.8)
@@ -249,19 +251,17 @@ class ModelCollection(object):
         mean_auc = auc(mean_fpr, mean_tpr)
         std_auc = np.std(aucs)
 
-        # 1.96 is a constant for normal distribution and 95% CI
-        #
-        # XXX I am doing this inconsistently with where I compute aucs elsewhere.
-        ci = 1.96 * (std_auc / np.sqrt(len(aucs)))
+        model_aucs = self.get_auc_results(results)
+        auc_ci = 1.96 * (model_aucs.std() / np.sqrt(len(model_aucs)))
         plt.plot(mean_fpr, mean_tpr, color='b',
-                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, ci),
+                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, auc_ci),
                  lw=2, alpha=.8)
 
         std_tpr = np.std(tprs, axis=0)
         tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
         tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
         plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
-                         label=r'$\pm$ 1 std. dev.')
+                         label=r'1 std. dev.')
 
         plt.xlim([-0.05, 1.05])
         plt.ylim([-0.05, 1.05])
@@ -270,14 +270,21 @@ class ModelCollection(object):
         plt.legend(loc="lower right")
         plt.show()
 
-    def plot_sen_spec_vs_thresh(self):
+    def plot_sen_spec_vs_thresh(self, thresh_interval):
         # XXX need to fix this one up after I finish the ROC work
+        y1 = []
+        y2 = []
+        pred_threshes = range(0, 100+thresh_interval, thresh_interval)
+        for i in pred_threshes:
+            thresh = i / 100.0
+            df = self.get_aggregate_predictions_dataframe(thresh)
+            stats = self.get_summary_statistics_from_frame(df, 'ards', thresh)
+            means = stats.mean()
+            y1.append(means[0])
+            y2.append(means[1])
         patho = 'ARDS'
-        row = self.thresh_eval[(self.thresh_eval.patho == patho) & (self.thresh_eval.fold_idx == -1)].iloc[0]
-        y1 = [row['sen@{}'.format(i)] for i in self.pred_threshes]
-        y2 = [row['spec@{}'.format(i)] for i in self.pred_threshes]
-        plt.plot(self.pred_threshes, y1, label='{} sensitivity'.format(patho))
-        plt.plot(self.pred_threshes, y2, label='{} specificity'.format(patho))
+        plt.plot(pred_threshes, y1, label='{} sensitivity'.format(patho))
+        plt.plot(pred_threshes, y2, label='{} specificity'.format(patho))
         plt.legend(loc='lower right')
         plt.title('Sensitivity v Specificity analysis')
         plt.ylabel('Score')
