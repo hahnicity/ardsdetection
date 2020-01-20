@@ -87,6 +87,16 @@ class ARDSDetectionModel(object):
         # }
         self.patient_predictions = {}
 
+    def get_bootstrap_idxs(self):
+        unique_patients = self.data['patient'].unique()
+        idxs = []
+        for _ in range(self.args.n_bootstraps):
+            pts = list(np.random.choice(unique_patients, size=self.args.bootstrap_n, replace=self.args.no_bootstrap_replace))
+            train_patient_data = self.data.query('patient in {}'.format(pts))
+            test_patient_data = self.data.query('patient not in {}'.format(pts))
+            idxs.append((train_patient_data.index, test_patient_data.index))
+        return idxs
+
     def get_holdout_random_idxs(self):
         """
         Split patients according to some kind of random split with proportions defined
@@ -256,6 +266,8 @@ class ARDSDetectionModel(object):
             idxs = [(x.index, [])]
         elif self.args.split_type == 'test_all':
             idxs = [([], x.index)]
+        elif self.args.split_type == 'bootstrap':
+            idxs = self.get_bootstrap_idxs()
 
         if len(idxs) == 0:
             raise NoIndicesError('No indices were found for split. Did you enter your arguments correctly?')
@@ -801,14 +813,14 @@ class ARDSDetectionModel(object):
                 predictions = pd.Series(self.models[-1].predict(prediction_set), index=y_test.index)
                 self.results.add_model(y_test, predictions, self.data.loc[y_test.index], model_idx)
 
+            self.results.calc_fold_stats(.5, model_idx, print_results=not self.args.no_print_results)
             if not self.args.no_print_results:
-                self.results.calc_fold_stats(.5, model_idx)
                 print("-------------------")
 
-            if self.args.print_thresh_table:
-                self.print_thresh_table(model_idx)
+        self.results.calc_aggregate_stats(.5, print_results=not self.args.no_print_results)
 
-        self.results.calc_aggregate_stats(.5)
+        if self.args.print_thresh_table:
+            self.results.print_thresh_table(self.args.thresh_interval)
 
         if not self.args.no_print_results:
             self.results.get_youdens_results()
@@ -1171,30 +1183,6 @@ class ARDSDetectionModel(object):
             sns.pairplot(all_rows, vars=to_plot[i:i+max_features_per_plot], hue="preds")
             plt.show()
 
-    def print_thresh_table(self, model_idx):
-        # XXX doesn't actually work with multiple runs now because of the iloc[0]. need to fix
-        table = PrettyTable()
-        table.field_names = ['patho', 'vote %', 'sen', 'spec', 'prec']
-        for thresh in range(0, 100+self.args.thresh_interval, self.args.thresh_interval):
-            ards_results = self.thresh_eval[(self.thresh_eval.patho == 'ARDS') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
-            other_results = self.thresh_eval[(self.thresh_eval.patho == 'OTHER') & (self.thresh_eval.model_idx==model_idx)].iloc[0]
-            sen = 'sen@{}'.format(thresh)
-            spec = 'spec@{}'.format(thresh)
-            f1 = 'f1@{}'.format(thresh)
-            sen_ards = ards_results[sen]
-            spec_ards = ards_results[spec]
-            f1_ards = ards_results[f1]
-            prec_ards = round((f1_ards * sen_ards) / (2*sen_ards - f1_ards), 4)
-            sen_other = other_results[sen]
-            spec_other = other_results[spec]
-            f1_other = other_results[f1]
-            prec_other = round((f1_other * sen_other) / (2*sen_other - f1_other), 4)
-            row = ['ARDS', thresh, sen_ards, spec_ards, prec_ards]
-            table.add_row(row)
-            row = ['OTHER', thresh, sen_other, spec_other, prec_other]
-            table.add_row(row)
-        print(table)
-
     def print_aggregate_results(self):
         if len(self.feature_ranks) > 0:
             feature_avg_scores = []
@@ -1264,7 +1252,7 @@ def build_parser():
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
     parser.add_argument("--grid-search", action="store_true", help='perform a grid search  for model hyperparameters')
     parser.add_argument("--grid-search-kfolds", type=int, default=4, help='number of validation kfolds to use in the grid search')
-    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'kfold_random', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
+    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'kfold_random', 'train_all', 'test_all', 'bootstrap'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
     parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
     parser.add_argument('--load-model')
     parser.add_argument('--load-scaler')
@@ -1301,6 +1289,9 @@ def build_parser():
     parser.add_argument('--print-thresh-table', action='store_true')
     parser.add_argument('--n-runs', type=int, help='number of times to run the model', default=10)
     parser.add_argument('--print-feature-selection', action='store_true')
+    parser.add_argument('--bootstrap-n-pts', type=int, default=80, help='number of patients to sample on a single bootstrap')
+    parser.add_argument('--no-bootstrap-replace', action='store_false', help='Dont use replacement when sampling patients with bootstrap')
+    parser.add_argument('--n-bootstraps', type=int, default=10, help='number of bootstrapped patient samplees to take')
     return parser
 
 
