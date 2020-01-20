@@ -241,7 +241,7 @@ class ModelCollection(object):
             roc_auc = auc(fpr, tpr)
             aucs.append(roc_auc)
             plt.plot(fpr, tpr, lw=1, alpha=0.3,
-                     label='ROC fold %d (AUC = %0.2f $\pm$ %0.2f)' % (fold_idx+1, roc_auc, auc_ci))
+                     label='ROC fold %d (AUC = %0.2f $\pm$ %0.3f)' % (fold_idx+1, roc_auc, auc_ci))
 
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
                  label='Chance', alpha=.8)
@@ -254,7 +254,7 @@ class ModelCollection(object):
         model_aucs = self.get_auc_results(results)
         auc_ci = 1.96 * (model_aucs.std() / np.sqrt(len(model_aucs)))
         plt.plot(mean_fpr, mean_tpr, color='b',
-                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, auc_ci),
+                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.3f)' % (mean_auc, auc_ci),
                  lw=2, alpha=.8)
 
         std_tpr = np.std(tprs, axis=0)
@@ -316,7 +316,14 @@ class ModelCollection(object):
         for patho in ['other', 'ards']:
             stats = self.get_summary_statistics_from_frame(data_at_frac, patho, optimal_pred_frac)
             means = stats.mean().round(2)
-            optimal_table.add_row([patho, optimal_pred_frac, means[0], means[1], means[2]])
+            cis = (1.96 * stats.std() / np.sqrt(len(stats))).round(3)
+            optimal_table.add_row([
+                patho,
+                optimal_pred_frac,
+                u"{}\u00B1{}".format(means[0], cis[0]),
+                u"{}\u00B1{}".format(means[1], cis[1]),
+                u"{}\u00B1{}".format(means[2], cis[2]),
+            ])
 
         print('---Youden Results---')
         print(optimal_table)
@@ -343,3 +350,24 @@ class ModelCollection(object):
             fpr, tpr, thresholds = roc_curve(model_pts.ground_truth, model_pts.frac_votes, pos_label=1)
             aucs.append(auc(fpr, tpr))
         return np.array(aucs)
+
+    def print_thresh_table(self, thresh_interval):
+        assert 1 <= thresh_interval <= 100
+        table = PrettyTable()
+        table.field_names = ['patho', 'vote %', 'sen', 'spec', 'prec']
+        pred_threshes = range(0, 100+thresh_interval, thresh_interval)
+        for i in pred_threshes:
+            thresh = i / 100.0
+            df = self.get_aggregate_predictions_dataframe(thresh)
+            stats = self.get_summary_statistics_from_frame(df, 'ards', thresh)
+            cis = (1.96 * stats.std() / np.sqrt(len(stats))).round(3)
+            means = stats.mean().round(2)
+            row = [
+                'ards',
+                i,
+                u"{}\u00B1{}".format(means[0], cis[0]),
+                u"{}\u00B1{}".format(means[1], cis[1]),
+                u"{}\u00B1{}".format(means[2], cis[2]),
+            ]
+            table.add_row(row)
+        print(table)

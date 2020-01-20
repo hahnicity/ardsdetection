@@ -25,10 +25,9 @@ def lasso(df, model_args):
         # XXX well the fs results don't seem determ. but what to do instead?
         if fs_results is not None and n_selected_features in fs_results.n_features.values:
             continue
-        tmp = model.aggregate_results.copy()
+        tmp = model.results.model_results['aggregate'].copy()
         tmp['n_features'] = n_selected_features
         tmp['selection_thresh'] = thresh
-        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'], axis=1)
         if fs_results is None:
             fs_results = tmp
         else:
@@ -52,10 +51,9 @@ def gini(df, model_args):
         # XXX well the fs results don't seem determ. but what to do instead?
         if fs_results is not None and n_selected_features in fs_results.n_features.values:
             continue
-        tmp = model.aggregate_results.copy()
+        tmp = model.results.model_results['aggregate'].copy()
         tmp['n_features'] = n_selected_features
         tmp['selection_thresh'] = thresh
-        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'], axis=1)
         if fs_results is None:
             fs_results = tmp
         else:
@@ -72,9 +70,8 @@ def pca(df, model_args):
         model_args.n_new_features = n
         model = ARDSDetectionModel(model_args, df)
         model.train_and_test()
-        tmp = model.aggregate_results.copy()
+        tmp = model.results.model_results['aggregate'].copy()
         tmp['n_features'] = n
-        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'], axis=1)
         if fs_results is None:
             fs_results = tmp
         else:
@@ -91,9 +88,8 @@ def n_feature_selection(df, model_args):
         model_args.n_new_features = n
         model = ARDSDetectionModel(model_args, df)
         model.train_and_test()
-        tmp = model.aggregate_results.copy()
+        tmp = model.results.model_results['aggregate'].copy()
         tmp['n_features'] = n
-        tmp = tmp.drop(['tps', 'fps', 'tns', 'fns'], axis=1)
         for feature in model_features:
             tmp[feature] = 1 if feature in model.selected_features else 0
 
@@ -112,13 +108,16 @@ def main():
     parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA', 'ATS_MODEL'], default='RF')
 
     parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method', required=True)
-    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all'], help='All splits are performed so there is no test/train patient overlap', required=True)
+    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all', 'bootstrap'], help='All splits are performed so there is no test/train patient overlap', required=True)
     parser.add_argument('--savefig', help='save figure to specified location instead of plotting')
     parser.add_argument('--print-results-table', action='store_true')
     parser.add_argument('--save-results')
     parser.add_argument('--load-results')
     parser.add_argument('-sp', '--post-hour', type=int, required=True)
     parser.add_argument('--n-runs', type=int, default=10)
+    parser.add_argument('--bootstrap-n', type=int, default=80)
+    parser.add_argument('--no-bootstrap-replace', action='store_false', help='Dont use replacement when sampling patients with bootstrap')
+    parser.add_argument('--n-bootstraps', type=int, default=10, help='number of bootstrapped patient samplees to take')
     main_args = parser.parse_args()
 
     model_args = build_parser().parse_args([])
@@ -130,6 +129,9 @@ def main():
     model_args.frame_size = 100
     model_args.n_runs = main_args.n_runs
     model_args.post_hour = main_args.post_hour
+    model_args.bootstrap_n = main_args.bootstrap_n
+    model_args.no_bootstrap_replace = main_args.no_bootstrap_replace
+    model_args.n_bootstraps = main_args.n_bootstraps
 
     if not main_args.load_results:
         df = pd.read_pickle(main_args.from_pickle)
@@ -148,9 +150,9 @@ def main():
     if main_args.save_results:
         results.to_pickle(main_args.save_results)
 
-    ards_results = results[(results.patho == 'ARDS') & (results.model_idx == -1)]
+    ards_results = results[(results.patho == 'ards')]
     plt.plot(ards_results['n_features'].values.astype(int), ards_results.auc.values, label='AUC')
-    plt.plot(ards_results['n_features'].values.astype(int), ards_results.accuracy.values, label='Accuracy')
+    ards_results['f1'] = 2 * (ards_results['prec'] * ards_results['recall']) / (ards_results['prec'] + ards_results['recall'])
     plt.plot(ards_results['n_features'].values.astype(int), ards_results.f1.values, label='ARDS F1')
     features_min = ards_results['n_features'].min()
     features_max = ards_results['n_features'].max()
