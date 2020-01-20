@@ -716,7 +716,7 @@ class Dataset(object):
                 }
             }
         elif (self.test_post_hour or self.test_start_hour_delta or self.test_frame_size) and self.split_type in ['holdout', 'holdout_random', 'train_all', 'test_all']:
-            raise NotImplementedError('Havent implemented {} split with varying test params'.format(self.args.split_type))
+            raise NotImplementedError('Havent implemented {} split with varying test params'.format(self.split_type))
         elif self.split_type == 'holdout':
             cohorts = {
                 'train': {

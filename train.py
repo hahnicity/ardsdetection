@@ -401,8 +401,16 @@ class ARDSDetectionModel(object):
                             'majority': {
                                 "max_depth": 6,
                                 "max_features": 'auto',
-                                'criterion': 'entropy',
+                                'criterion': 'gini',
                                 'n_estimators': 5,
+                                'oob_score': True,
+                                'random_state': np.random.RandomState(),
+                            },
+                            'average': {
+                                "max_depth": 16,
+                                "max_features": 'auto',
+                                'criterion': 'gini',
+                                'n_estimators': 29,
                                 'oob_score': True,
                                 'random_state': np.random.RandomState(),
                             },
@@ -430,14 +438,21 @@ class ARDSDetectionModel(object):
                             },
                         },
                     },
-                    # XXX these are params from 24 hr model. should be changed
                     'holdout': {
                         100: {
                             'majority': {
-                                "max_depth": 6,
-                                "max_features": 'auto',
-                                'criterion': 'entropy',
-                                'n_estimators': 5,
+                                "max_depth": 3,
+                                "max_features": 'log2',
+                                'criterion': 'gini',
+                                'n_estimators': 10,
+                                'oob_score': True,
+                                'random_state': np.random.RandomState(),
+                            },
+                            'average': {
+                                "max_depth": 2,
+                                "max_features": 'log2',
+                                'criterion': 'gini',
+                                'n_estimators': 40,
                                 'oob_score': True,
                                 'random_state': np.random.RandomState(),
                             },
@@ -469,10 +484,18 @@ class ARDSDetectionModel(object):
                     'holdout': {
                         100: {
                             'majority': {
-                                "max_depth": 6,
+                                "max_depth": 2,
                                 "max_features": 'auto',
-                                'criterion': 'entropy',
-                                'n_estimators': 5,
+                                'criterion': 'gini',
+                                'n_estimators': 15,
+                                'oob_score': True,
+                                'random_state': np.random.RandomState(),
+                            },
+                            'average': {
+                                "max_depth": 2,
+                                "max_features": 'auto',
+                                'criterion': 'gini',
+                                'n_estimators': 13,
                                 'oob_score': True,
                                 'random_state': np.random.RandomState(),
                             },
@@ -981,7 +1004,7 @@ class ARDSDetectionModel(object):
 
     def _perform_grid_search(self, cls, params, x_train, y_train):
         x_train_expanded = self.data.loc[x_train.index]
-        cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, self.args.grid_search_kfolds)
+        cv = self.get_cross_patient_kfold_idxs(x_train_expanded, y_train, self.args.grid_search_kfolds, False)
         # sklearn does CV indexing with iloc and not loc. Annoying, but can be worked around
         cv = self.convert_loc_to_iloc(x_train, cv)
         # keep 1 core around to actually do other stuff
