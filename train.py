@@ -91,7 +91,7 @@ class ARDSDetectionModel(object):
         unique_patients = self.data['patient'].unique()
         idxs = []
         for _ in range(self.args.n_bootstraps):
-            pts = list(np.random.choice(unique_patients, size=self.args.bootstrap_n, replace=self.args.no_bootstrap_replace))
+            pts = list(np.random.choice(unique_patients, size=self.args.bootstrap_n_pts, replace=self.args.no_bootstrap_replace))
             train_patient_data = self.data.query('patient in {}'.format(pts))
             test_patient_data = self.data.query('patient not in {}'.format(pts))
             idxs.append((train_patient_data.index, test_patient_data.index))
