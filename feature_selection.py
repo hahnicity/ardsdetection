@@ -160,7 +160,7 @@ def main():
     plt.xlabel('N features')
     plt.legend()
     plt.grid()
-    plt.title('{} with {}'.format(main_args.feature_selection_method, main_args.algo))
+    plt.title('{} with {} {} - sp{}'.format(main_args.feature_selection_method, main_args.algo, main_args.split_type, main_args.post_hour))
     if main_args.savefig:
         plt.savefig(main_args.savefig)
     else:
