@@ -354,14 +354,14 @@ class ModelCollection(object):
         table = PrettyTable()
         table.field_names = ['patho', 'vote %', 'sen', 'spec', 'prec', 'npv']
         pred_threshes = range(0, 100+thresh_interval, thresh_interval)
-        patient_results = self.get_patient_results_dataframe()
+        patient_results = self.get_all_patient_results_dataframe()
         uniq_pts = len(patient_results.patient_id.unique())
         for i in pred_threshes:
             thresh = i / 100.0
             df = self.get_aggregate_predictions_dataframe(thresh)
             stats = self.get_summary_statistics_from_frame(df, 'ards', thresh)
-            cis = (1.96 * np.sqrt(means*(1-means)/uniq_pts)).round(3)
             means = stats.mean().round(2)
+            cis = (1.96 * np.sqrt(means*(1-means)/uniq_pts)).round(3)
             row = [
                 'ards',
                 i,
