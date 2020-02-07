@@ -188,6 +188,8 @@ class ModelCollection(object):
         columns = ['patho', 'recall', 'spec', 'prec', 'auc', 'recall_ci', 'spec_ci', 'prec_ci', 'auc_ci']
         stats_tmp = []
         aucs = self.get_auc_results(patient_results)
+        # XXX np.percentile might be helpful for this as well. Probably better because it
+        # will be an empirical sample.
         auc_ci = (1.96 * aucs.std() / np.sqrt(len(aucs))).round(3)
         for patho in ['other', 'ards']:
             stats = self.get_summary_statistics_from_frame(dataframe, patho, threshold)
