@@ -31,6 +31,7 @@ class PatientResults(object):
 
     def to_list(self):
         return [
+            self.patient_id,
             self.other_votes,
             self.ards_votes,
             self.ards_votes / (float(self.other_votes) + self.ards_votes),
@@ -38,7 +39,7 @@ class PatientResults(object):
             self.fold_idx,
             self.model_idx,
             self.ground_truth,
-        ], ['other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'model_idx', 'ground_truth']
+        ], ['patient_id', 'other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'model_idx', 'ground_truth']
 
     def get_patient_id(self):
         return self.patient_id
@@ -69,12 +70,12 @@ class ModelResults(object):
             tmp.append(lst)
         return pd.DataFrame(tmp, columns=cols)
 
-    def get_patient_results_np_array(self):
+    def get_patient_results(self):
         tmp = []
         for result in self.all_patient_results:
             lst, cols = result.to_list()
             tmp.append(lst)
-        return np.array(tmp)
+        return pd.DataFrame(tmp, columns=cols)
 
     def count_predictions(self, threshold):
         """
@@ -90,7 +91,7 @@ class ModelResults(object):
             ])
         stat_cols += ['fold_idx']
 
-        patient_results = self.get_patient_results_np_array()
+        patient_results = self.get_patient_results()
         stat_results = []
         for patho in [0, 1]:
             # The 2 idx is the prediction fraction from the patient results class
@@ -100,17 +101,17 @@ class ModelResults(object):
             # predictions made for the pathophysiology. For instance if our pathophys
             # is 0 then we want the fraction votes for ARDS to be < prediction threshold.
             if patho == 0:
-                eq_mask = patient_results[:, 2] < threshold
-                neq_mask = patient_results[:, 2] >= threshold
+                eq_mask = patient_results.frac_votes < threshold
+                neq_mask = patient_results.frac_votes >= threshold
             else:
-                eq_mask = patient_results[:, 2] >= threshold
-                neq_mask = patient_results[:, 2] < threshold
+                eq_mask = patient_results.frac_votes >= threshold
+                neq_mask = patient_results.frac_votes < threshold
 
             stat_results.extend([
-                len(patient_results[eq_mask][patient_results[eq_mask, -1] == patho]),
-                len(patient_results[neq_mask][patient_results[neq_mask, -1] != patho]),
-                len(patient_results[eq_mask][patient_results[eq_mask, -1] != patho]),
-                len(patient_results[neq_mask][patient_results[neq_mask, -1] == patho]),
+                len(patient_results[eq_mask][patient_results.loc[eq_mask, 'ground_truth'] == patho]),
+                len(patient_results[neq_mask][patient_results.loc[neq_mask, 'ground_truth'] != patho]),
+                len(patient_results[eq_mask][patient_results.loc[eq_mask, 'ground_truth'] != patho]),
+                len(patient_results[neq_mask][patient_results.loc[neq_mask, 'ground_truth'] == patho]),
             ])
         return stat_results + [self.fold_idx], stat_cols
 
@@ -140,20 +141,9 @@ class ModelCollection(object):
             tmp.append(results)
         return pd.DataFrame(tmp, columns=cols)
 
-    def get_all_patient_results_np_array(self):
-        tmp = [model.get_patient_results_np_array() for model in self.models]
-        return np.concatenate(tmp, axis=0)
-
     def get_all_patient_results_dataframe(self):
         tmp = [model.get_patient_results_dataframe() for model in self.models]
         return pd.concat(tmp, axis=0, ignore_index=True)
-
-    def get_all_patient_results_in_fold_np_array(self, fold_idx):
-        # if you don't want to reconstitute this all the time you
-        # can probably keep a boolean variable that tells you when you need to remake
-        # and then can store as a global var
-        tmp = [model.get_patient_results_np_array() for model in self.models if model.fold_idx == fold_idx]
-        return np.concatenate(tmp, axis=0)
 
     def get_all_patient_results_in_fold_dataframe(self, fold_idx):
         # if you don't want to reconstitute this all the time you
@@ -185,38 +175,41 @@ class ModelCollection(object):
             self.print_results_table(results_df)
 
     def calc_results(self, dataframe, threshold, patient_results):
-        columns = ['patho', 'recall', 'spec', 'prec', 'auc', 'recall_ci', 'spec_ci', 'prec_ci', 'auc_ci']
+        columns = ['patho', 'recall', 'spec', 'prec', 'npv', 'auc', 'recall_ci', 'spec_ci', 'prec_ci', 'npv_ci', 'auc_ci']
         stats_tmp = []
         aucs = self.get_auc_results(patient_results)
-        # XXX np.percentile might be helpful for this as well. Probably better because it
-        # will be an empirical sample.
-        auc_ci = (1.96 * aucs.std() / np.sqrt(len(aucs))).round(3)
+        uniq_pts = len(patient_results.patient_id.unique())
+        mean_auc = aucs.mean().round(2)
+        auc_ci = (1.96 * np.sqrt(mean_auc * (1-mean_auc) / uniq_pts)).round(3)
         for patho in ['other', 'ards']:
             stats = self.get_summary_statistics_from_frame(dataframe, patho, threshold)
-            cis = (1.96 * stats.std() / np.sqrt(len(stats))).round(3)
             means = stats.mean().round(2)
+            cis = (1.96 * np.sqrt(means*(1-means)/uniq_pts)).round(3)
             stats_tmp.append([
                 patho,
                 means[0],
                 means[1],
                 means[2],
+                means[3],
                 aucs.mean().round(2),
                 cis[0],
                 cis[1],
                 cis[2],
+                cis[3],
                 auc_ci,
             ])
         return pd.DataFrame(stats_tmp, columns=columns)
 
     def print_results_table(self, results_df):
         table = PrettyTable()
-        table.field_names = ['patho', 'sensitivity', 'specificity', 'precision', 'auc']
+        table.field_names = ['patho', 'sensitivity', 'specificity', 'precision', 'npv', 'auc']
         for i, row in results_df.iterrows():
             results_row = [
                 row.patho,
                 u"{}\u00B1{}".format(row.recall, row.recall_ci),
                 u"{}\u00B1{}".format(row.spec, row.spec_ci),
                 u"{}\u00B1{}".format(row.prec, row.prec_ci),
+                u"{}\u00B1{}".format(row.npv, row.npv_ci),
                 u"{}\u00B1{}".format(row.auc, row.auc_ci),
             ]
             table.add_row(results_row)
@@ -231,11 +224,11 @@ class ModelCollection(object):
         threshes = set()
         mean_fpr = np.linspace(0, 1, 100)
         results = self.get_all_patient_results_dataframe()
+        uniq_pts = len(results.patient_id.unique())
 
         for fold_idx in results.fold_idx.unique():
             fold_preds = results[results.fold_idx == fold_idx]
             model_aucs = self.get_auc_results(fold_preds)
-            auc_ci = 1.96 * model_aucs.std() / np.sqrt(len(model_aucs))
             fpr, tpr, thresh = roc_curve(fold_preds.ground_truth, fold_preds.frac_votes)
             threshes.update(thresh)
             tprs.append(interp(mean_fpr, fpr, tpr))
@@ -243,20 +236,20 @@ class ModelCollection(object):
             roc_auc = auc(fpr, tpr)
             aucs.append(roc_auc)
             plt.plot(fpr, tpr, lw=1, alpha=0.3,
-                     label='ROC fold %d (AUC = %0.2f $\pm$ %0.2f)' % (fold_idx+1, roc_auc, auc_ci))
+                     label='ROC fold %d (AUC = %0.2f)' % (fold_idx+1, roc_auc))
 
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
                  label='Chance', alpha=.8)
 
         mean_tpr = np.mean(tprs, axis=0)
         mean_tpr[-1] = 1.0
-        mean_auc = auc(mean_fpr, mean_tpr)
+        mean_auc = round(auc(mean_fpr, mean_tpr), 2)
         std_auc = np.std(aucs)
 
         model_aucs = self.get_auc_results(results)
-        auc_ci = 1.96 * (model_aucs.std() / np.sqrt(len(model_aucs)))
+        auc_ci = (1.96 * np.sqrt(mean_auc * (1-mean_auc) / uniq_pts)).round(3)
         plt.plot(mean_fpr, mean_tpr, color='b',
-                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, auc_ci),
+                 label=r'Mean ROC (AUC = %0.2f $\pm$ %0.3f)' % (mean_auc, auc_ci),
                  lw=2, alpha=.8)
 
         std_tpr = np.std(tprs, axis=0)
@@ -300,9 +293,10 @@ class ModelCollection(object):
         """
         Get Youden results for all models derived
         """
-        results = self.get_all_patient_results_np_array()
+        results = self.get_all_patient_results_dataframe()
+        uniq_pts = len(results.patient_id.unique())
         # -1 stands for the ground truth idx, and 2 stands for prediction frac idx
-        all_tpr, all_fpr, threshs = janky_roc(results[:, -1], results[:, 2])
+        all_tpr, all_fpr, threshs = janky_roc(results.ground_truth, results.frac_votes)
         j_scores = np.array(all_tpr) - np.array(all_fpr)
         tmp = zip(j_scores, threshs)
         ordered_j_scores = []
@@ -314,11 +308,19 @@ class ModelCollection(object):
         data_at_frac = self.get_aggregate_predictions_dataframe(optimal_pred_frac)
         # get closest prediction thresh
         optimal_table = PrettyTable()
-        optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec']
+        optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec', 'npv']
         for patho in ['other', 'ards']:
             stats = self.get_summary_statistics_from_frame(data_at_frac, patho, optimal_pred_frac)
             means = stats.mean().round(2)
-            optimal_table.add_row([patho, optimal_pred_frac, means[0], means[1], means[2]])
+            cis = (1.96 * np.sqrt(means*(1-means)/uniq_pts)).round(3)
+            optimal_table.add_row([
+                patho,
+                optimal_pred_frac,
+                u"{}\u00B1{}".format(means[0], cis[0]),
+                u"{}\u00B1{}".format(means[1], cis[1]),
+                u"{}\u00B1{}".format(means[2], cis[2]),
+                u"{}\u00B1{}".format(means[3], cis[3]),
+            ])
 
         print('---Youden Results---')
         print(optimal_table)
@@ -335,7 +337,8 @@ class ModelCollection(object):
         sens = dataframe[tps] / (dataframe[tps] + dataframe[fns])
         specs = dataframe[tns] / (dataframe[tns] + dataframe[fps])
         precs = dataframe[tps] / (dataframe[fps] + dataframe[tps])
-        stats = pd.concat([sens, specs, precs], axis=1)
+        npvs = dataframe[tns] / (dataframe[tns] + dataframe[fns])
+        stats = pd.concat([sens, specs, precs, npvs], axis=1)
         return stats
 
     def get_auc_results(self, patient_results):
@@ -345,3 +348,27 @@ class ModelCollection(object):
             fpr, tpr, thresholds = roc_curve(model_pts.ground_truth, model_pts.frac_votes, pos_label=1)
             aucs.append(auc(fpr, tpr))
         return np.array(aucs)
+
+    def print_thresh_table(self, thresh_interval):
+        assert 1 <= thresh_interval <= 100
+        table = PrettyTable()
+        table.field_names = ['patho', 'vote %', 'sen', 'spec', 'prec', 'npv']
+        pred_threshes = range(0, 100+thresh_interval, thresh_interval)
+        patient_results = self.get_all_patient_results_dataframe()
+        uniq_pts = len(patient_results.patient_id.unique())
+        for i in pred_threshes:
+            thresh = i / 100.0
+            df = self.get_aggregate_predictions_dataframe(thresh)
+            stats = self.get_summary_statistics_from_frame(df, 'ards', thresh)
+            means = stats.mean().round(2)
+            cis = (1.96 * np.sqrt(means*(1-means)/uniq_pts)).round(3)
+            row = [
+                'ards',
+                i,
+                u"{}\u00B1{}".format(means[0], cis[0]),
+                u"{}\u00B1{}".format(means[1], cis[1]),
+                u"{}\u00B1{}".format(means[2], cis[2]),
+                u"{}\u00B1{}".format(means[3], cis[3]),
+            ]
+            table.add_row(row)
+        print(table)

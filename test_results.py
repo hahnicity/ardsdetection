@@ -15,6 +15,7 @@ def test_patient_results_sunny_day():
     patient_a.set_results([1] * 60 + [0] * 50)
     lst, cols = patient_a.to_list()
     assert_list_equal(lst, [
+        'a',
         50,
         60,
         60 / 110.0,
@@ -24,6 +25,7 @@ def test_patient_results_sunny_day():
         1,
     ])
     assert_list_equal(cols, [
+        'patient_id',
         'other_votes',
         'ards_votes',
         'frac_votes',
@@ -142,26 +144,14 @@ def test_get_summary_statistics_from_frame():
         [10, 9, 0, 1],
     ], columns=['ards_tps_0.55', 'ards_tns_0.55', 'ards_fps_0.55', 'ards_fns_0.55'])
     expected = pd.DataFrame([
-        [1, 1, 1],
-        [1, 10.0/12, 8.0/10],
-        [5.0/9, 6.0/11, 5.0/10],
-        [10.0/11, 1, 1],
+        [1, 1, 1, 1],
+        [1, 10.0/12, 8.0/10, 1],
+        [5.0/9, 6.0/11, 5.0/10, 6/10.0],
+        [10.0/11, 1, 1, 9.0/10],
     ])
     model_collection = ModelCollection()
     res = model_collection.get_summary_statistics_from_frame(dataframe, 'ards', .55)
     assert (res == expected).all().all()
-
-
-def test_get_all_patient_results_in_fold_np_array():
-    model_collection = ModelCollection()
-    pred1 = pd.Series([0] * 50 + [1] * 60)
-    pred2 = pd.Series([0] * 110 + [1] * 40)
-    model_collection.add_model(y_test_fold1, pred1, x_test_fold1, 1)
-    model_collection.add_model(y_test_fold2, pred2, x_test_fold2, 2)
-    res = model_collection.get_all_patient_results_in_fold_np_array(1)
-    assert (np.array([[50, 60, 60 / 110.0, 1, 1, 0, 1]]) == res).all()
-    res = model_collection.get_all_patient_results_in_fold_np_array(2)
-    assert (np.array([[110, 40, 40 / 150.0, 0, 2, 1, 0]]) == res).all()
 
 
 def test_get_all_patient_results_dataframe():
@@ -171,9 +161,9 @@ def test_get_all_patient_results_dataframe():
     model_collection.add_model(y_test_fold1, pred1, x_test_fold1, 1)
     model_collection.add_model(y_test_fold2, pred2, x_test_fold2, 2)
     expected = pd.DataFrame([
-        [50, 60, 60 / 110.0, 1, 1, 0, 1],
-        [110, 40, 40 / 150.0, 0, 2, 1, 0],
-    ], columns=['other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'model_idx', 'ground_truth'])
+        ['a', 50, 60, 60 / 110.0, 1, 1, 0, 1],
+        ['b', 110, 40, 40 / 150.0, 0, 2, 1, 0],
+    ], columns=['patient_id', 'other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'model_idx', 'ground_truth'])
     res = model_collection.get_all_patient_results_dataframe()
     assert (expected == res).all().all()
 
