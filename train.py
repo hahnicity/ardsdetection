@@ -1111,15 +1111,19 @@ class ARDSDetectionModel(object):
 
         if self.args.plot_dtw_with_disease:
             hourly_predictions = self.results.get_all_hourly_preds()
+            for _, pt_rows in hourly_predictions.groupby('patient_id'):
+                pt = pt_rows.iloc[0].patient_id
+                dtw_lib.analyze_patient(pt, self.args.data_path, self.args.cohort_description, self.args.dtw_cache_dir)
+
             if not self.args.tiled_disease_evol:
+                # ensure all results are processed and cached first
+
                 for _, pt_rows in hourly_predictions.groupby('patient_id'):
                     self.plot_disease_evolution(pt_rows, cmap)
-                    pt = pt_rows.iloc[0].patient_id
-                    dtw = dtw_lib.analyze_patient(pt, self.args.data_path, self.args.cohort_description, self.args.dtw_cache_dir)
-                    ax2 = plt.gca().twinx()
-                    ax2.plot(dtw[:, 0], dtw[:, 1], lw=1, label='DTW', color='#663a3e')
-                    ax2.set_ylabel('DTW Score')
+                    self.plot_dtw_patient_data(pt_rows, True, 1, True)
                     plt.show()
+            else:
+                self.plot_tiled_disease_evol(hourly_predictions, cmap, True)
 
         if self.args.plot_disease_evolution:
             # Plot fraction of votes for a single patient over 24 hrs.
@@ -1129,26 +1133,67 @@ class ARDSDetectionModel(object):
                     self.plot_disease_evolution(pt_rows, cmap)
                     plt.show()
             else:
-                # just focus on ARDS for now.
-                #
-                # want to have true ARDS, false pos ARDS, false neg ARDS, and true neg ARDS
-                true_pos = self.results[(self.results.patho == 1) & (self.results.prediction == 1)].patient
-                true_neg = self.results[(self.results.patho != 1) & (self.results.prediction != 1)].patient
-                false_pos = self.results[(self.results.patho != 1) & (self.results.prediction == 1)].patient
-                false_neg = self.results[(self.results.patho == 1) & (self.results.prediction != 1)].patient
-                for arr, title in [
-                    (true_pos, 'ARDS True Pos'),
-                    (true_neg, 'ARDS True Neg'),
-                    (false_pos, 'ARDS False Pos'),
-                    (false_neg, 'ARDS False Neg'),
-                ]:
-                    for idx, pt in enumerate(arr):
-                        layout = int(ceil(sqrt(len(arr))))
-                        plt.suptitle(title)
-                        pt_rows, pt_preds = self.patient_predictions[pt]
-                        plt.subplot(layout, layout, idx+1)
-                        self.plot_disease_evolution(pt, pt_rows, pt_preds, cmap, legend=False, fontsize=6, xylabel=False, xy_visible=False)
-                    plt.show()
+                self.plot_tiled_disease_evol(hourly_predictions, cmap, False)
+
+    def plot_dtw_patient_data(self, pt_rows, set_label, lw, xy_visible):
+        """
+        Plot DTW for an individual patient
+
+        :param pt_rows: Rows grouped by patient from the dataframe received from
+                        self.results.get_all_hourly_preds
+        """
+        pt = pt_rows.iloc[0].patient_id
+        dtw = dtw_lib.analyze_patient(pt, self.args.data_path, self.args.cohort_description, self.args.dtw_cache_dir)
+        ax2 = plt.gca().twinx()
+        ax2.plot(dtw[:, 0], dtw[:, 1], lw=lw, label='DTW', color='#663a3e')
+        if set_label:
+            ax2.set_ylabel('DTW Score')
+        if not xy_visible:
+            ax2.set_yticks([])
+            ax2.set_xticks([])
+
+    def plot_tiled_disease_evol(self, hourly_predictions, cmap, plot_with_dtw):
+        """
+        just focus on ARDS for now.
+
+        want to have true ARDS, false pos ARDS, false neg ARDS, and true neg ARDS
+        """
+        pts = self.results.get_all_patient_results_dataframe()
+        tps, tns, fps, fns = [], [], [], []
+        for i, rows in pts.groupby('patient_id'):
+            pt = rows.iloc[0].patient_id
+            total_votes = rows[['other_votes', 'ards_votes']].sum().sum()
+            ards_votes = rows['ards_votes'].sum()
+            ground_truth = rows.iloc[0].ground_truth
+            if ards_votes / float(total_votes) >= .5:
+                pred = 1
+            else:
+                pred = 0
+
+            if pred == 1 and ground_truth == 1:
+                tps.append(pt)
+            elif pred == 0 and ground_truth == 0:
+                tns.append(pt)
+            elif pred == 1 and ground_truth == 0:
+                fps.append(pt)
+            elif pred != 1 and ground_truth == 1:
+                fns.append(pt)
+
+        for arr, title in [
+            (tps, 'ARDS True Pos'),
+            (tns, 'ARDS True Neg'),
+            (fps, 'ARDS False Pos'),
+            (fns, 'ARDS False Neg'),
+        ]:
+            for idx, pt in enumerate(arr):
+                layout = int(ceil(sqrt(len(arr))))
+                plt.suptitle(title)
+                pt_rows = hourly_predictions[hourly_predictions.patient_id == pt]
+                plt.subplot(layout, layout, idx+1)
+                self.plot_disease_evolution(pt_rows, cmap, legend=False, fontsize=6, xylabel=False, xy_visible=False)
+                if plot_with_dtw:
+                    self.plot_dtw_patient_data(pt_rows, False, .08, False)
+            plt.show()
 
     def plot_disease_evolution(self, pt_rows, cmap, legend=True, fontsize=11, xylabel=True, xy_visible=True):
         """
