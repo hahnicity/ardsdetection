@@ -52,7 +52,20 @@ def dtw_analyze(file_gen_list, n_breaths, rolling_av_len):
     return np.append([np.nan]*(rolling_av_len-1), rolling_av), rel_bns, timestamps
 
 
-def analyze_patient(patient_id, dataset_path, cohort_file):
+def analyze_patient(patient_id, dataset_path, cohort_file, cache_dir):
+    if not os.path.exists(cache_dir):
+        os.mkdir(cache_dir)
+
+    if not os.path.exists(os.path.join(cache_dir, patient_id)):
+        os.mkdir(os.path.join(cache_dir, patient_id))
+
+    n_breaths = 4
+    rolling_len = 5
+    cache_file = "{}_n{}_rolling{}.npy".format(patient_id, n_breaths, rolling_len)
+    cache_file_path = os.path.join(cache_dir, patient_id, cache_file)
+    if os.path.exists(cache_file_path):
+        return np.load(cache_file_path)
+
     files = glob(os.path.join(dataset_path, 'experiment1/all_data/raw', patient_id, '*.raw.npy'))
     desc = pd.read_csv(cohort_file).drop_duplicates(subset=['Patient Unique Identifier'])
 
@@ -74,5 +87,6 @@ def analyze_patient(patient_id, dataset_path, cohort_file):
     hrs = [(ts - start_time).total_seconds() / (60 * 60) for ts in timestamps]
     arr = np.array([hrs, dtw_scores]).T
     arr = arr[np.argsort(arr[:, 0])]
+    np.save(cache_file_path, arr)
     # return an array of factional hours to their corresponding DTW scoring
     return arr

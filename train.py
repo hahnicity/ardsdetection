@@ -1112,7 +1112,7 @@ class ARDSDetectionModel(object):
                 for _, pt_rows in hourly_predictions.groupby('patient_id'):
                     self.plot_disease_evolution(pt_rows, cmap)
                     pt = pt_rows.iloc[0].patient_id
-                    dtw = dtw_lib.analyze_patient(pt, self.args.data_path, self.args.cohort_description)
+                    dtw = dtw_lib.analyze_patient(pt, self.args.data_path, self.args.cohort_description, self.args.dtw_cache_dir)
                     ax2 = plt.gca().twinx()
                     ax2.plot(dtw[:, 0], dtw[:, 1], lw=1, label='DTW', color='#663a3e')
                     ax2.set_ylabel('DTW Score')
@@ -1329,6 +1329,7 @@ def build_parser():
     parser.add_argument('--no-bootstrap-replace', action='store_false', help='Dont use replacement when sampling patients with bootstrap')
     parser.add_argument('--n-bootstraps', type=int, default=10, help='number of bootstrapped patient samplees to take')
     parser.add_argument('--plot-dtw-with-disease', action='store_true', help='Plot DTW observations by hour versus patient disease evolution')
+    parser.add_argument('--dtw-cache-dir', default='dtw_cache')
     return parser
 
 
