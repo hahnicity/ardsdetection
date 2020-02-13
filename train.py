@@ -72,19 +72,7 @@ class ARDSDetectionModel(object):
             self.models.append(pd.read_pickle(self.args.load_model))
 
         self.results = ModelCollection()
-        # self.patient_predictions is a dictionary of low level data for each patient that
-        # consists of x, y, and prediction frames for each patient. The format is like so:
-        #
-        # {
-        #   patient: (
-        #       x+y,
-        #       predictions
-        #   ),
-        #   patient2: (
-        #       ...
-        #   )
-        #   ...
-        # }
+        # XXX this var is unused, and anything relying on it will break
         self.patient_predictions = {}
 
     def get_bootstrap_idxs(self):
@@ -1119,9 +1107,10 @@ class ARDSDetectionModel(object):
 
         if self.args.plot_disease_evolution:
             # Plot fraction of votes for a single patient over 24 hrs.
+            hourly_predictions = self.results.get_all_hourly_preds()
             if not self.args.tiled_disease_evol:
-                for pt, (pt_rows, pt_preds) in sorted(self.patient_predictions.items()):
-                    self.plot_disease_evolution(pt, pt_rows, pt_preds, cmap)
+                for _, pt_rows in hourly_predictions.groupby('patient_id'):
+                    self.plot_disease_evolution(pt_rows, cmap)
                     plt.show()
             else:
                 # just focus on ARDS for now.
@@ -1145,18 +1134,21 @@ class ARDSDetectionModel(object):
                         self.plot_disease_evolution(pt, pt_rows, pt_preds, cmap, legend=False, fontsize=6, xylabel=False, xy_visible=False)
                     plt.show()
 
-    def plot_disease_evolution(self, pt, pt_rows, pt_preds, cmap, legend=True, fontsize=11, xylabel=True, xy_visible=True):
-        pt_rows['pred'] = pt_preds
-        hour_preds = pt_rows[['hour', 'pred']]
+    def plot_disease_evolution(self, pt_rows, cmap, legend=True, fontsize=11, xylabel=True, xy_visible=True):
+        """
+        :param pt_rows:
+        :param cmap: color map palette.
+        """
+        pt = pt_rows.iloc[0].patient_id
         bar_data = [[0] * len(self.pathos) for _ in range(24)]
         for hour in range(0, 24):
-            hour_frame = hour_preds[hour_preds.hour == hour]
-            counts = hour_frame.pred.value_counts()
-            for n in self.pathos:
-                try:
-                    bar_data[hour][n] = counts[n] / float(counts.sum())
-                except (IndexError, KeyError):
-                    continue
+            ards_colname = 'hour_{}_ards_votes'.format(hour)
+            other_colname = 'hour_{}_other_votes'.format(hour)
+            colnames = [other_colname, ards_colname]
+            pt_rows[colnames]
+            all_votes = pt_rows[colnames].sum().sum()
+            bar_data[hour] = [pt_rows[other_colname].sum() / all_votes, pt_rows[ards_colname].sum() / all_votes]
+
         plots = []
         bottom = np.zeros(24)
         for n in self.pathos:
@@ -1170,9 +1162,17 @@ class ARDSDetectionModel(object):
             plt.xlabel('Hour', fontsize=fontsize)
         plt.xlim(-.8, 23.8)
         if legend:
+            votes_cols = list(set(pt_rows.columns).difference(['patient_id']))
+            all_votes = pt_rows[votes_cols].sum().sum()
+            ards_vote_cols = ['hour_{}_ards_votes'.format(hour) for hour in range(24)]
+            other_vote_cols = ['hour_{}_other_votes'.format(hour) for hour in range(24)]
+            mapping = {
+                'Non-ARDS_percent': round(pt_rows[other_vote_cols].sum().sum() / all_votes, 3) * 100,
+                'ARDS_percent': round(pt_rows[ards_vote_cols].sum().sum() / all_votes, 3) * 100,
+            }
+
             plt.legend([
-                "{}: {}%".format(patho, round(len(pt_preds[pt_preds == n]) / float(len(pt_preds)), 3)*100)
-                for n, patho in self.pathos.items()
+                "{}: {}%".format(patho, mapping['{}_percent'.format(patho)]) for patho in ['Non-ARDS', 'ARDS']
             ], fontsize=fontsize)
         if not xy_visible:
             plt.yticks([])
