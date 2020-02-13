@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from cohort_tools.non_phasic_analysis import perform_patient_hour_mapping
-from cohort_tools.quality_check import find_hourly_coverage
+from cohort_tools.non_phasic_analysis import perform_patient_time_mapping
+from cohort_tools.quality_check import find_time_coverage
 
 
 def plot_patient(idx, patient, coverage, patho, hours):
@@ -89,8 +89,8 @@ def main():
     phases = phases.rename(columns={'vent_start_time': 'vent_start', 'Patient Unique Identifier': 'patient'})
     phases['vent_end'] = pd.to_datetime(phases.vent_start) + pd.Timedelta(hours=24)
 
-    hour_idxs = perform_patient_hour_mapping(df, phases, 'no')
-    coverage = find_hourly_coverage(df, hour_idxs)
+    hour_idxs = perform_patient_time_mapping(df, phases, 'h', 'vent_start', 'vent_end')
+    coverage = find_time_coverage(df, hour_idxs)
 
     # analyze 24 hr coverage
     analyze_coverage(coverage, ards_patients, other_patients, 24)

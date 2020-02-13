@@ -17,9 +17,12 @@ class PatientResults(object):
         self.majority_prediction = np.nan
         self.fold_idx = fold_idx
         self.model_idx = model_idx
+        # the intention is that this will map hour to the number of predictions made
+        # for non-ARDS and ARDS
+        self.hourly_preds = {i: [np.nan, np.nan] for i in range(24)}
 
-    def set_results(self, predictions):
-        for i in predictions:
+    def set_results(self, predictions, x_test_pt):
+        for i in predictions.values:
             if i == 0:
                 self.other_votes += 1
             elif i == 1:
@@ -28,6 +31,11 @@ class PatientResults(object):
         # at least in python 2.7 int() essentially acts as math.floor
         ards_percentage = int(100 * (self.ards_votes / float(len(predictions))))
         self.majority_prediction = 1 if self.ards_votes >= self.other_votes else 0
+        x_test_pt['pred'] = predictions
+        grouping = x_test_pt[['hour', 'pred']].groupby('hour')
+        for i, rows in grouping:
+            ards_count = rows.pred.sum()
+            self.hourly_preds[rows.iloc[0].hour] = [len(rows) - ards_count, ards_count]
 
     def to_list(self):
         return [
@@ -41,8 +49,13 @@ class PatientResults(object):
             self.ground_truth,
         ], ['patient_id', 'other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'model_idx', 'ground_truth']
 
-    def get_patient_id(self):
-        return self.patient_id
+    def get_hourly_preds(self):
+        results = [self.patient_id]
+        columns = ['patient_id']
+        for hour, preds in self.hourly_preds.items():
+            results.extend(preds)
+            columns.extend(['hour_{}_other_votes'.format(hour), 'hour_{}_ards_votes'.format(hour)])
+        return results, columns
 
 
 class ModelResults(object):
@@ -60,7 +73,7 @@ class ModelResults(object):
             pt_predictions = predictions.loc[pt_rows.index]
             ground_truth_label = pt_gt.iloc[0]
             results = PatientResults(pt, ground_truth_label, self.fold_idx, self.model_idx)
-            results.set_results(pt_predictions.values)
+            results.set_results(pt_predictions, pt_rows)
             self.all_patient_results.append(results)
 
     def get_patient_results_dataframe(self):
@@ -74,6 +87,13 @@ class ModelResults(object):
         tmp = []
         for result in self.all_patient_results:
             lst, cols = result.to_list()
+            tmp.append(lst)
+        return pd.DataFrame(tmp, columns=cols)
+
+    def get_patient_hourly_preds(self):
+        tmp = []
+        for result in self.all_patient_results:
+            lst, cols = result.get_hourly_preds()
             tmp.append(lst)
         return pd.DataFrame(tmp, columns=cols)
 
@@ -140,6 +160,10 @@ class ModelCollection(object):
             results, cols = model.count_predictions(threshold)
             tmp.append(results)
         return pd.DataFrame(tmp, columns=cols)
+
+    def get_all_hourly_preds(self):
+        tmp = [model.get_patient_hourly_preds() for model in self.models]
+        return pd.concat(tmp, ignore_index=True)
 
     def get_all_patient_results_dataframe(self):
         tmp = [model.get_patient_results_dataframe() for model in self.models]
