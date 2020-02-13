@@ -334,7 +334,7 @@ class ModelCollection(object):
         data_at_frac = self.get_aggregate_predictions_dataframe(optimal_pred_frac)
         # get closest prediction thresh
         optimal_table = PrettyTable()
-        optimal_table.field_names = ['patho', '% votes', 'sen', 'spec', 'prec', 'npv']
+        optimal_table.field_names = ['patho', '% votes', 'acc', 'sen', 'spec', 'prec', 'npv']
         for patho in ['other', 'ards']:
             stats = self.get_summary_statistics_from_frame(data_at_frac, patho, optimal_pred_frac)
             means = stats.mean().round(2)
