@@ -326,7 +326,7 @@ class ARDSDetectionModel(object):
             header = '--- Feature chi2 p-values ---'
             scores, pvals = chi2(x_train, y_train)
             scores = sorted(pvals)
-            self.feature_score_rounding = lambda x: round(x, 10)
+            self.feature_score_rounding = lambda x: round(x, 100)
             self.rank_order = 1
 
         table = PrettyTable()
@@ -863,6 +863,9 @@ class ARDSDetectionModel(object):
         if self.args.plot_sen_spec_vs_thresh:
             self.results.plot_sen_spec_vs_thresh(self.args.thresh_interval)
 
+        if self.args.print_feature_selection:
+            self.print_aggregate_feature_results()
+
     def aggregate_grid_search_results(self):
         print("---- Grid Search Final Results ----")
         print("----")
@@ -1206,19 +1209,18 @@ class ARDSDetectionModel(object):
             sns.pairplot(all_rows, vars=to_plot[i:i+max_features_per_plot], hue="preds")
             plt.show()
 
-    def print_aggregate_results(self):
-        if len(self.feature_ranks) > 0:
-            feature_avg_scores = []
-            feature_all_ranks = {}
-            for feature in self.feature_ranks:
-                feature_avg_scores.append((feature, np.mean([x[1] for x in self.feature_ranks[feature]])))
-                feature_all_ranks[feature] = [str(x[0]) for x in self.feature_ranks[feature]]
-            table = PrettyTable()
-            table.field_names = ['feature', 'avg_score', 'rank']
-            feature_avg_scores = sorted(feature_avg_scores, key=lambda x: self.rank_order * x[1])
-            for feature, score in feature_avg_scores:
-                table.add_row([feature, self.feature_score_rounding(score), ", ".join(feature_all_ranks[feature])])
-            print(table)
+    def print_aggregate_feature_results(self):
+        feature_avg_scores = []
+        feature_all_ranks = {}
+        for feature in self.feature_ranks:
+            feature_avg_scores.append((feature, np.mean([x[1] for x in self.feature_ranks[feature]])))
+            feature_all_ranks[feature] = [str(x[0]) for x in self.feature_ranks[feature]]
+        table = PrettyTable()
+        table.field_names = ['feature', 'avg_score', 'avg_rank']
+        feature_avg_scores = sorted(feature_avg_scores, key=lambda x: self.rank_order * x[1])
+        for feature, score in feature_avg_scores:
+            table.add_row([feature, self.feature_score_rounding(score), np.mean(np.array(feature_all_ranks[feature]).astype(int))])
+        print(table)
 
 
 def create_df(args):

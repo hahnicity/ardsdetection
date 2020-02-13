@@ -153,14 +153,15 @@ def main():
     ards_results = results[(results.patho == 'ards')]
     plt.plot(ards_results['n_features'].values.astype(int), ards_results.auc.values, label='AUC')
     ards_results['f1'] = 2 * (ards_results['prec'] * ards_results['recall']) / (ards_results['prec'] + ards_results['recall'])
-    plt.plot(ards_results['n_features'].values.astype(int), ards_results.f1.values, label='ARDS F1')
+    plt.plot(ards_results['n_features'].values.astype(int), ards_results.acc.values, label='ARDS Accuracy', lw=2)
     features_min = ards_results['n_features'].min()
     features_max = ards_results['n_features'].max()
     plt.xticks(range(features_min, features_max+1))
-    plt.xlabel('N features')
+    plt.xlabel('N Features')
+    plt.ylabel('Score')
     plt.legend()
     plt.grid()
-    plt.title('{} with {} {} - sp{}'.format(main_args.feature_selection_method, main_args.algo, main_args.split_type, main_args.post_hour))
+    plt.title('{} feature selection with {} {} - Status Post {}'.format(main_args.feature_selection_method, main_args.algo, main_args.split_type, main_args.post_hour))
     if main_args.savefig:
         plt.savefig(main_args.savefig)
     else:

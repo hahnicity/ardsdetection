@@ -175,15 +175,15 @@ class ModelCollection(object):
             self.print_results_table(results_df)
 
     def calc_results(self, dataframe, threshold, patient_results):
-        columns = ['patho', 'recall', 'spec', 'prec', 'npv', 'auc', 'recall_ci', 'spec_ci', 'prec_ci', 'npv_ci', 'auc_ci']
+        columns = ['patho', 'acc', 'recall', 'spec', 'prec', 'npv', 'auc', 'acc_ci', 'recall_ci', 'spec_ci', 'prec_ci', 'npv_ci', 'auc_ci']
         stats_tmp = []
         aucs = self.get_auc_results(patient_results)
         uniq_pts = len(patient_results.patient_id.unique())
-        mean_auc = aucs.mean().round(2)
+        mean_auc = aucs.mean().round(3)
         auc_ci = (1.96 * np.sqrt(mean_auc * (1-mean_auc) / uniq_pts)).round(3)
         for patho in ['other', 'ards']:
             stats = self.get_summary_statistics_from_frame(dataframe, patho, threshold)
-            means = stats.mean().round(2)
+            means = stats.mean().round(3)
             cis = (1.96 * np.sqrt(means*(1-means)/uniq_pts)).round(3)
             stats_tmp.append([
                 patho,
@@ -191,11 +191,13 @@ class ModelCollection(object):
                 means[1],
                 means[2],
                 means[3],
+                means[4],
                 aucs.mean().round(2),
                 cis[0],
                 cis[1],
                 cis[2],
                 cis[3],
+                cis[4],
                 auc_ci,
             ])
         return pd.DataFrame(stats_tmp, columns=columns)
@@ -274,8 +276,8 @@ class ModelCollection(object):
             df = self.get_aggregate_predictions_dataframe(thresh)
             stats = self.get_summary_statistics_from_frame(df, 'ards', thresh)
             means = stats.mean()
-            y1.append(means[0])
-            y2.append(means[1])
+            y1.append(means[1])
+            y2.append(means[2])
         patho = 'ARDS'
         plt.plot(pred_threshes, y1, label='{} sensitivity'.format(patho), lw=2)
         plt.plot(pred_threshes, y2, label='{} specificity'.format(patho), lw=2)
@@ -320,6 +322,7 @@ class ModelCollection(object):
                 u"{}\u00B1{}".format(means[1], cis[1]),
                 u"{}\u00B1{}".format(means[2], cis[2]),
                 u"{}\u00B1{}".format(means[3], cis[3]),
+                u"{}\u00B1{}".format(means[4], cis[4]),
             ])
 
         print('---Youden Results---')
@@ -338,7 +341,8 @@ class ModelCollection(object):
         specs = dataframe[tns] / (dataframe[tns] + dataframe[fps])
         precs = dataframe[tps] / (dataframe[fps] + dataframe[tps])
         npvs = dataframe[tns] / (dataframe[tns] + dataframe[fns])
-        stats = pd.concat([sens, specs, precs, npvs], axis=1)
+        accs = (dataframe[tns] + dataframe[tps]) / (dataframe[tns] + dataframe[tps] + dataframe[fns] + dataframe[fps])
+        stats = pd.concat([accs, sens, specs, precs, npvs], axis=1)
         return stats
 
     def get_auc_results(self, patient_results):
@@ -352,7 +356,7 @@ class ModelCollection(object):
     def print_thresh_table(self, thresh_interval):
         assert 1 <= thresh_interval <= 100
         table = PrettyTable()
-        table.field_names = ['patho', 'vote %', 'sen', 'spec', 'prec', 'npv']
+        table.field_names = ['patho', 'vote %', 'acc', 'sen', 'spec', 'prec', 'npv']
         pred_threshes = range(0, 100+thresh_interval, thresh_interval)
         patient_results = self.get_all_patient_results_dataframe()
         uniq_pts = len(patient_results.patient_id.unique())
@@ -369,6 +373,7 @@ class ModelCollection(object):
                 u"{}\u00B1{}".format(means[1], cis[1]),
                 u"{}\u00B1{}".format(means[2], cis[2]),
                 u"{}\u00B1{}".format(means[3], cis[3]),
+                u"{}\u00B1{}".format(means[4], cis[5]),
             ]
             table.add_row(row)
         print(table)
