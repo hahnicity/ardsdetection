@@ -34,6 +34,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVC
 
 from collate import Dataset
+import dtw_lib
 from metrics import *
 from results import ModelCollection
 
@@ -836,7 +837,7 @@ class ARDSDetectionModel(object):
         if not self.args.no_print_results:
             self.results.get_youdens_results()
 
-        if self.args.plot_predictions or self.args.plot_disease_evolution:
+        if self.args.plot_predictions or self.args.plot_disease_evolution or self.args.plot_dtw_with_disease:
             self.plot_predictions()
 
         if self.args.plot_pairwise_features:
@@ -1105,6 +1106,18 @@ class ARDSDetectionModel(object):
                 plt.subplots_adjust(bottom=0.15)
                 plt.show()
 
+        if self.args.plot_dtw_with_disease:
+            hourly_predictions = self.results.get_all_hourly_preds()
+            if not self.args.tiled_disease_evol:
+                for _, pt_rows in hourly_predictions.groupby('patient_id'):
+                    self.plot_disease_evolution(pt_rows, cmap)
+                    pt = pt_rows.iloc[0].patient_id
+                    dtw = dtw_lib.analyze_patient(pt, self.args.data_path, self.args.cohort_description)
+                    ax2 = plt.gca().twinx()
+                    ax2.plot(dtw[:, 0], dtw[:, 1], lw=1, label='DTW', color='#663a3e')
+                    ax2.set_ylabel('DTW Score')
+                    plt.show()
+
         if self.args.plot_disease_evolution:
             # Plot fraction of votes for a single patient over 24 hrs.
             hourly_predictions = self.results.get_all_hourly_preds()
@@ -1136,7 +1149,7 @@ class ARDSDetectionModel(object):
 
     def plot_disease_evolution(self, pt_rows, cmap, legend=True, fontsize=11, xylabel=True, xy_visible=True):
         """
-        :param pt_rows:
+        :param pt_rows: Result from self.results.get_all_hourly_preds but grouped by patient
         :param cmap: color map palette.
         """
         pt = pt_rows.iloc[0].patient_id
@@ -1315,6 +1328,7 @@ def build_parser():
     parser.add_argument('--bootstrap-n-pts', type=int, default=80, help='number of patients to sample on a single bootstrap')
     parser.add_argument('--no-bootstrap-replace', action='store_false', help='Dont use replacement when sampling patients with bootstrap')
     parser.add_argument('--n-bootstraps', type=int, default=10, help='number of bootstrapped patient samplees to take')
+    parser.add_argument('--plot-dtw-with-disease', action='store_true', help='Plot DTW observations by hour versus patient disease evolution')
     return parser
 
 
