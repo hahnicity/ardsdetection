@@ -10,20 +10,22 @@ from ventmap.constants import OUT_DATETIME_FORMAT
 from ventmap.raw_utils import read_processed_file
 
 
-def _find_per_breath_dtw_score(prev_pressure_flow_waves, breath):
+def _find_per_breath_dtw_score(prev_pressure_flow_waves, breath, use_pressure):
     # compare the last n_breaths to current breath to compute DTW score
     score = 0
     for pressure, flow in prev_pressure_flow_waves:
-        score += dtw(pressure, breath['pressure'])
         score += dtw(flow, breath['flow'])
+        if use_pressure:
+            score += dtw(pressure, breath['pressure'])
     return score / len(prev_pressure_flow_waves)
 
 
-def dtw_analyze(file_gen_list, n_breaths, rolling_av_len):
+def dtw_analyze(file_gen_list, n_breaths, rolling_av_len, use_pressure):
     """
     :param file_gen_list: list of generators for specific patient's vent files
     :param n_breaths: number of breaths we want to look back in the window
-    :rolling_av_len: An additional rolling average to compute on top of the stats. Can be 1 if you don't want a rolling average
+    :param rolling_av_len: An additional rolling average to compute on top of the stats. Can be 1 if you don't want a rolling average
+    :param use_pressure: Use pressure waveform along with flow to calc DTW
     """
     pressure_flow_waves = []
     dtw_scores = [np.nan] * n_breaths
@@ -43,7 +45,7 @@ def dtw_analyze(file_gen_list, n_breaths, rolling_av_len):
                 pressure_flow_waves.append((breath['pressure'], breath['flow']))
                 continue
 
-            dtw_scores.append(_find_per_breath_dtw_score(pressure_flow_waves, breath))
+            dtw_scores.append(_find_per_breath_dtw_score(pressure_flow_waves, breath, use_pressure))
             pressure_flow_waves.append((breath['pressure'], breath['flow']))
             # XXX I'd like to setup system that drops breaths if vent bn is too far away.
             prev_vent_bn = breath['vent_bn']
@@ -52,7 +54,7 @@ def dtw_analyze(file_gen_list, n_breaths, rolling_av_len):
     return np.append([np.nan]*(rolling_av_len-1), rolling_av), rel_bns, timestamps
 
 
-def analyze_patient(patient_id, dataset_path, cohort_file, cache_dir):
+def analyze_patient(patient_id, dataset_path, cohort_file, cache_dir, use_pressure):
     if not os.path.exists(cache_dir):
         os.mkdir(cache_dir)
 
@@ -61,7 +63,7 @@ def analyze_patient(patient_id, dataset_path, cohort_file, cache_dir):
 
     n_breaths = 4
     rolling_len = 5
-    cache_file = "{}_n{}_rolling{}.npy".format(patient_id, n_breaths, rolling_len)
+    cache_file = "{}_n{}_rolling{}_pressure{}.npy".format(patient_id, n_breaths, rolling_len, use_pressure)
     cache_file_path = os.path.join(cache_dir, patient_id, cache_file)
     if os.path.exists(cache_file_path):
         return np.load(cache_file_path)
@@ -74,7 +76,7 @@ def analyze_patient(patient_id, dataset_path, cohort_file, cache_dir):
         proc_file = f.replace('.raw.npy', '.processed.npy')
         gen_list.append(read_processed_file(f, proc_file))
 
-    dtw_scores, rel_bns, timestamps = dtw_analyze(gen_list, 4, 5)
+    dtw_scores, rel_bns, timestamps = dtw_analyze(gen_list, 4, 5, use_pressure)
     patient_row = desc[desc['Patient Unique Identifier'] == patient_id].iloc[0]
 
     if patient_row.Pathophysiology != 'ARDS':
