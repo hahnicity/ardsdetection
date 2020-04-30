@@ -1,8 +1,11 @@
+import time
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
 from scipy import interp
+import seaborn as sns
 from sklearn.metrics import auc, roc_curve
 
 from metrics import janky_roc
@@ -137,13 +140,14 @@ class ModelResults(object):
 
 
 class ModelCollection(object):
-    def __init__(self):
+    def __init__(self, args):
         self.models = []
         self.model_results = {
             'folds': {},
             'aggregate': None,
         }
         self.model_idx = 0
+        self.args = args
 
     def add_model(self, y_test, predictions, x_test, fold_idx):
         model = ModelResults(fold_idx, self.model_idx)
@@ -192,7 +196,19 @@ class ModelCollection(object):
             threshold = threshold / 100.0
         df = self.get_aggregate_predictions_dataframe(threshold)
         patient_results = self.get_all_patient_results_dataframe()
+        model_time = time.time()
         results_df = self.calc_results(df, threshold, patient_results)
+        # XXX debug
+        tt = {0: .98, 1: .91, 2: .78, 3: .95, 4: .79}
+        for i in range(5):
+            patient_results = self.get_all_patient_results_in_fold_dataframe(i)
+            fold_results = df[df.fold_idx == i]
+            results_df = self.calc_results(fold_results, threshold, patient_results)
+            if tt[i] != results_df.auc.iloc[0]:
+                return
+        pd.to_pickle(self, 'results/model_collection_results_{}-things-matching.pkl'.format(int(model_time)))
+        # XXX debug
+        pd.to_pickle(self, 'results/model_collection_results_{}.pkl'.format(int(model_time)))
         self.model_results['aggregate'] = results_df
         if print_results:
             print('---Aggregate Results---')
@@ -241,7 +257,7 @@ class ModelCollection(object):
             table.add_row(results_row)
         print(table)
 
-    def plot_roc_all_folds(self):
+    def plot_roc_all_folds(self, savefig=False, dpi=1200, fmt_out='png'):
         # I might be able to find confidence std using p(1-p). Nah. we actually cant do
         # this because polling is using the identity of std from a binomial distribution. So
         # in order to have conf interval we need some kind of observable std.
@@ -252,6 +268,14 @@ class ModelCollection(object):
         results = self.get_all_patient_results_dataframe()
         uniq_pts = len(results.patient_id.unique())
 
+        color_map = {
+            0: 'green',
+            1: 'orange',
+            2: 'purple',
+            3: 'saddlebrown',
+            4: 'fuchsia',
+            'main': 'royalblue'
+        }
         for fold_idx in results.fold_idx.unique():
             fold_preds = results[results.fold_idx == fold_idx]
             model_aucs = self.get_auc_results(fold_preds)
@@ -261,8 +285,9 @@ class ModelCollection(object):
             tprs[-1][0] = 0.0
             roc_auc = auc(fpr, tpr)
             aucs.append(roc_auc)
-            plt.plot(fpr, tpr, lw=1, alpha=0.3,
-                     label='ROC fold %d (AUC = %0.2f)' % (fold_idx+1, roc_auc))
+            plt.plot(fpr, tpr, lw=1.5, alpha=0.3,
+                     label='ROC fold %d (AUC = %0.2f)' % (fold_idx+1, roc_auc),
+                     color=color_map[fold_idx])
 
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
                  label='Chance', alpha=.8)
@@ -274,9 +299,9 @@ class ModelCollection(object):
 
         model_aucs = self.get_auc_results(results)
         auc_ci = (1.96 * np.sqrt(mean_auc * (1-mean_auc) / uniq_pts)).round(3)
-        plt.plot(mean_fpr, mean_tpr, color='b',
+        plt.plot(mean_fpr, mean_tpr, color=color_map['main'],
                  label=r'Mean ROC (AUC = %0.2f $\pm$ %0.3f)' % (mean_auc, auc_ci),
-                 lw=2, alpha=.8)
+                 lw=2.5, alpha=.8)
 
         std_tpr = np.std(tprs, axis=0)
         tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
@@ -289,9 +314,11 @@ class ModelCollection(object):
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
         plt.legend(loc="lower right")
+        if savefig:
+            plt.savefig('roc-all-folds.{}'.format(fmt_out), dpi=dpi)
         plt.show()
 
-    def plot_sen_spec_vs_thresh(self, thresh_interval):
+    def plot_sen_spec_vs_thresh(self, thresh_interval, savefig=False, dpi=1200, fmt_out='png'):
         y1 = []
         y2 = []
         pred_threshes = range(0, 100+thresh_interval, thresh_interval)
@@ -313,6 +340,8 @@ class ModelCollection(object):
         plt.yticks(np.arange(0, 1.01, .1))
         plt.xticks(np.arange(0, 101, 10))
         plt.grid()
+        if savefig:
+            plt.savefig('sen-spec-vs-thresh.{}'.format(fmt_out), dpi=dpi)
         plt.show()
 
     def get_youdens_results(self):

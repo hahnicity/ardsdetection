@@ -38,12 +38,10 @@ import dtw_lib
 from metrics import *
 from results import ModelCollection
 
-sns.set()
-sns.set_style('ticks')
-sns.set_context('paper')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=DataConversionWarning)
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
+
 
 class NoFeaturesSelectedError(Exception):
     pass
@@ -72,9 +70,7 @@ class ARDSDetectionModel(object):
         if self.args.load_model:
             self.models.append(pd.read_pickle(self.args.load_model))
 
-        self.results = ModelCollection()
-        # XXX this var is unused, and anything relying on it will break
-        self.patient_predictions = {}
+        self.results = ModelCollection(args)
 
     def get_bootstrap_idxs(self):
         unique_patients = self.data['patient'].unique()
@@ -131,6 +127,7 @@ class ARDSDetectionModel(object):
         Gathers a list of patients and splits them by pathophysiology. Then just takes a continuous
         kfold split of them.
         """
+        # XXX add logic for doing fractional patients here
         idxs = []
         mapping = {patho: [] for n, patho in self.pathos.items()}
 
@@ -146,17 +143,26 @@ class ARDSDetectionModel(object):
             mapping[type_].append(patient)
 
         for i in range(folds):
-            patients_to_use = []
+            test_pts = []
+            train_pts = []
             for k, v in mapping.items():
                 lower_bound = int(round(i * len(v) / float(folds)))
                 upper_bound = int(round((i + 1) * len(v) / float(folds)))
                 if upper_bound < 1:
                     raise Exception("You do not have enough patients for {} cohort".format(k))
                 patients = v[lower_bound:upper_bound]
-                patients_to_use.extend(patients)
+                test_pts.extend(patients)
+            train_pts = set(x[x.set_type == train_cohort].patient.unique()).difference(test_pts)
+            if self.args.train_pt_frac:
+                n_pts_to_select = int(len(train_pts) * self.args.train_pt_frac)
+                n_pts_each_patho = n_pts_to_select / 2
+                ards_patients = x[(x.patient.isin(train_pts)) & (x.y == 1)].patient.unique()
+                other_patients = x[(x.patient.isin(train_pts)) & (x.y != 1)].patient.unique()
+                train_pts = np.random.choice(ards_patients, size=n_pts_each_patho, replace=False)
+                train_pts = np.append(np.random.choice(other_patients, size=n_pts_each_patho, replace=False), train_pts)
 
-            train_pt_data = x[(x.set_type == train_cohort) & (~x.patient.isin(patients_to_use))]
-            test_pt_data = x[(x.set_type == test_cohort) & (x.patient.isin(patients_to_use))]
+            train_pt_data = x[x.patient.isin(train_pts)]
+            test_pt_data = x[(x.set_type == test_cohort) & (x.patient.isin(test_pts))]
             idxs.append((train_pt_data.index, test_pt_data.index))
         return idxs
 
@@ -840,9 +846,6 @@ class ARDSDetectionModel(object):
         if self.args.plot_predictions or self.args.plot_disease_evolution or self.args.plot_dtw_with_disease:
             self.plot_predictions()
 
-        if self.args.plot_pairwise_features:
-            self.plot_pairwise_feature_visualizations()
-
         if self.args.grid_search:
             self.aggregate_grid_search_results()
 
@@ -1082,31 +1085,35 @@ class ARDSDetectionModel(object):
         colors = ['sky blue', 'deep red', 'eggplant']
         #fontname = 'Osaka'
         #cmap = sns.color_palette(sns.xkcd_palette(colors))
-        cmap = ['#6c89b7', '#ff919c']
-        plt.rcParams['font.family'] = 'Osaka'
+        cmap = ['#429AFF', '#FF455E']
+        plt.rcParams['font.family'] = 'Arial'
         plt.rcParams['legend.loc'] = 'upper right'
         if self.args.plot_predictions:
             # plot fraction of votes for all patients
             step_size = 10
-            for i in range(0, len(self.patient_results), step_size):
-                slice = self.patient_results.loc[i:i+step_size-1]
-                slice = slice.sort_values(by='patient')
+            patient_results = self.results.get_all_patient_results_dataframe()
+            for i in range(0, len(patient_results), step_size):
+                slice = patient_results.loc[i:i+step_size-1]
+                slice = slice.sort_values(by='patient_id')
                 ind = np.arange(len(slice))
                 bottom = np.zeros(len(ind))
                 plots = []
                 totals = [0] * len(ind)
-                vote_cols = ['{}_votes'.format(patho) for _, patho in self.pathos.items()]
+                vote_cols = ['{}_votes'.format(patho.lower()) for _, patho in self.pathos.items()]
                 # get sum of votes across all patients
-                total_votes = slice[vote_cols].sum(axis=1).values
+                total_votes = slice[vote_cols].sum(axis=1).values.astype(float)
+                # XXX numerous pts missing votes. why? also only 1 type of patho actually shows
                 for n, patho in self.pathos.items():
-                    plots.append(plt.bar(ind, slice['{}_votes'.format(patho)].values / total_votes, bottom=bottom, color=cmap[n]))
-                    bottom = bottom + (slice['{}_votes'.format(patho)].values / total_votes)
-                plt.xticks(ind, slice.patient.str[:4].values, rotation=45)
+                    plots.append(plt.bar(ind, slice['{}_votes'.format(patho.lower())].values / total_votes, bottom=bottom, color=cmap[n]))
+                    bottom = bottom + (slice['{}_votes'.format(patho.lower())].values / total_votes)
+
+                plt.xticks(ind, slice.patient_id.str[:4].values, rotation=45)
                 plt.ylabel('Fraction Votes')
                 plt.xlabel('Patient Token ID')
                 plt.legend([p[0] for p in plots], [patho for _, patho in self.pathos.items()], fontsize=11)
                 plt.yticks(np.arange(0, 1.01, .1))
                 plt.subplots_adjust(bottom=0.15)
+                plt.savefig('results/prediction-voting-fractions-{}.png'.format(i), dpi=1200)
                 plt.show()
 
         if self.args.plot_dtw_with_disease:
@@ -1131,7 +1138,9 @@ class ARDSDetectionModel(object):
             if not self.args.tiled_disease_evol:
                 for _, pt_rows in hourly_predictions.groupby('patient_id'):
                     self.plot_disease_evolution(pt_rows, cmap)
+                    plt.savefig('results/{}-by-time.png'.format(pt_rows.patient_id.unique()[0]), dpi=1200)
                     plt.show()
+                    plt.close()
             else:
                 self.plot_tiled_disease_evol(hourly_predictions, cmap, False)
 
@@ -1242,31 +1251,6 @@ class ARDSDetectionModel(object):
             plt.yticks(np.arange(0, 1.01, .1))
             plt.xticks([0, 5, 11, 17, 23], [1, 6, 12, 18, 24])
 
-    def plot_pairwise_feature_visualizations(self):
-        """
-        Visualize predictions versus feature relationships in the data.
-        """
-        max_features_per_plot = 5
-        all_rows = None
-        all_preds = None
-        new_cols = None
-        for pt, (rows, preds) in self.patient_predictions.items():
-            rows = rows.drop(['ventBN', 'hour', 'set_type'], axis=1)
-            new_cols = rows.columns
-            if all_rows is None:
-                all_rows = rows.values
-                all_preds = preds.values
-            else:
-                all_rows = np.append(all_rows, rows.values, axis=0)
-                all_preds = np.append(all_preds, preds.values, axis=0)
-
-        all_rows = pd.DataFrame(all_rows, columns=new_cols)
-        all_rows['preds'] = all_preds
-        to_plot = sorted(list(set(all_rows.columns).difference(set(['y', 'preds', 'patient', 'row_time']))))
-        for i in range(0, len(to_plot), max_features_per_plot):
-            sns.pairplot(all_rows, vars=to_plot[i:i+max_features_per_plot], hue="preds")
-            plt.show()
-
     def print_aggregate_feature_results(self):
         feature_avg_scores = []
         feature_all_ranks = {}
@@ -1365,19 +1349,19 @@ def build_parser():
     parser.add_argument('--plot-disease-evolution', action='store_true', help='Plot evolution of disease over time')
     parser.add_argument('--plot-predictions', action='store_true', help='Plot prediction bars')
     parser.add_argument('--tiled-disease-evol', action='store_true', help='Plot disease evolution in tiled manner')
-    parser.add_argument('--plot-pairwise-features', action='store_true', help='Plot pairwise relationships between features to better visualize their relationships and predictions')
     parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA', 'ATS_MODEL'], default='RF')
     parser.add_argument('-pdfe', '--print-dropped-frame-eval', action='store_true', help='Print evaluation of all the frames we drop')
     parser.add_argument('--plot-sen-spec-vs-thresh', action='store_true', help='Plot the sensitivity and specificity values versus the ARDS threshold used')
     parser.add_argument('--plot-roc-all-folds', action='store_true', help='Plot ROC curve but with individual roc curves and then an average.')
     parser.add_argument('--print-thresh-table', action='store_true')
-    parser.add_argument('--thresh-interval', type=int, default=25)
+    parser.add_argument('--thresh-interval', type=int, default=1)
     parser.add_argument('--bootstrap-n-pts', type=int, default=80, help='number of patients to sample on a single bootstrap')
     parser.add_argument('--no-bootstrap-replace', action='store_false', help='Dont use replacement when sampling patients with bootstrap')
     parser.add_argument('--n-bootstraps', type=int, default=10, help='number of bootstrapped patient samplees to take')
     parser.add_argument('--plot-dtw-with-disease', action='store_true', help='Plot DTW observations by hour versus patient disease evolution')
     parser.add_argument('--dtw-cache-dir', default='dtw_cache')
     parser.add_argument('--dtw-use-pressure', action='store_true', help='Use pressure waveform in DTW calculations')
+    parser.add_argument('--train-pt-frac', type=float, help='Fraction of random training patients you want to use')
     return parser
 
 
