@@ -198,16 +198,6 @@ class ModelCollection(object):
         patient_results = self.get_all_patient_results_dataframe()
         model_time = time.time()
         results_df = self.calc_results(df, threshold, patient_results)
-        # XXX debug
-        tt = {0: .98, 1: .91, 2: .78, 3: .95, 4: .79}
-        for i in range(5):
-            patient_results = self.get_all_patient_results_in_fold_dataframe(i)
-            fold_results = df[df.fold_idx == i]
-            results_df = self.calc_results(fold_results, threshold, patient_results)
-            if tt[i] != results_df.auc.iloc[0]:
-                return
-        pd.to_pickle(self, 'results/model_collection_results_{}-things-matching.pkl'.format(int(model_time)))
-        # XXX debug
         pd.to_pickle(self, 'results/model_collection_results_{}.pkl'.format(int(model_time)))
         self.model_results['aggregate'] = results_df
         if print_results:

@@ -107,7 +107,7 @@ def main():
     parser.add_argument('-p', '--from-pickle', help='load data frame from pickle', required=True)
     parser.add_argument('--algo', help='The type of algorithm you want to do ML with', choices=['RF', 'MLP', 'SVM', 'LOG_REG', 'GBC', 'NB', 'ADA', 'ATS_MODEL'], default='RF')
 
-    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method', required=True)
+    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA', 'chimerge'], help='Feature selection method', required=True)
     parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'train_all', 'test_all', 'bootstrap'], help='All splits are performed so there is no test/train patient overlap', required=True)
     parser.add_argument('--savefig', help='save figure to specified location instead of plotting')
     parser.add_argument('--print-results-table', action='store_true')
@@ -136,7 +136,7 @@ def main():
     if not main_args.load_results:
         df = pd.read_pickle(main_args.from_pickle)
 
-        if main_args.feature_selection_method in ['RFE', 'chi2', 'mutual_info']:
+        if main_args.feature_selection_method in ['RFE', 'chi2', 'mutual_info', 'chimerge']:
             results = n_feature_selection(df, model_args)
         elif main_args.feature_selection_method == 'PCA':
             results = pca(df, model_args)

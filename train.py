@@ -228,7 +228,6 @@ class ARDSDetectionModel(object):
 
     def get_and_fit_scaler(self, x_train):
         """
-        Get the scaler we wish to use and fit it to train data.
 
         :param x_train: Training set we wish to fit to
         """
@@ -818,7 +817,7 @@ class ARDSDetectionModel(object):
                     prediction_set = x_test
                 elif self.args.feature_selection_method:
                     # sometimes x_test is modified by this func
-                    prediction_set = self.perform_feature_selection(x_train, y_train, x_test)
+                    prediction_set = self.perform_feature_selection(x_train, y_train, x_test, model_idx)
                 elif not self.args.load_model:
                     self.train(x_train, y_train)
                     prediction_set = x_test
@@ -1009,7 +1008,7 @@ class ARDSDetectionModel(object):
         print("Best CV score: ", clf.best_score_)
         self.models.append(clf)
 
-    def perform_feature_selection(self, x_train, y_train, x_test):
+    def perform_feature_selection(self, x_train, y_train, x_test, fold_num):
         clf = self._get_hyperparameterized_model()
         orig_train_idx = x_train.index
         orig_test_idx = x_test.index
@@ -1073,6 +1072,87 @@ class ARDSDetectionModel(object):
             pca.fit(x_train, y_train)
             x_train = pd.DataFrame(pca.transform(x_train), index=x_train.index)
             x_test = pd.DataFrame(pca.transform(x_test), index=x_test.index)
+            clf.fit(x_train, y_train)
+            self.models.append(clf)
+        elif self.args.feature_selection_method == 'chimerge':
+            # manual selection of features based on chimerge importances. Automated selection
+            # is not feasible because chimerge can take awhile to calculate. So instead
+            # we precompute chimerge and then re-apply on the fly
+            if self.args.split_type in ['holdout', 'bootstrap']:
+                feature_ranks = [
+                    'median_eTime',
+                    'median_inst_RR',
+                    'median_pef_+0.16_to_zero',
+                    'median_I:E ratio',
+                    'median_slope_minF_to_zero',
+                    'median_iTime',
+                    'median_mean_flow_from_pef',
+                    'median_dyn_compliance',
+                    'median_tve:tvi ratio',
+                ]
+            elif self.args.split_type == 'kfold':
+                feature_ranks = {
+                    0: [
+                        'median_eTime',
+                        'median_inst_RR',
+                        'median_pef_+0.16_to_zero',
+                        'median_I:E ratio',
+                        'median_slope_minF_to_zero',
+                        'median_iTime',
+                        'median_dyn_compliance',
+                        'median_mean_flow_from_pef',
+                        'median_tve:tvi ratio',
+                    ],
+                    1: [
+                        'median_eTime',
+                        'median_pef_+0.16_to_zero',
+                        'median_inst_RR',
+                        'median_I:E ratio',
+                        'median_slope_minF_to_zero',
+                        'median_iTime',
+                        'median_dyn_compliance',
+                        'median_mean_flow_from_pef',
+                        'median_tve:tvi ratio',
+                    ],
+                    2: [
+                        'median_eTime',
+                        'median_inst_RR',
+                        'median_pef_+0.16_to_zero',
+                        'median_I:E ratio',
+                        'median_slope_minF_to_zero',
+                        'median_mean_flow_from_pef',
+                        'median_iTime',
+                        'median_dyn_compliance',
+                        'median_tve:tvi ratio',
+                    ],
+                    3: [
+                        'median_eTime',
+                        'median_I:E ratio',
+                        'median_pef_+0.16_to_zero',
+                        'median_inst_RR',
+                        'median_slope_minF_to_zero',
+                        'median_iTime',
+                        'median_mean_flow_from_pef',
+                        'median_dyn_compliance',
+                        'median_tve:tvi ratio',
+                    ],
+                    4: [
+                        'median_eTime',
+                        'median_I:E ratio',
+                        'median_inst_RR',
+                        'median_pef_+0.16_to_zero',
+                        'median_slope_minF_to_zero',
+                        'median_mean_flow_from_pef',
+                        'median_iTime',
+                        'median_dyn_compliance',
+                        'median_tve:tvi ratio',
+                    ],
+                }[fold_num]
+            else:
+                raise Exception('chimerge feature selection is not supported with {}'.format(self.args.split_type))
+            x_train = x_train[feature_ranks[:self.args.n_new_features]]
+            x_test = x_test[feature_ranks[:self.args.n_new_features]]
+            self.selected_features = feature_ranks[:self.args.n_new_features]
             clf.fit(x_train, y_train)
             self.models.append(clf)
 
@@ -1321,7 +1401,7 @@ def build_parser():
     parser.add_argument("--feature-set", default="flow_time", choices=Dataset.vent_feature_sets)
     parser.add_argument('-ehr', '--use-ehr-features', action='store_true', help='use EHR data in learning')
     parser.add_argument('-demo', '--use-demographic-features', action='store_true', help='use demographic data in learning')
-    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA'], help='Feature selection method')
+    parser.add_argument('-fsm', '--feature-selection-method', choices=['RFE', 'chi2', 'mutual_info', 'gini', 'lasso', 'PCA', 'chimerge'], help='Feature selection method')
     parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
     parser.add_argument('--print-feature-selection', action='store_true')
     parser.add_argument('--select-from-model-thresh', type=float, default=.2, help='Threshold to use for feature importances when using lasso and gini selection')
