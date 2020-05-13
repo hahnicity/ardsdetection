@@ -1,3 +1,4 @@
+import os
 import time
 
 import matplotlib.pyplot as plt
@@ -148,6 +149,7 @@ class ModelCollection(object):
         }
         self.model_idx = 0
         self.args = args
+        self.experiment_name = self.args.experiment_name
 
     def add_model(self, y_test, predictions, x_test, fold_idx):
         model = ModelResults(fold_idx, self.model_idx)
@@ -196,9 +198,8 @@ class ModelCollection(object):
             threshold = threshold / 100.0
         df = self.get_aggregate_predictions_dataframe(threshold)
         patient_results = self.get_all_patient_results_dataframe()
-        model_time = time.time()
         results_df = self.calc_results(df, threshold, patient_results)
-        pd.to_pickle(self, 'results/model_collection_results_{}.pkl'.format(int(model_time)))
+        self.save_to_pickle()
         self.model_results['aggregate'] = results_df
         if print_results:
             print('---Aggregate Results---')
@@ -420,3 +421,12 @@ class ModelCollection(object):
             ]
             table.add_row(row)
         print(table)
+
+    def save_to_pickle(self):
+        results_dir = os.path.join(os.path.dirname(__file__), 'results')
+        model_time = time.time()
+        if self.experiment_name is not None:
+            base_filename = 'model_collection_results_{}_{}.pkl'.format(self.experiment_name, int(model_time))
+        else:
+            base_filename = 'model_collection_results_{}.pkl'.format(int(model_time))
+        pd.to_pickle(self, os.path.join(results_dir, base_filename))

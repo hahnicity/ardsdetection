@@ -1442,6 +1442,7 @@ def build_parser():
     parser.add_argument('--dtw-cache-dir', default='dtw_cache')
     parser.add_argument('--dtw-use-pressure', action='store_true', help='Use pressure waveform in DTW calculations')
     parser.add_argument('--train-pt-frac', type=float, help='Fraction of random training patients you want to use')
+    parser.add_argument('-exp', '--experiment-name', help='name of the experiment being run so we can name the results file something that will be remembered later.')
     return parser
 
 

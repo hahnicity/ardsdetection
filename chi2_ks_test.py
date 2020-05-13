@@ -35,17 +35,23 @@ def ks_test_to_target(data):
     print(table)
 
 
-def ks_conditional(data):
+def ks_conditional(data, no_print=False):
     # test colinearity against all other features
     table = PrettyTable()
-    table.field_names = ['f1', 'D', 'p-val']
+    table.field_names = ['feature', 'D', 'p-val']
+    ds = []
     for idx, feature in enumerate(data.columns.difference(['y'])):
         ards = data[data.y == 1][feature]
         non_ards = data[data.y == 0][feature]
         d, pval = ks_2samp(ards, non_ards)
-        table.add_row([feature, round(d, 3), round(pval,3)])
+        ds.append([feature, d, pval])
 
-    print(table)
+    ds = sorted(ds, key=lambda x: -x[1])
+    for feature, d, pval in ds:
+        table.add_row([feature, round(d, 3), pval])
+    if not no_print:
+        print(table)
+    return ds
 
 
 def chimerge(data, bins, strat):
