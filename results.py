@@ -35,7 +35,7 @@ class PatientResults(object):
         # at least in python 2.7 int() essentially acts as math.floor
         ards_percentage = int(100 * (self.ards_votes / float(len(predictions))))
         self.majority_prediction = 1 if self.ards_votes >= self.other_votes else 0
-        x_test_pt['pred'] = predictions
+        x_test_pt.loc[:, 'pred'] = predictions
         grouping = x_test_pt[['hour', 'pred']].groupby('hour')
         for i, rows in grouping:
             ards_count = rows.pred.sum()

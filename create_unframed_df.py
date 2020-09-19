@@ -17,12 +17,13 @@ def main():
     parser.add_argument('-sp', '--post-hour', default=24, type=int)
     parser.add_argument('-tsd', '--test-start-hour-delta', default=None, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data. Only for usage in testing set')
     parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)
+    parser.add_argument("--feature-set", default="flow_time", choices=Dataset.vent_feature_sets)
     args = parser.parse_args()
 
     cls = Dataset(
         args.data_path,
         args.cohort_description,
-        'flow_time',
+        args.feature_set,
         20,
         True,
         args.experiment,

@@ -40,6 +40,19 @@ class Dataset(object):
             'dyn_compliance',
             'tve:tvi ratio',
         ],
+        'flow_time_biased': necessities + [
+            'mean_flow_from_pef',
+            'inst_RR',
+            'slope_minF_to_zero',
+            'pef_+0.16_to_zero',
+            'iTime',
+            'eTime',
+            'I:E ratio',
+            'dyn_compliance',
+            'tve:tvi ratio',
+            'tvi',
+            'tve',
+        ],
         'flow_time_orig': necessities + [
             'mean_flow_from_pef',
             'inst_RR',
@@ -75,8 +88,8 @@ class Dataset(object):
     }
     vent_feature_sets.update({
         'broad': vent_feature_sets['flow_time'] + [
-            'TVi',
-            'TVe',
+            'tvi',
+            'tve',
             'Maw',
             'ipAUC',
             'PIP',
