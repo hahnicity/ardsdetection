@@ -5,19 +5,24 @@ collate
 Create dataset of items we wish to use for the training/testing of our
 model.
 """
+from copy import copy
 import csv
 from datetime import datetime
 from glob import glob
 import logging
+from operator import xor
 import os
 import re
 
 import coloredlogs
 import numpy as np
 import pandas as pd
+from ventmode import datasets
+from ventmode.main import run_dataset_with_classifier_and_lookahead
 
 from algorithms.breath_meta import get_file_experimental_breath_meta
 from algorithms.constants import EXPERIMENTAL_META_HEADER
+from algorithms.tor5 import perform_tor_with_bs_be
 
 coloredlogs.install()
 DEMOGRAPHIC_DATA_PATH = 'demographic/cohort_demographics.csv'
@@ -63,7 +68,6 @@ class Dataset(object):
             'I:E ratio',
             'dyn_compliance',
         ],
-        # XXX the whole optimality thing changes quite a bit.
         'flow_time_opt': necessities + [
             'dyn_compliance',
             'tve:tvi ratio',
@@ -145,7 +149,11 @@ class Dataset(object):
                  custom_vent_features=None,
                  use_ehr_features=True,
                  use_demographic_features=True,
-                 vent_bn_frac_missing=.5):
+                 vent_bn_frac_missing=.5,
+                 use_ventmode=False,
+                 ventmode_model_path='',
+                 ventmode_scaler_path='',
+                 use_tor=False):
         """
         Define a dataset for use in training an ARDS detection algorithm. If we desire we can
         have separate parameterization for train and test sets. This causes a completely new
@@ -169,6 +177,10 @@ class Dataset(object):
         :param use_ehr_features: Should we use EHR derived features?
         :param use_demographic_features: Should we use demographic features?
         :param vent_bn_frac_missing: Define amount of sequential BNs we will allow missing from a frame
+        :param use_ventmode: bool for whether or not we should use ventmode in our frame
+        :param ventmode_model_path:
+        :param ventmode_scaler_path:
+        :param use_tor: bool for whether or not we should use tor
         """
         self.data_dir_path = data_dir_path
         self.split_type = split_type
@@ -200,7 +212,7 @@ class Dataset(object):
         self.start_hour_delta = start_hour_delta
         self.vent_bn_frac_missing = vent_bn_frac_missing
         # keep track of the number of frames dropped per patient
-        self.frames_dropped = {}
+        self.data_dropped = {}
         if test_frame_size or test_post_hour or test_start_hour_delta:
             self.test_frame_size = test_frame_size if isinstance(test_frame_size, int) else frame_size
             self.test_post_hour = test_post_hour if isinstance(test_post_hour, int) else post_hour
@@ -209,7 +221,6 @@ class Dataset(object):
             self.test_frame_size = test_frame_size
             self.test_post_hour = test_post_hour
             self.test_start_hour_delta = test_start_hour_delta
-        # XXX Add use_vent_features
         self.use_ehr_features = use_ehr_features
         if use_ehr_features:
             self.ehr_data = pd.read_csv(os.path.join(data_dir_path, EHR_DATA_PATH))
@@ -221,6 +232,10 @@ class Dataset(object):
             self.demographic_data = pd.read_csv(os.path.join(data_dir_path, DEMOGRAPHIC_DATA_PATH))
             self.demographic_data.loc[self.demographic_data.SEX == 'M', 'SEX'] = 0
             self.demographic_data.loc[self.demographic_data.SEX == 'F', 'SEX'] = 1
+        self.use_ventmode = use_ventmode
+        self.use_tor = use_tor
+        self.ventmode_model_path = ventmode_model_path
+        self.ventmode_scaler_path = ventmode_scaler_path
 
     def _get_patient_file_map(self, cohort_dir):
         raw_dirs = []
@@ -290,10 +305,6 @@ class Dataset(object):
                 if len(meta) == 0:
                     logging.warn('Filtered all data for patient: {} start time: {}'.format(patient_id, start_time))
                     continue
-                # XXX Add processing for EHR and Demographic data.
-                #
-                # XXX This chunk of code that goes to the bottom of the for loop also has
-                # possibility to be moved to a separate place
                 tmp = pd.DataFrame(meta, columns=cols)
                 tmp['patient'] = patient_id
                 tmp['row_time'] = stack_times
@@ -355,8 +366,6 @@ class Dataset(object):
 
                 if 'ARDS' not in patho:
                     pt_start_time = pt_row['vent_start_time']
-                    # XXX in future change this behavior if we don't want to use patients
-                    # without a vent start time
                     if pt_start_time is np.nan:
                         first_file = sorted(files)[0]
                         date_str = re.search(date_fmt, first_file).groups()[0]
@@ -454,9 +463,49 @@ class Dataset(object):
 
         return meta
 
+    def process_ventmode_tor(self, patient_id, pt_files, meta):
+        if xor(self.use_ventmode, self.use_tor):
+            # this is really just because I don't have to do ventmode and tor
+            # together in any other case other than to just make nice with
+            # a reviewer.
+            #
+            # but in general this whole process takes a butt-ton of time so
+            # it shouldn't be done unless we absolutely need it
+            raise Exception('do ventmode and tor together otherwise this line of code will continue to be angry')
+
+        fileset = {'x': [(patient_id, f) for f in pt_files]}
+        # VFinal is pretty bloated and could be dramatically slimmed down if you
+        # really need it for speed sake
+        ventmode_dataset = datasets.VFinalFeatureSet(fileset, 10, 100)
+        ventmode_df = ventmode_dataset.create_prediction_df()
+        ventmode_model = pd.read_pickle(self.ventmode_model_path)
+        ventmode_scaler = pd.read_pickle(self.ventmode_scaler_path)
+        model_results = run_dataset_with_classifier_and_lookahead(
+            ventmode_model, ventmode_scaler, ventmode_df, 'vfinal', 50, 0.6
+        )
+        ventmode_preds = model_results[['rel_bn', 'vent_bn', 'predictions']]
+        # convert to dataframe because pandas has a handy merge function
+        meta = pd.DataFrame(meta)
+        meta = meta.rename(columns={0: 'rel_bn', 1: 'vent_bn'})
+        meta['rel_bn'] = meta.rel_bn.astype(int)
+        meta['vent_bn'] = meta.vent_bn.astype(int)
+        meta = meta.merge(ventmode_preds, on=['rel_bn', 'vent_bn'], how='inner')
+        if len(meta) == 0:
+            raise Exception('ventmode merge was not completed successfully for pt: {}'.format(patient_id))
+        solo3 = [perform_tor_with_bs_be(f, [], '/tmp', 64, 'F', None)[0] for f in pt_files]
+
+        solo3 = pd.concat(solo3)
+        solo3 = solo3.rename(columns={'BN': 'rel_bn', 'ventBN': 'vent_bn', 'dbl.4': 'dta', 'bs.1or2': 'bsa'})[['rel_bn', 'vent_bn', 'dta', 'bsa']]
+        meta = meta.merge(solo3, on=['rel_bn', 'vent_bn'], how='inner')
+        if len(meta) == 0:
+            raise Exception('solo merge was not completed successfully for pt: {}'.format(patient_id))
+        return meta.values
+
     def process_framed_patient_data(self, patient_id, pt_files, start_time, post_hour, frame_size):
         """
-        Process all patient framed data for use in our learning algorithms
+        Process all patient framed data for use in our learning algorithms. In this
+        function we go from loading all raw breath metadata to compiling it into
+        a near usable frame.
 
         :param patient_id: patient pseudo-id
         :param pt_files: abspath to all patient vent files
@@ -467,11 +516,15 @@ class Dataset(object):
         # PROCESS ALL VENTILATOR DATA
         pt_files = sorted(pt_files)
         meta = self.load_breath_meta_file(pt_files[0])
+
         for f in pt_files[1:]:
             # This takes up about 21% of the time in this function if ehr and demo
             # data is not processed
             tmp = self.load_breath_meta_file(f)
             meta.extend(tmp)
+
+        if self.use_ventmode or self.use_tor:
+            meta = self.process_ventmode_tor(patient_id, pt_files, meta)
 
         if len(meta) != 0:
             # This takes up 54% of the time in this function if ehr and demo data
@@ -526,6 +579,8 @@ class Dataset(object):
         elif self.use_demographic_features:
             cols = cols + self.demographic_features
 
+        if self.use_ventmode and self.use_tor:
+            cols += ['ventmode', 'dta', 'bsa']
         df = pd.DataFrame(meta, columns=cols)
         df['row_time'] = stack_times
         try:
@@ -547,6 +602,9 @@ class Dataset(object):
         for f in pt_files[1:]:
             meta.extend(self.load_breath_meta_file(f))
 
+        if self.use_ventmode or self.use_tor:
+            meta = self.process_ventmode_tor(patient_id, pt_files, meta)
+
         if len(meta) != 0:
             meta = np.array(meta)
             if isinstance(meta[0], list):
@@ -562,10 +620,16 @@ class Dataset(object):
         # If all data was filtered by our starting time criteria
         if len(meta) == 0:
             meta = []
-        df = pd.DataFrame(meta, columns=EXPERIMENTAL_META_HEADER)
+        cols = copy(EXPERIMENTAL_META_HEADER)
+        if self.use_ventmode and self.use_tor:
+            cols += ['ventmode', 'dta', 'bsa']
+        try:
+            df = pd.DataFrame(meta, columns=cols)
+        except:
+            import IPython; IPython.embed()
         # setup standard datatypes, remove things that are not helpful
         to_drop = [' ', 'BS.1', 'x01', 'tvi1', 'tve1', 'x02', 'tvi2', 'tve2']
-        dtypes = {name: "float32" for name in EXPERIMENTAL_META_HEADER if name not in to_drop}
+        dtypes = {name: "float32" for name in cols if name not in to_drop}
         # exemptions
         exemptions = {
             "BN": 'int16', 'ventBN': 'int16', 'BS': 'float16','x0_index': 'int16',
@@ -583,7 +647,7 @@ class Dataset(object):
         df['patient'] = patient_id
         return df
 
-    def process_breath_features(self, mat, start_time, post_hour):
+    def process_breath_features(self, mat, start_time, post_hour, patient_id):
         """
         Preprocess all breath_meta information. This mainly involves cutting the
         data off when it doesn't correspond to the 24 hr window we're interested in
@@ -592,6 +656,7 @@ class Dataset(object):
         :param mat: matrix of data to process
         :param start_time: time we wish to start using data from patient
         :param post_hour: time to stop analyzing data relative to start of ventilation of berlin match
+        :param patient_id: patient identifier
         """
         # index of abs bs is 29. So sort by BS time.
         abs_bs_idx = EXPERIMENTAL_META_HEADER.index('abs_time_at_BS')
@@ -606,9 +671,18 @@ class Dataset(object):
 
         # Derive numpy row idxs based on which features we want in the model
         row_idxs = [EXPERIMENTAL_META_HEADER.index(feature) for feature in self.vent_features]
+        if self.use_ventmode and self.use_tor:
+            row_idxs += [mat.shape[1]-3, mat.shape[1]-2, mat.shape[1]-1]
         mat = mat[:, row_idxs]
         mat = mat.astype(np.float32)
         mask = np.any(np.isnan(mat) | np.isinf(mat), axis=1)
+        if mask.any():
+            vent_bn_idx = self.vent_features.index('ventBN')
+            vent_bns = list(mat[mask, vent_bn_idx].ravel())
+            self.dropped_data[patient_id] = {
+                'too_many_discontinuous_bns': {'vent_bns': [], 'count': 0},
+                'nan_inf_dropping': {'vent_bns': vent_bns},
+            }
         return mat[~mask], bs_times[~mask]
 
     def create_breath_frames(self, mat, frame_size, bs_times, patient_id):
@@ -636,10 +710,11 @@ class Dataset(object):
             if bns_missing > missing_thresh:
                 # last vent BN possible is 65536 (2^16) I'd like to recognize if this is occurring
                 if not abs(bns_missing - (2 ** 16)) <= missing_thresh:
-                    if not patient_id in self.frames_dropped:
-                        self.frames_dropped[patient_id] = 1
+                    if patient_id not in self.data_dropped:
+                        self.data_dropped[patient_id] = {'too_many_discontinuous_bns': {'vent_bns': list(stack[:, vent_bn_idx].ravel()), 'count': 1}}
                     else:
-                        self.frames_dropped[patient_id] += 1
+                        self.data_dropped[patient_id]['too_many_discontinuous_bns']['vent_bns'].append(list(stack[:, vent_bn_idx].ravel()))
+                        self.data_dropped[patient_id]['too_many_discontinuous_bns']['count'] += 1
                     continue
             stack_times.append(bs_times[low_idx:low_idx+frame_size][0])
             # We still have ventBN in the matrix, and this essentially gives func(BN)
@@ -647,6 +722,8 @@ class Dataset(object):
             # axis=0 takes function across a column
             for func in self.frame_funcs:
                 if row is None:
+                    if self.use_tor:
+                        stack[:, -2:] = stack[:, -2:].sum(axis=0)
                     row = func(stack, axis=0)
                 else:
                     row = np.append(row, func(stack, axis=0))

@@ -1369,6 +1369,10 @@ def create_df(args):
         args.test_start_hour_delta,
         use_ehr_features=args.use_ehr_features,
         use_demographic_features=args.use_demographic_features,
+        use_ventmode=True if args.ventmode_model or args.ventmode_scaler else False,
+        ventmode_model_path=args.ventmode_model,
+        ventmode_scaler_path=args.ventmode_scaler,
+        use_tor=args.use_tor,
     )
     if args.load_from_unframed:
         unframed = pd.read_pickle(args.load_from_unframed)
@@ -1376,6 +1380,8 @@ def create_df(args):
     else:
         df = data_cls.get()
     # Perform evaluation on number of frames dropped if we want
+    #
+    # XXX this will be important to evaluate for the reviewer
     if args.print_dropped_frame_eval:
         table = PrettyTable()
         table.field_names = ['patient', 'Current Frames', 'Frames Dropped', '% Dropped']
@@ -1443,6 +1449,9 @@ def build_parser():
     parser.add_argument('--dtw-use-pressure', action='store_true', help='Use pressure waveform in DTW calculations')
     parser.add_argument('--train-pt-frac', type=float, help='Fraction of random training patients you want to use')
     parser.add_argument('-exp', '--experiment-name', help='name of the experiment being run so we can name the results file something that will be remembered later.')
+    parser.add_argument('-vm', '--ventmode-model', help='path to ventmode model if we are utilizing ventmode')
+    parser.add_argument('-vs', '--ventmode-scaler', help='path to ventmode scaler if we are utilizing ventmode')
+    parser.add_argument('--use-tor', action='store_true', help='use tor in featurization')
     return parser
 
 

@@ -18,6 +18,9 @@ def main():
     parser.add_argument('-tsd', '--test-start-hour-delta', default=None, type=int, help='time delta post ARDS detection time or vent start to begin analyzing data. Only for usage in testing set')
     parser.add_argument('-tsp', '--test-post-hour', default=None, type=int)
     parser.add_argument("--feature-set", default="flow_time", choices=Dataset.vent_feature_sets)
+    parser.add_argument('-vm', '--ventmode-model', help='path to ventmode model if we are utilizing ventmode')
+    parser.add_argument('-vs', '--ventmode-scaler', help='path to ventmode scaler if we are utilizing ventmode')
+    parser.add_argument('--use-tor', action='store_true', help='use tor in featurization')
     args = parser.parse_args()
 
     cls = Dataset(
@@ -33,6 +36,10 @@ def main():
         args.split_type,
         test_post_hour=args.test_post_hour,
         test_start_hour_delta=args.test_start_hour_delta,
+        use_ventmode=True if args.ventmode_model or args.ventmode_scaler else False,
+        ventmode_model_path=args.ventmode_model,
+        ventmode_scaler_path=args.ventmode_scaler,
+        use_tor=args.use_tor,
     )
     df = cls.get_unframed_dataset()
     pd.to_pickle(df, args.to_pickle)
