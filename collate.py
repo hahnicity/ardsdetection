@@ -212,7 +212,7 @@ class Dataset(object):
         self.start_hour_delta = start_hour_delta
         self.vent_bn_frac_missing = vent_bn_frac_missing
         # keep track of the number of frames dropped per patient
-        self.data_dropped = {}
+        self.dropped_data = {}
         if test_frame_size or test_post_hour or test_start_hour_delta:
             self.test_frame_size = test_frame_size if isinstance(test_frame_size, int) else frame_size
             self.test_post_hour = test_post_hour if isinstance(test_post_hour, int) else post_hour
@@ -529,7 +529,7 @@ class Dataset(object):
         if len(meta) != 0:
             # This takes up 54% of the time in this function if ehr and demo data
             # is not processed
-            meta, bs_times = self.process_breath_features(np.array(meta), start_time, post_hour)
+            meta, bs_times = self.process_breath_features(np.array(meta), start_time, post_hour, patient_id)
             # This takes up 15% of computation time if ehr and demo data is not
             # processed
             meta, stack_times = self.create_breath_frames(meta, frame_size, bs_times, patient_id)
@@ -623,10 +623,8 @@ class Dataset(object):
         cols = copy(EXPERIMENTAL_META_HEADER)
         if self.use_ventmode and self.use_tor:
             cols += ['ventmode', 'dta', 'bsa']
-        try:
-            df = pd.DataFrame(meta, columns=cols)
-        except:
-            import IPython; IPython.embed()
+
+        df = pd.DataFrame(meta, columns=cols)
         # setup standard datatypes, remove things that are not helpful
         to_drop = [' ', 'BS.1', 'x01', 'tvi1', 'tve1', 'x02', 'tvi2', 'tve2']
         dtypes = {name: "float32" for name in cols if name not in to_drop}
@@ -675,14 +673,25 @@ class Dataset(object):
             row_idxs += [mat.shape[1]-3, mat.shape[1]-2, mat.shape[1]-1]
         mat = mat[:, row_idxs]
         mat = mat.astype(np.float32)
-        mask = np.any(np.isnan(mat) | np.isinf(mat), axis=1)
+        mask = np.isnan(mat) | np.isinf(mat)
+        # XXX can I find out which rows contributed to the masking?
+        self.dropped_data[patient_id] = {
+            'too_many_discontinuous_bns': {'vent_bns': [], 'count': 0},
+            'nan_inf_dropping': {
+                'drop_vent_bns': None,
+                'out_of_n': len(mat),
+                'cols': {feature: 0 for feature in self.vent_features}
+            },
+        }
         if mask.any():
             vent_bn_idx = self.vent_features.index('ventBN')
-            vent_bns = list(mat[mask, vent_bn_idx].ravel())
-            self.dropped_data[patient_id] = {
-                'too_many_discontinuous_bns': {'vent_bns': [], 'count': 0},
-                'nan_inf_dropping': {'vent_bns': vent_bns},
-            }
+            vent_bns = list(mat[np.any(mask, axis=1), vent_bn_idx].ravel())
+            self.dropped_data[patient_id]['nan_inf_dropping']['drop_vent_bns'] = vent_bns
+            cols_dropped = np.where(mask)[1]
+            for k, v in pd.value_counts(cols_dropped).items():
+                self.dropped_data[patient_id]['nan_inf_dropping']['cols'][self.vent_features[k]] = v
+
+        mask = np.any(mask, axis=1)
         return mat[~mask], bs_times[~mask]
 
     def create_breath_frames(self, mat, frame_size, bs_times, patient_id):
@@ -710,11 +719,8 @@ class Dataset(object):
             if bns_missing > missing_thresh:
                 # last vent BN possible is 65536 (2^16) I'd like to recognize if this is occurring
                 if not abs(bns_missing - (2 ** 16)) <= missing_thresh:
-                    if patient_id not in self.data_dropped:
-                        self.data_dropped[patient_id] = {'too_many_discontinuous_bns': {'vent_bns': list(stack[:, vent_bn_idx].ravel()), 'count': 1}}
-                    else:
-                        self.data_dropped[patient_id]['too_many_discontinuous_bns']['vent_bns'].append(list(stack[:, vent_bn_idx].ravel()))
-                        self.data_dropped[patient_id]['too_many_discontinuous_bns']['count'] += 1
+                    self.dropped_data[patient_id]['too_many_discontinuous_bns']['vent_bns'].append(list(stack[:, vent_bn_idx].ravel()))
+                    self.dropped_data[patient_id]['too_many_discontinuous_bns']['count'] += 1
                     continue
             stack_times.append(bs_times[low_idx:low_idx+frame_size][0])
             # We still have ventBN in the matrix, and this essentially gives func(BN)

@@ -1380,15 +1380,41 @@ def create_df(args):
     else:
         df = data_cls.get()
     # Perform evaluation on number of frames dropped if we want
-    #
-    # XXX this will be important to evaluate for the reviewer
     if args.print_dropped_frame_eval:
         table = PrettyTable()
-        table.field_names = ['patient', 'Current Frames', 'Frames Dropped', '% Dropped']
-        for patient, frames_dropped in data_cls.frames_dropped.items():
+        table.field_names = [
+            'Patient', 'Current Frames', 'Frames Dropped',
+            '% Frames Dropped', 'Total Breaths', 'Breaths Dropped',
+            '% Breath Dropped'
+        ]
+        for patient, vals in data_cls.dropped_data.items():
             n_frames_cur = len(df[df.patient == patient])
-            table.add_row([patient, n_frames_cur, frames_dropped, round(100 * float(frames_dropped) / (frames_dropped+n_frames_cur), 3)])
+            if not n_frames_cur:
+                continue
+            n_frames_dropped = vals['too_many_discontinuous_bns']['count']
+            total_breaths = vals['nan_inf_dropping']['out_of_n']
+            n_breaths_dropped = len(vals['nan_inf_dropping']['drop_vent_bns']) if vals['nan_inf_dropping']['drop_vent_bns'] else 0
+            table.add_row([
+                patient,
+                n_frames_cur,
+                n_frames_dropped,
+                round(100 * float(n_frames_dropped) / (n_frames_dropped+n_frames_cur), 3),
+                total_breaths,
+                n_breaths_dropped,
+                round(100 * float(n_breaths_dropped) / total_breaths, 3),
+            ])
         print(table)
+
+        # breakdown data dropped by column
+        table = PrettyTable()
+        table.field_names = ['Patient'] + list(vals['nan_inf_dropping']['cols'].keys())
+        for patient, vals in data_cls.dropped_data.items():
+            row = [patient]
+            for c, v in vals['nan_inf_dropping']['cols'].items():
+                row.append(v)
+            table.add_row(row)
+        print(table)
+        pd.to_pickle(data_cls, 'results/data-cls-obj-with-dropped-data.pkl')
 
     if args.to_pickle:
         df.to_pickle(args.to_pickle)
