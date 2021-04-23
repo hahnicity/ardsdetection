@@ -1414,7 +1414,7 @@ def create_df(args):
                 row.append(v)
             table.add_row(row)
         print(table)
-        pd.to_pickle(data_cls, 'results/data-cls-obj-with-dropped-data.pkl')
+        pd.to_pickle([df, data_cls], 'results/data-cls-obj-with-dropped-data.pkl')
 
     if args.to_pickle:
         df.to_pickle(args.to_pickle)

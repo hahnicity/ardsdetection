@@ -235,10 +235,11 @@ class ModelCollection(object):
 
     def print_results_table(self, results_df):
         table = PrettyTable()
-        table.field_names = ['patho', 'sensitivity', 'specificity', 'precision', 'npv', 'auc']
+        table.field_names = ['patho', 'accuracy', 'sensitivity', 'specificity', 'precision', 'npv', 'auc']
         for i, row in results_df.iterrows():
             results_row = [
                 row.patho,
+                u"{}\u00B1{}".format(row.acc, row.acc_ci),
                 u"{}\u00B1{}".format(row.recall, row.recall_ci),
                 u"{}\u00B1{}".format(row.spec, row.spec_ci),
                 u"{}\u00B1{}".format(row.prec, row.prec_ci),
