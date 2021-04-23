@@ -11,6 +11,7 @@ scaler-*
 *.xlsx
 *.pkl
 *spark_demo.py
+ucdpvanalysis-1.5.tar.gz
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
