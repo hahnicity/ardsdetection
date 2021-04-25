@@ -9,18 +9,22 @@ from copy import copy
 import csv
 from datetime import datetime
 from glob import glob
+from io import open
 import logging
 from operator import xor
 import os
 import re
+import sys
+import traceback
 
 import coloredlogs
 import numpy as np
 import pandas as pd
+from ventmap.raw_utils import extract_raw
 from ventmode import datasets
 from ventmode.main import run_dataset_with_classifier_and_lookahead
 
-from algorithms.breath_meta import get_file_experimental_breath_meta
+from algorithms.breath_meta import get_experimental_breath_meta, get_file_experimental_breath_meta
 from algorithms.constants import EXPERIMENTAL_META_HEADER
 from algorithms.tor5 import perform_tor_with_bs_be
 
@@ -153,7 +157,9 @@ class Dataset(object):
                  use_ventmode=False,
                  ventmode_model_path='',
                  ventmode_scaler_path='',
-                 use_tor=False):
+                 use_tor=False,
+                 fft_filtering_low=None,
+                 fft_filtering_high=None,):
         """
         Define a dataset for use in training an ARDS detection algorithm. If we desire we can
         have separate parameterization for train and test sets. This causes a completely new
@@ -181,6 +187,8 @@ class Dataset(object):
         :param ventmode_model_path:
         :param ventmode_scaler_path:
         :param use_tor: bool for whether or not we should use tor
+        :param fft_filtering_low: lower bound hz. perform fft filtering
+        :param fft_filtering_high: upper bound hz. perform fft filtering.
         """
         self.data_dir_path = data_dir_path
         self.split_type = split_type
@@ -236,6 +244,8 @@ class Dataset(object):
         self.use_tor = use_tor
         self.ventmode_model_path = ventmode_model_path
         self.ventmode_scaler_path = ventmode_scaler_path
+        self.fft_filtering_low = fft_filtering_low
+        self.fft_filtering_high = fft_filtering_high
 
     def _get_patient_file_map(self, cohort_dir):
         raw_dirs = []
@@ -418,6 +428,13 @@ class Dataset(object):
         df.index = range(len(df))
         return df
 
+    def fft_filter_waveform(self, waveform):
+        freqs = np.fft.fftshift(np.fft.fftfreq(len(waveform), d=0.02))
+        freq_mask = np.logical_and(np.abs(freqs) > self.fft_filtering_low, np.abs(freqs) < self.fft_filtering_high)  # mask outside frequency bands
+        filtered = np.fft.fftshift(np.fft.fft(waveform, axis=-1))
+        filtered[~freq_mask] = 0
+        return list(np.fft.ifft(np.fft.ifftshift(filtered), axis=-1).real)
+
     def load_breath_meta_file(self, filename):
         """
         Load breath metadata from a file. If we want to load intermediate
@@ -447,9 +464,23 @@ class Dataset(object):
 
         if load_from_raw:
             try:
-                meta = get_file_experimental_breath_meta(filename, ignore_missing_bes=False)[1:]
+                if self.fft_filtering_low is not None and self.fft_filtering_high is not None:
+                    meta = []
+                    for breath in extract_raw(open(filename, errors='ignore', encoding='ascii'), False):
+                        if len(breath['flow']) == 0 or len(breath['pressure']) == 0:
+                            continue
+                        breath['flow'] = self.fft_filter_waveform(breath['flow'])
+                        breath['pressure'] = self.fft_filter_waveform(breath['pressure'])
+                        bm = get_experimental_breath_meta(breath)
+                        meta.append(bm)
+                else:
+                    meta = get_file_experimental_breath_meta(filename, ignore_missing_bes=False)[1:]
             except Exception as err:
                 logging.error('Unable to load data from file: {}'.format(filename))
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                print('-------- BEGIN TRACEBACK -----------')
+                traceback.print_tb(exc_traceback)
+                print('-------- END TRACEBACK ------------')
                 raise err
 
             try:
@@ -457,7 +488,7 @@ class Dataset(object):
             except OSError:  # dir likely exists
                 pass
 
-            with open(metadata_path, 'w') as f:
+            with open(metadata_path, 'wb') as f:
                 writer = csv.writer(f)
                 writer.writerows(meta)
 

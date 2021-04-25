@@ -1373,6 +1373,8 @@ def create_df(args):
         ventmode_model_path=args.ventmode_model,
         ventmode_scaler_path=args.ventmode_scaler,
         use_tor=args.use_tor,
+        fft_filtering_low=args.fft_filtering_low,
+        fft_filtering_high=args.fft_filtering_high,
     )
     if args.load_from_unframed:
         unframed = pd.read_pickle(args.load_from_unframed)
@@ -1478,6 +1480,8 @@ def build_parser():
     parser.add_argument('-vm', '--ventmode-model', help='path to ventmode model if we are utilizing ventmode')
     parser.add_argument('-vs', '--ventmode-scaler', help='path to ventmode scaler if we are utilizing ventmode')
     parser.add_argument('--use-tor', action='store_true', help='use tor in featurization')
+    parser.add_argument('--fft-filtering-low', type=float, help='lower hz bound for fft filtering')
+    parser.add_argument('--fft-filtering-high', type=float, help='upper hz bound for fft filtering')
     return parser
 
 
