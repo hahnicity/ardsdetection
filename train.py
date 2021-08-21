@@ -1375,6 +1375,8 @@ def create_df(args):
         use_tor=args.use_tor,
         fft_filtering_low=args.fft_filtering_low,
         fft_filtering_high=args.fft_filtering_high,
+        butter_low=args.butter_low,
+        butter_high=args.butter_high,
     )
     if args.load_from_unframed:
         unframed = pd.read_pickle(args.load_from_unframed)
@@ -1482,6 +1484,8 @@ def build_parser():
     parser.add_argument('--use-tor', action='store_true', help='use tor in featurization')
     parser.add_argument('--fft-filtering-low', type=float, help='lower hz bound for fft filtering')
     parser.add_argument('--fft-filtering-high', type=float, help='upper hz bound for fft filtering')
+    parser.add_argument('--butter-low', type=float, help='lower hz bound for Butterworth filtering')
+    parser.add_argument('--butter-high', type=float, help='upper hz bound for Butterworth filtering')
     return parser
 
 

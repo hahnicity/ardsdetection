@@ -20,6 +20,8 @@ import traceback
 import coloredlogs
 import numpy as np
 import pandas as pd
+from parliament.analyze import FileCalculations
+from scipy.signal import butter, sosfilt
 from ventmap.raw_utils import extract_raw
 from ventmode import datasets
 from ventmode.main import run_dataset_with_classifier_and_lookahead
@@ -48,6 +50,7 @@ class Dataset(object):
             'I:E ratio',
             'dyn_compliance',
             'tve:tvi ratio',
+            'stat_compliance',
         ],
         'flow_time_biased': necessities + [
             'mean_flow_from_pef',
@@ -61,6 +64,7 @@ class Dataset(object):
             'tve:tvi ratio',
             'tvi',
             'tve',
+            'stat_compliance',
         ],
         'flow_time_orig': necessities + [
             'mean_flow_from_pef',
@@ -159,7 +163,9 @@ class Dataset(object):
                  ventmode_scaler_path='',
                  use_tor=False,
                  fft_filtering_low=None,
-                 fft_filtering_high=None,):
+                 fft_filtering_high=None,
+                 butter_low=None,
+                 butter_high=None,):
         """
         Define a dataset for use in training an ARDS detection algorithm. If we desire we can
         have separate parameterization for train and test sets. This causes a completely new
@@ -189,11 +195,16 @@ class Dataset(object):
         :param use_tor: bool for whether or not we should use tor
         :param fft_filtering_low: lower bound hz. perform fft filtering
         :param fft_filtering_high: upper bound hz. perform fft filtering.
+        :param butter_low: lower bound hz for butterworth filtering
+        :param butter_high: upper bound hz for butterworth filtering
         """
         self.data_dir_path = data_dir_path
         self.split_type = split_type
         self.experiment_num = experiment_num
         self.desc = pd.read_csv(cohort_description)
+        self.compliance_upper_lim = 500
+        self.compliance_lower_lim = 0
+        self.compliance_algo = 'polynomial'
 
         if feature_set != 'custom':
             self.vent_features = self.vent_feature_sets[feature_set]
@@ -204,13 +215,13 @@ class Dataset(object):
         self.frame_funcs = []
         for func in frame_funcs:
             if func == 'median':
-                self.frame_funcs.append(np.median)
+                self.frame_funcs.append(np.nanmedian)
             elif func == 'mean':
-                self.frame_funcs.append(np.mean)
+                self.frame_funcs.append(np.nanmean)
             elif func == 'var':
-                self.frame_funcs.append(np.var)
+                self.frame_funcs.append(np.nanvar)
             elif func == 'std':
-                self.frame_funcs.append(np.std)
+                self.frame_funcs.append(np.nanstd)
             else:
                 raise Exception('Chosen frame function: {} is not currently supported!'.format(frame_func))
 
@@ -246,6 +257,8 @@ class Dataset(object):
         self.ventmode_scaler_path = ventmode_scaler_path
         self.fft_filtering_low = fft_filtering_low
         self.fft_filtering_high = fft_filtering_high
+        self.butter_low = butter_low
+        self.butter_high = butter_high
 
     def _get_patient_file_map(self, cohort_dir):
         raw_dirs = []
@@ -435,6 +448,34 @@ class Dataset(object):
         filtered[~freq_mask] = 0
         return list(np.fft.ifft(np.fft.ifftshift(filtered), axis=-1).real)
 
+    def butter_filter_waveform(self, waveform):
+        if self.butter_low == 0:
+            sos = butter(10, self.butter_high, fs=50, output='sos', btype='lowpass')
+        elif self.butter_high == 25:
+            sos = butter(10, self.butter_low, fs=50, output='sos', btype='highpass')
+        else:
+            wn = (self.butter_low, self.butter_high)
+            sos = butter(10, wn, fs=50, output='sos', btype='bandpass')
+        return list(sosfilt(sos, waveform, axis=-1))
+
+    def load_compliance_file(self, patient_id, filename):
+        base_filename = os.path.basename(filename)
+        intermediate_fname = "compliance_{}".format(base_filename)
+        meta_dir = os.path.dirname(filename).replace('raw', 'meta')
+        metadata_path = os.path.join(meta_dir, intermediate_fname)
+        load_from_raw = True
+
+        if self.load_intermediates:
+            try:
+                return pd.read_csv(metadata_path)
+            except IOError:
+                pass
+
+        if load_from_raw:
+            compliance = FileCalculations(patient_id, filename, [self.compliance_algo], 5, []).quick_analyze_file()
+            compliance.to_csv(metadata_path, index=False)
+            return compliance
+
     def load_breath_meta_file(self, filename):
         """
         Load breath metadata from a file. If we want to load intermediate
@@ -471,6 +512,15 @@ class Dataset(object):
                             continue
                         breath['flow'] = self.fft_filter_waveform(breath['flow'])
                         breath['pressure'] = self.fft_filter_waveform(breath['pressure'])
+                        bm = get_experimental_breath_meta(breath)
+                        meta.append(bm)
+                elif self.butter_low is not None and self.butter_high is not None:
+                    meta = []
+                    for breath in extract_raw(open(filename, errors='ignore', encoding='ascii'), False):
+                        if len(breath['flow']) == 0 or len(breath['pressure']) == 0:
+                            continue
+                        breath['flow'] = self.butter_filter_waveform(breath['flow'])
+                        breath['pressure'] = self.butter_filter_waveform(breath['pressure'])
                         bm = get_experimental_breath_meta(breath)
                         meta.append(bm)
                 else:
@@ -547,20 +597,37 @@ class Dataset(object):
         # PROCESS ALL VENTILATOR DATA
         pt_files = sorted(pt_files)
         meta = self.load_breath_meta_file(pt_files[0])
+        compliance = [self.load_compliance_file(patient_id, pt_files[0])]
 
         for f in pt_files[1:]:
             # This takes up about 21% of the time in this function if ehr and demo
             # data is not processed
             tmp = self.load_breath_meta_file(f)
             meta.extend(tmp)
+            compliance.append(self.load_compliance_file(patient_id, f))
 
-        if self.use_ventmode or self.use_tor:
-            meta = self.process_ventmode_tor(patient_id, pt_files, meta)
+        compliance = pd.concat(compliance)
+        mask = (
+            (compliance[self.compliance_algo] > self.compliance_upper_lim) |
+            (compliance[self.compliance_algo] < self.compliance_lower_lim)
+        )
+        compliance.loc[mask, self.compliance_algo] = np.nan
 
         if len(meta) != 0:
             # This takes up 54% of the time in this function if ehr and demo data
             # is not processed
-            meta, bs_times = self.process_breath_features(np.array(meta), start_time, post_hour, patient_id)
+            meta = np.array(meta)
+            c_vals = np.expand_dims(compliance[self.compliance_algo].values, axis=1)
+            if len(meta) == len(c_vals):
+                meta = np.append(meta, c_vals, axis=1)
+            else:  # corner case
+                compliance = compliance[['rel_bn', 'vent_bn', self.compliance_algo]]
+                meta = pd.DataFrame(meta)
+                meta = meta.rename(columns={0: 'rel_bn', 1: 'vent_bn'})
+                meta[['rel_bn', 'vent_bn']] = meta[['rel_bn', 'vent_bn']].astype(int)
+                meta = meta.merge(compliance, on=['rel_bn', 'vent_bn'])
+                meta = meta.values
+            meta, bs_times = self.process_breath_features(meta, start_time, post_hour, patient_id)
             # This takes up 15% of computation time if ehr and demo data is not
             # processed
             meta, stack_times = self.create_breath_frames(meta, frame_size, bs_times, patient_id)
@@ -698,14 +765,17 @@ class Dataset(object):
         mat = mat[mask]
         bs_times = bs_times[mask]
 
-        # Derive numpy row idxs based on which features we want in the model
-        row_idxs = [EXPERIMENTAL_META_HEADER.index(feature) for feature in self.vent_features]
+        row_idxs = [
+            EXPERIMENTAL_META_HEADER.index(feature) for feature in self.vent_features
+            if feature in EXPERIMENTAL_META_HEADER
+        ] + (lambda x: [] if 'stat_compliance' not in x else [-1])(self.vent_features)
         if self.use_ventmode and self.use_tor:
             row_idxs += [mat.shape[1]-3, mat.shape[1]-2, mat.shape[1]-1]
         mat = mat[:, row_idxs]
         mat = mat.astype(np.float32)
-        mask = np.isnan(mat) | np.isinf(mat)
-        # XXX can I find out which rows contributed to the masking?
+        # drop the nan condition because it preserves data and there is higher
+        # likelihood of static compliance calcs being nan
+        mask = np.isinf(mat)
         self.dropped_data[patient_id] = {
             'too_many_discontinuous_bns': {'vent_bns': [], 'count': 0},
             'nan_inf_dropping': {
