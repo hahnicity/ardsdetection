@@ -444,10 +444,11 @@ class Dataset(object):
 
     def fft_filter_waveform(self, waveform):
         freqs = np.fft.fftshift(np.fft.fftfreq(len(waveform), d=0.02))
-        freq_mask = np.logical_and(np.abs(freqs) > self.fft_filtering_low, np.abs(freqs) < self.fft_filtering_high)  # mask outside frequency bands
+        freq_mask = np.logical_and(np.abs(freqs) >= self.fft_filtering_low, np.abs(freqs) <= self.fft_filtering_high)  # mask outside frequency bands
         filtered = np.fft.fftshift(np.fft.fft(waveform, axis=-1))
         filtered[~freq_mask] = 0
-        return list(np.fft.ifft(np.fft.ifftshift(filtered), axis=-1).real)
+        filt = list(np.fft.ifft(np.fft.ifftshift(filtered), axis=-1).real)
+        return filt
 
     def butter_filter_waveform(self, waveform):
         if self.butter_low == 0:
@@ -539,7 +540,7 @@ class Dataset(object):
             except OSError:  # dir likely exists
                 pass
 
-            with open(metadata_path, 'wb') as f:
+            with open(metadata_path, 'w') as f:
                 writer = csv.writer(f)
                 writer.writerows(meta)
 
