@@ -75,6 +75,7 @@ class Dataset(object):
             'eTime',
             'I:E ratio',
             'dyn_compliance',
+            'tve:tvi ratio',
         ],
         'flow_time_opt': necessities + [
             'dyn_compliance',

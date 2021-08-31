@@ -320,7 +320,7 @@ class ARDSDetectionModel(object):
             header = '--- Feature chi2 p-values ---'
             scores, pvals = chi2(x_train, y_train)
             scores = sorted(pvals)
-            self.feature_score_rounding = lambda x: round(x, 100)
+            self.feature_score_rounding = lambda x: round(x, 4)
             self.rank_order = 1
 
         table = PrettyTable()
