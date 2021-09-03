@@ -9,7 +9,7 @@ from sklearn.feature_selection import chi2
 from discretizer import Chi2discretizer
 
 
-def ks_test_colinear(data):
+def ks_tst_colinear(data):
     # test colinearity against all other features
     table = PrettyTable()
     table.field_names = ['f1', 'f2', 'D', 'p-val']
@@ -24,7 +24,7 @@ def ks_test_colinear(data):
     print(table)
 
 
-def ks_test_to_target(data):
+def ks_tst_to_target(data):
     # test colinearity against all other features
     table = PrettyTable()
     table.field_names = ['f1', 'f2', 'D', 'p-val']
@@ -89,9 +89,9 @@ def main():
     df = pd.read_csv(args.fold_file)
 
     if args.method == 'kstest' and args.ks_method == 'colinear':
-        ks_test_colinear(df)
+        ks_tst_colinear(df)
     elif args.method == 'kstest' and args.ks_method == 'to_target':
-        ks_test_to_target(df)
+        ks_tst_to_target(df)
     elif args.method == 'kstest' and args.ks_method == 'conditional':
         ks_conditional(df)
     elif args.method == 'chi2':

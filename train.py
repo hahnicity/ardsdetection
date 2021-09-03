@@ -70,7 +70,7 @@ class ARDSDetectionModel(object):
         if self.args.load_model:
             self.models.append(pd.read_pickle(self.args.load_model))
 
-        self.results = ModelCollection(args)
+        self.results = ModelCollection(args.experiment_name)
 
     def get_bootstrap_idxs(self):
         unique_patients = self.data['patient'].unique()

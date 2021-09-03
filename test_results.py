@@ -4,15 +4,17 @@ import pandas as pd
 
 from results import ModelCollection, ModelResults, PatientResults
 
-x_test_fold1 = pd.DataFrame([['a', 1, 1]] * 110, columns=['patient', 'fold_idx', 'ground_truth'])
-x_test_fold2 = pd.DataFrame([['b', 2, 0]] * 150, columns=['patient', 'fold_idx', 'ground_truth'])
+x_test_fold1 = pd.DataFrame([['a', 1, 1, 0]] * 110, columns=['patient', 'fold_idx', 'ground_truth', 'hour'])
+x_test_fold2 = pd.DataFrame([['b', 2, 0, 0]] * 150, columns=['patient', 'fold_idx', 'ground_truth', 'hour'])
 y_test_fold1 = pd.Series([1] * 110)
 y_test_fold2 = pd.Series([0] * 150)
+experiment_name = 'testing'
 
 
 def test_patient_results_sunny_day():
     patient_a = PatientResults('a', 1, 1, 0)
-    patient_a.set_results([1] * 60 + [0] * 50)
+    preds = pd.Series([1] * 60 + [0] * 50)
+    patient_a.set_results(preds, x_test_fold1)
     lst, cols = patient_a.to_list()
     assert_list_equal(lst, [
         'a',
@@ -37,7 +39,7 @@ def test_patient_results_sunny_day():
 
 
 def test_calc_fold_stats():
-    model_collection = ModelCollection()
+    model_collection = ModelCollection(experiment_name)
     pred1 = pd.Series([0] * 50 + [1] * 60)
     pred2 = pd.Series([0] * 110 + [1] * 40)
     model_collection.add_model(y_test_fold1, pred1, x_test_fold1, 1)
@@ -57,7 +59,7 @@ def test_calc_fold_stats():
 
 
 def test_calc_aggregate_stats():
-    model_collection = ModelCollection()
+    model_collection = ModelCollection(experiment_name)
     pred1 = pd.Series([0] * 50 + [1] * 60)
     pred2 = pd.Series([0] * 110 + [1] * 40)
     model_collection.add_model(y_test_fold1, pred1, x_test_fold1, 1)
@@ -73,7 +75,7 @@ def test_calc_aggregate_stats():
 
 
 def test_calc_aggregate_stats_with_failing_ards_thresh():
-    model_collection = ModelCollection()
+    model_collection = ModelCollection(experiment_name)
     pred1 = pd.Series([0] * 50 + [1] * 60)
     pred2 = pd.Series([0] * 110 + [1] * 40)
     model_collection.add_model(y_test_fold1, pred1, x_test_fold1, 1)
@@ -89,7 +91,7 @@ def test_calc_aggregate_stats_with_failing_ards_thresh():
 
 
 def test_calc_aggregate_stats_with_passing_ards_thresh():
-    model_collection = ModelCollection()
+    model_collection = ModelCollection(experiment_name)
     pred1 = pd.Series([0] * 50 + [1] * 60)
     pred2 = pd.Series([0] * 110 + [1] * 40)
     model_collection.add_model(y_test_fold1, pred1, x_test_fold1, 1)
@@ -105,7 +107,7 @@ def test_calc_aggregate_stats_with_passing_ards_thresh():
 
 
 def test_calc_aggregate_stats_with_passing_other_thresh():
-    model_collection = ModelCollection()
+    model_collection = ModelCollection(experiment_name)
     pred1 = pd.Series([0] * 50 + [1] * 60)
     pred2 = pd.Series([0] * 110 + [1] * 40)
     model_collection.add_model(y_test_fold1, pred1, x_test_fold1, 1)
@@ -121,7 +123,7 @@ def test_calc_aggregate_stats_with_passing_other_thresh():
 
 
 def test_calc_aggregate_stats_with_failing_other_thresh():
-    model_collection = ModelCollection()
+    model_collection = ModelCollection(experiment_name)
     pred1 = pd.Series([0] * 50 + [1] * 60)
     pred2 = pd.Series([0] * 110 + [1] * 40)
     model_collection.add_model(y_test_fold1, pred1, x_test_fold1, 1)
@@ -144,18 +146,18 @@ def test_get_summary_statistics_from_frame():
         [10, 9, 0, 1],
     ], columns=['ards_tps_0.55', 'ards_tns_0.55', 'ards_fps_0.55', 'ards_fns_0.55'])
     expected = pd.DataFrame([
-        [1, 1, 1, 1],
-        [1, 10.0/12, 8.0/10, 1],
-        [5.0/9, 6.0/11, 5.0/10, 6/10.0],
-        [10.0/11, 1, 1, 9.0/10],
+        [1, 1, 1, 1, 1],
+        [.9, 1, 10.0/12, 8.0/10, 1],
+        [.55, 5.0/9, 6.0/11, 5.0/10, 6/10.0],
+        [.95, 10.0/11, 1, 1, 9.0/10],
     ])
-    model_collection = ModelCollection()
+    model_collection = ModelCollection(experiment_name)
     res = model_collection.get_summary_statistics_from_frame(dataframe, 'ards', .55)
     assert (res == expected).all().all()
 
 
 def test_get_all_patient_results_dataframe():
-    model_collection = ModelCollection()
+    model_collection = ModelCollection(experiment_name)
     pred1 = pd.Series([0] * 50 + [1] * 60)
     pred2 = pd.Series([0] * 110 + [1] * 40)
     model_collection.add_model(y_test_fold1, pred1, x_test_fold1, 1)
@@ -196,6 +198,6 @@ def test_auc_results():
         [110, 40, 40 / 150.0, 0, 2, 1, 0],
         [110, 40, 40 / 150.0, 0, 2, 1, 0],
     ], columns=['other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'model_idx', 'ground_truth'])
-    model_collection = ModelCollection()
+    model_collection = ModelCollection(experiment_name)
     aucs = model_collection.get_auc_results(patient_results)
     assert (aucs == np.array([1, 1])).all()

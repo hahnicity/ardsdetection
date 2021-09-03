@@ -141,15 +141,14 @@ class ModelResults(object):
 
 
 class ModelCollection(object):
-    def __init__(self, args):
+    def __init__(self, experiment_name):
         self.models = []
         self.model_results = {
             'folds': {},
             'aggregate': None,
         }
         self.model_idx = 0
-        self.args = args
-        self.experiment_name = self.args.experiment_name
+        self.experiment_name = experiment_name
 
     def add_model(self, y_test, predictions, x_test, fold_idx):
         model = ModelResults(fold_idx, self.model_idx)
