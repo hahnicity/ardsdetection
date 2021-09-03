@@ -20,6 +20,11 @@ Use anaconda for setting up your environment
 	conda install matplotlib seaborn
 	pip install -r requirements.txt
 
+## Dataset
+
+For access to the dataset please contact Jason Adams `jyadams@ucdavis.edu` for dataset
+access. After this you will be able to use the code described in this repo.
+
 ## Reproduction
 
 ### ATS Conference Results
