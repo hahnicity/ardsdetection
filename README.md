@@ -35,3 +35,18 @@ Checkout the `ccx` tag
 
     git checkout ccx
     python train.py --algo RF -fsm chi2 --split-type kfold --n-new-features 8
+
+## Citing
+If you used my dataset or the work herein please cite us :bowtie:
+
+```
+@article{rehm2021use,
+  title={Use of Machine Learning to Screen for Acute Respiratory Distress Syndrome Using Raw Ventilator Waveform Data},
+  author={Rehm, Gregory B and Cort{\'e}s-Puch, Irene and Kuhn, Brooks T and Nguyen, Jimmy and Fazio, Sarina A and Johnson, Michael A and Anderson, Nicholas R and Chuah, Chen-Nee and Adams, Jason Y},
+  journal={Critical care explorations},
+  volume={3},
+  number={1},
+  year={2021},
+  publisher={Wolters Kluwer Health}
+}
+```
