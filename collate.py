@@ -97,7 +97,8 @@ class Dataset(object):
             'mean_flow_from_pef',
             'eTime',
             'I:E ratio',
-        ]
+        ],
+        'stat_compliance': necessities + ['stat_compliance'],
     }
     vent_feature_sets.update({
         'broad': vent_feature_sets['flow_time'] + [
@@ -619,6 +620,9 @@ class Dataset(object):
             # This takes up 54% of the time in this function if ehr and demo data
             # is not processed
             meta = np.array(meta)
+            # ensure meta is proper length
+            len_mask = [len(r) == 49 for r in meta]
+            meta = np.array(list(meta[len_mask]))
             c_vals = np.expand_dims(compliance[self.compliance_algo].values, axis=1)
             if len(meta) == len(c_vals):
                 meta = np.append(meta, c_vals, axis=1)
@@ -627,6 +631,7 @@ class Dataset(object):
                 meta = pd.DataFrame(meta)
                 meta = meta.rename(columns={0: 'rel_bn', 1: 'vent_bn'})
                 meta[['rel_bn', 'vent_bn']] = meta[['rel_bn', 'vent_bn']].astype(int)
+
                 meta = meta.merge(compliance, on=['rel_bn', 'vent_bn'])
                 meta = meta.values
             meta, bs_times = self.process_breath_features(meta, start_time, post_hour, patient_id)
