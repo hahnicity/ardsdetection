@@ -17,13 +17,14 @@ class PatientResults(object):
         self.patient_id = patient_id
         self.other_votes = 0
         self.ards_votes = 0
+        self.copd_votes = 0
         self.ground_truth = ground_truth
         self.majority_prediction = np.nan
         self.fold_idx = fold_idx
         self.model_idx = model_idx
         # the intention is that this will map hour to the number of predictions made
         # for non-ARDS and ARDS
-        self.hourly_preds = {i: [np.nan, np.nan] for i in range(24)}
+        self.hourly_preds = {i: [np.nan, np.nan, np.nan] for i in range(24)}
 
     def set_results(self, predictions, x_test_pt):
         for i in predictions.values:
@@ -31,46 +32,52 @@ class PatientResults(object):
                 self.other_votes += 1
             elif i == 1:
                 self.ards_votes += 1
+            elif i == 2:
+                self.copd_votes += 1
 
         # at least in python 2.7 int() essentially acts as math.floor
         ards_percentage = int(100 * (self.ards_votes / float(len(predictions))))
-        self.majority_prediction = 1 if self.ards_votes >= self.other_votes else 0
+        self.majority_prediction = np.argmax([self.other_votes, self.ards_votes, self.copd_votes])
         x_test_pt.loc[:, 'pred'] = predictions
+
+        # run hourly predictions
         grouping = x_test_pt[['hour', 'pred']].groupby('hour')
         for i, rows in grouping:
-            ards_count = rows.pred.sum()
-            self.hourly_preds[rows.iloc[0].hour] = [len(rows) - ards_count, ards_count]
+            ards_count = len(rows[rows == 1])
+            copd_count = len(rows[rows == 2])
+            self.hourly_preds[rows.iloc[0].hour] = [len(rows) - ards_count - copd_count, ards_count, copd_count]
 
     def to_list(self):
         return [
             self.patient_id,
             self.other_votes,
             self.ards_votes,
-            self.ards_votes / (float(self.other_votes) + self.ards_votes),
+            self.ards_votes / (float(self.other_votes) + self.ards_votes + self.copd_votes),
+            self.copd_votes,
             self.majority_prediction,
             self.fold_idx,
             self.model_idx,
             self.ground_truth,
-        ], ['patient_id', 'other_votes', 'ards_votes', 'frac_votes', 'majority_prediction', 'fold_idx', 'model_idx', 'ground_truth']
+        ], ['patient_id', 'other_votes', 'ards_votes', 'frac_votes', 'copd_votes', 'majority_prediction', 'fold_idx', 'model_idx', 'ground_truth']
 
     def get_hourly_preds(self):
         results = [self.patient_id]
         columns = ['patient_id']
         for hour, preds in self.hourly_preds.items():
             results.extend(preds)
-            columns.extend(['hour_{}_other_votes'.format(hour), 'hour_{}_ards_votes'.format(hour)])
+            columns.extend(['hour_{}_other_votes'.format(hour), 'hour_{}_ards_votes'.format(hour), 'hour_{}_copd_votes'.format(hour)])
         return results, columns
 
 
 class ModelResults(object):
-    def __init__(self, fold_idx, model_idx):
+    def __init__(self, fold_idx, model_idx, has_copd):
         self.fold_idx = fold_idx
         self.all_patient_results = []
         self.model_idx = model_idx
+        self.has_copd = has_copd
 
     def set_results(self, y_test, predictions, x_test):
-        """
-        """
+
         for pt in x_test.patient.unique():
             pt_rows = x_test[x_test.patient == pt]
             pt_gt = y_test.loc[pt_rows.index]
@@ -102,11 +109,11 @@ class ModelResults(object):
         return pd.DataFrame(tmp, columns=cols)
 
     def count_predictions(self, threshold):
-        """
-        """
         assert 0 <= threshold <= 1
         stat_cols = []
-        for patho in ['other', 'ards']:
+        pathos, nums = (['other', 'ards', 'copd'], [0, 1, 2]) if self.has_copd else (['other', 'ards'], [0, 1])
+
+        for patho in pathos:
             stat_cols.extend([
                 '{}_tps_{}'.format(patho, threshold),
                 '{}_tns_{}'.format(patho, threshold),
@@ -117,19 +124,23 @@ class ModelResults(object):
 
         patient_results = self.get_patient_results()
         stat_results = []
-        for patho in [0, 1]:
+
+        for patho in nums:
             # The 2 idx is the prediction fraction from the patient results class
             #
             # In this if statement we are differentiating between predictions made
             # for ARDS and predictions made otherwise. the eq_mask signifies
             # predictions made for the pathophysiology. For instance if our pathophys
             # is 0 then we want the fraction votes for ARDS to be < prediction threshold.
-            if patho == 0:
+            if patho == 0 and not self.has_copd:
                 eq_mask = patient_results.frac_votes < threshold
                 neq_mask = patient_results.frac_votes >= threshold
-            else:
+            elif patho == 1 and not self.has_copd:
                 eq_mask = patient_results.frac_votes >= threshold
                 neq_mask = patient_results.frac_votes < threshold
+            else:
+                eq_mask = patient_results.majority_prediction == patho
+                neq_mask = patient_results.majority_prediction != patho
 
             stat_results.extend([
                 len(patient_results[eq_mask][patient_results.loc[eq_mask, 'ground_truth'] == patho]),
@@ -137,11 +148,12 @@ class ModelResults(object):
                 len(patient_results[eq_mask][patient_results.loc[eq_mask, 'ground_truth'] != patho]),
                 len(patient_results[neq_mask][patient_results.loc[neq_mask, 'ground_truth'] == patho]),
             ])
+
         return stat_results + [self.fold_idx], stat_cols
 
 
 class ModelCollection(object):
-    def __init__(self, experiment_name):
+    def __init__(self, experiment_name, has_copd):
         self.models = []
         self.model_results = {
             'folds': {},
@@ -149,9 +161,10 @@ class ModelCollection(object):
         }
         self.model_idx = 0
         self.experiment_name = experiment_name
+        self.has_copd = has_copd
 
     def add_model(self, y_test, predictions, x_test, fold_idx):
-        model = ModelResults(fold_idx, self.model_idx)
+        model = ModelResults(fold_idx, self.model_idx, self.has_copd)
         model.set_results(y_test, predictions, x_test)
         self.models.append(model)
         self.model_idx += 1
@@ -210,11 +223,19 @@ class ModelCollection(object):
         aucs = self.get_auc_results(patient_results)
         uniq_pts = len(patient_results.patient_id.unique())
         mean_auc = aucs.mean().round(3)
-        auc_ci = (1.96 * np.sqrt(mean_auc * (1-mean_auc) / uniq_pts)).round(3)
-        for patho in ['other', 'ards']:
+        if self.has_copd:
+            auc_ci = np.nan
+        else:
+            auc_ci = (1.96 * np.sqrt(mean_auc * (1-mean_auc) / uniq_pts)).round(3)
+        pathos = ['other', 'ards', 'copd'] if self.has_copd else ['other', 'ards']
+
+        for patho in pathos:
             stats = self.get_summary_statistics_from_frame(dataframe, patho, threshold)
             means = stats.mean().round(3)
-            cis = (1.96 * np.sqrt(means*(1-means)/uniq_pts)).round(3)
+            if self.has_copd:
+                cis = means * np.nan
+            else:
+                cis = (1.96 * np.sqrt(means*(1-means)/uniq_pts)).round(3)
             stats_tmp.append([
                 patho,
                 means[0],
