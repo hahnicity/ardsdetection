@@ -118,6 +118,9 @@ def main():
     parser.add_argument('--bootstrap-n', type=int, default=80)
     parser.add_argument('--no-bootstrap-replace', action='store_false', help='Dont use replacement when sampling patients with bootstrap')
     parser.add_argument('--n-bootstraps', type=int, default=10, help='number of bootstrapped patient samplees to take')
+    parser.add_argument("--no-copd-to-ctrl", action="store_true", help='Dont convert copd annotations to ctrl annotations')
+    parser.add_argument("--no-copd", action="store_true", help='Remove COPD patients from cohort')
+    parser.add_argument("--no-other", action="store_true", help='Remove Other patients from cohort')
     main_args = parser.parse_args()
 
     model_args = build_parser().parse_args([])
@@ -131,6 +134,9 @@ def main():
     model_args.post_hour = main_args.post_hour
     model_args.bootstrap_n = main_args.bootstrap_n
     model_args.no_bootstrap_replace = main_args.no_bootstrap_replace
+    model_args.no_copd_to_ctrl = main_args.no_copd_to_ctrl
+    model_args.no_copd = main_args.no_copd
+    model_args.no_other = main_args.no_other
     model_args.n_bootstraps = main_args.n_bootstraps
 
     if not main_args.load_results:

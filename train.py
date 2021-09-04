@@ -62,7 +62,15 @@ class ARDSDetectionModel(object):
         self.data = data
         self.pathos = {0: 'OTHER', 1: 'ARDS', 2: 'COPD'}
         self.feature_ranks = {}
-        if not self.args.no_copd_to_ctrl:
+        # this is kinda a janky way to do this. but yolo?
+        if self.args.no_other:
+            self.data = self.data.loc[~(self.data.y == 0)]
+
+        if self.args.no_copd:
+            self.data = self.data.loc[~(self.data.y == 2)]
+            del self.pathos[2]
+
+        if not self.args.no_copd_to_ctrl and not self.args.no_copd:
             self.data.loc[self.data[self.data.y == 2].index, 'y'] = 0
             del self.pathos[2]
 
@@ -1457,6 +1465,8 @@ def build_parser():
     parser.add_argument('--load-from-unframed', help='create new framed dataset from an existing unframed one')
     parser.add_argument('--no-load-intermediates', action='store_false', help='do not load from intermediate data')
     parser.add_argument("--no-copd-to-ctrl", action="store_true", help='Dont convert copd annotations to ctrl annotations')
+    parser.add_argument("--no-copd", action="store_true", help='Remove COPD patients from cohort')
+    parser.add_argument("--no-other", action="store_true", help='Remove Other patients from cohort')
     parser.add_argument("--grid-search", action="store_true", help='perform a grid search  for model hyperparameters')
     parser.add_argument("--grid-search-kfolds", type=int, default=4, help='number of validation kfolds to use in the grid search')
     parser.add_argument('-gsj', '--grid-search-jobs', type=int, default=multiprocessing.cpu_count(), help='run grid search with this many cores')
