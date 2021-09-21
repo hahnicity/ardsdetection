@@ -21,12 +21,14 @@ import coloredlogs
 import numpy as np
 import pandas as pd
 from parliament.analyze import FileCalculations
+from parliament.polynomial_model import perform_polynomial_model
+from parliament.other_calcs import calc_volumes
 from scipy.signal import butter, sosfilt
+from ventmap.breath_meta import get_experimental_breath_meta, get_file_experimental_breath_meta
 from ventmap.raw_utils import extract_raw
 from ventmode import datasets
 from ventmode.main import run_dataset_with_classifier_and_lookahead
 
-from algorithms.breath_meta import get_experimental_breath_meta, get_file_experimental_breath_meta
 from algorithms.constants import EXPERIMENTAL_META_HEADER
 from algorithms.tor5 import perform_tor_with_bs_be
 
@@ -51,6 +53,7 @@ class Dataset(object):
             'dyn_compliance',
             'tve:tvi ratio',
             'stat_compliance',
+            'resist',
         ],
         'flow_time_biased': necessities + [
             'mean_flow_from_pef',
@@ -65,6 +68,7 @@ class Dataset(object):
             'tvi',
             'tve',
             'stat_compliance',
+            'resist',
         ],
         'flow_time_orig': necessities + [
             'mean_flow_from_pef',
@@ -461,23 +465,33 @@ class Dataset(object):
             sos = butter(10, wn, fs=50, output='sos', btype='bandpass')
         return list(sosfilt(sos, waveform, axis=-1))
 
-    def load_compliance_file(self, patient_id, filename):
+    def load_compliance_file(self, patient_id, filename, meta):
         base_filename = os.path.basename(filename)
         intermediate_fname = "compliance_{}".format(base_filename)
-        meta_dir = os.path.dirname(filename).replace('raw', 'meta')
-        metadata_path = os.path.join(meta_dir, intermediate_fname)
+        compliance_dir = os.path.dirname(filename).replace('raw', 'meta')
+        compliance_path = os.path.join(compliance_dir, intermediate_fname)
         load_from_raw = True
 
         if self.load_intermediates:
             try:
-                return pd.read_csv(metadata_path)
+                return pd.read_csv(compliance_path)
             except IOError:
                 pass
 
-        if load_from_raw:
-            compliance = FileCalculations(patient_id, filename, [self.compliance_algo], 5, []).quick_analyze_file()
-            compliance.to_csv(metadata_path, index=False)
-            return compliance
+        meta = pd.DataFrame(meta, columns=EXPERIMENTAL_META_HEADER)
+        c_res = []
+        for i, breath in enumerate(extract_raw(open(filename, errors='ignore', encoding='ascii'), False)):
+            r = meta.iloc[i]
+            flow = np.array(breath['flow']) / 60
+            vols = calc_volumes(flow, breath['dt'])
+            compliance, resist, _, _ = perform_polynomial_model(
+                flow, vols, np.array(breath['pressure']), r.x0_index, r.PEEP, r.tvi/1000
+            )
+            c_res.append([compliance, resist])
+        df = pd.DataFrame(c_res, columns=['stat_compliance', 'resist'])
+        df['stat_compliance'] = df['stat_compliance'] * 1000
+        df.to_csv(compliance_path, index=False)
+        return df
 
     def load_breath_meta_file(self, filename):
         """
@@ -600,21 +614,22 @@ class Dataset(object):
         # PROCESS ALL VENTILATOR DATA
         pt_files = sorted(pt_files)
         meta = self.load_breath_meta_file(pt_files[0])
-        compliance = [self.load_compliance_file(patient_id, pt_files[0])]
+        compliance = [self.load_compliance_file(patient_id, pt_files[0], meta)]
 
         for f in pt_files[1:]:
             # This takes up about 21% of the time in this function if ehr and demo
             # data is not processed
             tmp = self.load_breath_meta_file(f)
             meta.extend(tmp)
-            compliance.append(self.load_compliance_file(patient_id, f))
+            compliance.append(self.load_compliance_file(patient_id, f, tmp))
 
         compliance = pd.concat(compliance)
         mask = (
-            (compliance[self.compliance_algo] > self.compliance_upper_lim) |
-            (compliance[self.compliance_algo] < self.compliance_lower_lim)
+            (compliance['stat_compliance'] > self.compliance_upper_lim) |
+            (compliance['stat_compliance'] < self.compliance_lower_lim)
         )
-        compliance.loc[mask, self.compliance_algo] = np.nan
+        compliance.loc[mask, 'stat_compliance'] = np.nan
+        compliance.loc[compliance['resist'] < 0, 'resist'] = np.nan
 
         if len(meta) != 0:
             # This takes up 54% of the time in this function if ehr and demo data
@@ -623,11 +638,11 @@ class Dataset(object):
             # ensure meta is proper length
             len_mask = [len(r) == 49 for r in meta]
             meta = np.array(list(meta[len_mask]))
-            c_vals = np.expand_dims(compliance[self.compliance_algo].values, axis=1)
+            c_vals = compliance[['stat_compliance', 'resist']].values
             if len(meta) == len(c_vals):
                 meta = np.append(meta, c_vals, axis=1)
             else:  # corner case
-                compliance = compliance[['rel_bn', 'vent_bn', self.compliance_algo]]
+                compliance = compliance[['rel_bn', 'vent_bn', 'stat_compliance', 'resist']]
                 meta = pd.DataFrame(meta)
                 meta = meta.rename(columns={0: 'rel_bn', 1: 'vent_bn'})
                 meta[['rel_bn', 'vent_bn']] = meta[['rel_bn', 'vent_bn']].astype(int)
@@ -775,7 +790,7 @@ class Dataset(object):
         row_idxs = [
             EXPERIMENTAL_META_HEADER.index(feature) for feature in self.vent_features
             if feature in EXPERIMENTAL_META_HEADER
-        ] + (lambda x: [] if 'stat_compliance' not in x else [-1])(self.vent_features)
+        ] + (lambda x: [] if 'stat_compliance' not in x else [-2])(self.vent_features) + (lambda x: [] if 'resist' not in x else [-1])(self.vent_features)
         if self.use_ventmode and self.use_tor:
             row_idxs += [mat.shape[1]-3, mat.shape[1]-2, mat.shape[1]-1]
         mat = mat[:, row_idxs]
