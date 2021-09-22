@@ -321,19 +321,21 @@ class ARDSDetectionModel(object):
         if self.args.algo in ['RF']:
             header = '--- Feature OOB scores ---'
             oob_scores = clf.feature_importances_
-            scores = sorted(oob_scores, key=lambda x: -x)
+            sort_mask = np.argsort(-oob_scores)
+            scores = oob_scores[sort_mask]
             self.feature_score_rounding = lambda x: round(x, 4)
             self.rank_order = -1
         else:
             header = '--- Feature chi2 p-values ---'
             scores, pvals = chi2(x_train, y_train)
-            scores = sorted(pvals)
+            sort_mask = np.argsort(pvals)
+            scores = pvals[sort_mask]
             self.feature_score_rounding = lambda x: round(x, 4)
             self.rank_order = 1
 
         table = PrettyTable()
         table.field_names = ['rank', 'feature', 'score']
-        for rank, feature, score in zip(range(1, len(scores)+1), x_train.columns, scores):
+        for rank, feature, score in zip(range(1, len(scores)+1), x_train.columns[sort_mask], scores):
             if feature not in self.feature_ranks:
                 self.feature_ranks[feature] = [(rank, score)]
             else:
@@ -482,7 +484,6 @@ class ARDSDetectionModel(object):
                             },
                         },
                     },
-                    # XXX these are params from 24 hr model. should be changed
                     'holdout': {
                         100: {
                             'majority': {
