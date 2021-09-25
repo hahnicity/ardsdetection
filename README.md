@@ -35,17 +35,17 @@ pathing to the cohort description.
 
 Steps:
 
- 1. Unzip the dataset. Remember the final path of the dataset
+ 1. Unzip the dataset. Remember the final path of the dataset.
 ```
-    7z x ardsdetection_dataset_anonymized.7z
+7z x ardsdetection_dataset_anonymized.7z -o/dataset/base/path/
 ```
  2. Move to the code path for this repository
 ```
-    cd /path/to/ardsdetection
+cd /path/to/ardsdetection
 ```
  3. Run dataset processing
 ```
-    python train.py -dp /path/to/ardsdetection_anon --cohort-description /path/to/ardsdetection_anon/anon-desc.csv --to-pickle processed_dataset.pkl
+python train.py -dp /dataset/base/path/ardsdetection_anon --cohort-description /dataset/base/path/ardsdetection_anon/anon-desc.csv --to-pickle processed_dataset.pkl
 ```
 
 ### ATS Conference Results
