@@ -15,3 +15,8 @@ Checkout the `ats-abstract` branch and run.
 
 	git checkout ats-abstract
 	python train.py -p flow-time-opt-ats.pkl --folds 5
+
+### CCX Results
+
+    git checkout ccx
+    python train.py -p ccx_dataset.pkl --n-new-features 8 -fsm chi2 --algo RF
