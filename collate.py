@@ -12,6 +12,7 @@ from glob import glob
 from io import open
 import logging
 from operator import xor
+from pathlib import Path
 import os
 import re
 import sys
@@ -25,12 +26,16 @@ from parliament.polynomial_model import perform_polynomial_model
 from parliament.other_calcs import calc_volumes
 from scipy.signal import butter, sosfilt
 from ventmap.breath_meta import get_experimental_breath_meta, get_file_experimental_breath_meta
+from ventmap.constants import EXPERIMENTAL_META_HEADER
 from ventmap.raw_utils import extract_raw
-from ventmode import datasets
-from ventmode.main import run_dataset_with_classifier_and_lookahead
 
-from algorithms.constants import EXPERIMENTAL_META_HEADER
-from algorithms.tor5 import perform_tor_with_bs_be
+try:
+    from algorithms.tor5 import perform_tor_with_bs_be
+    from ventmode import datasets
+    from ventmode.main import run_dataset_with_classifier_and_lookahead
+    tor_possible = True
+except ImportError:
+    tor_possible = False
 
 coloredlogs.install()
 DEMOGRAPHIC_DATA_PATH = 'demographic/cohort_demographics.csv'
@@ -322,7 +327,7 @@ class Dataset(object):
             for patient_id in cohort_unframed.patient.unique():
                 patient_rows = unframed[unframed.patient == patient_id]
                 patient_rows = patient_rows.replace([np.inf, -np.inf], np.nan)
-                desc_pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient_id].iloc[0]
+                desc_pt_row = self.desc[self.desc['Patient Unique Identifier'].astype(str) == patient_id].iloc[0]
                 patho = patient_rows.iloc[0].y
                 if patho != 1:
                     pt_start_time = desc_pt_row['vent_start_time']
@@ -371,14 +376,10 @@ class Dataset(object):
             file_map = self._get_patient_file_map(params['cohort_dir'])
 
             for patient in file_map:
-                pt_row = self.desc[self.desc['Patient Unique Identifier'] == patient]
+                pt_row = self.desc[self.desc['Patient Unique Identifier'].astype(str) == patient]
                 if len(pt_row) == 0:
                     raise Exception('Found no information in patient mapping for patient: {}'.format(patient))
-                pt_row = pt_row[(pt_row.experiment_group.isin([int(i) for i in self.experiment_num.split('+')])) & (pt_row['Potential Enrollment'] == 'Y')]
-                if len(pt_row) == 0:
-                    raise Exception("patient {} is not supposed to be in the cohort!".format(patient))
-                else:
-                    pt_row = pt_row.iloc[0]
+                pt_row = pt_row.iloc[0]
 
                 if not self._is_patient_available_in_frame(pt_row, patient, start_hour_delta, post_hour):
                     continue
@@ -400,14 +401,20 @@ class Dataset(object):
                         date_str = re.search(date_fmt, first_file).groups()[0]
                         pt_start_time = np.datetime64(datetime.strptime(date_str, strp_fmt)) + np.timedelta64(start_hour_delta, 'h')
                     else:
-                        pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M")) + np.timedelta64(start_hour_delta, 'h')
+                        try:
+                            pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M")) + np.timedelta64(start_hour_delta, 'h')
+                        except ValueError:  # anon
+                            pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%Y-%m-%d %H:%M:%S")) + np.timedelta64(start_hour_delta, 'h')
 
                 # Handle COPD+ARDS as just ARDS wrt to the model for now. We can be
                 # more granular later
                 if 'ARDS' in patho:
                     gt_label = 1
                     pt_start_time = pt_row['Date when Berlin criteria first met (m/dd/yyy)']
-                    pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M")) + np.timedelta64(start_hour_delta, 'h')
+                    try:
+                        pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%m/%d/%y %H:%M")) + np.timedelta64(start_hour_delta, 'h')
+                    except ValueError:  # anon
+                        pt_start_time = np.datetime64(datetime.strptime(pt_start_time, "%Y-%m-%d %H:%M:%S")) + np.timedelta64(start_hour_delta, 'h')
                 # For now we only get first day of recorded data. Maybe in future we will want
                 # first day of vent data.
                 elif 'COPD' in patho or 'ASTHMA' in patho:
@@ -550,11 +557,7 @@ class Dataset(object):
                 print('-------- END TRACEBACK ------------')
                 raise err
 
-            try:
-                os.mkdir(meta_dir)
-            except OSError:  # dir likely exists
-                pass
-
+            Path(meta_dir).mkdir(parents=True, exist_ok=True)
             with open(metadata_path, 'w') as f:
                 writer = csv.writer(f)
                 writer.writerows(meta)
@@ -722,7 +725,7 @@ class Dataset(object):
         for f in pt_files[1:]:
             meta.extend(self.load_breath_meta_file(f))
 
-        if self.use_ventmode or self.use_tor:
+        if (self.use_ventmode or self.use_tor) and tor_possible:
             meta = self.process_ventmode_tor(patient_id, pt_files, meta)
 
         if len(meta) != 0:
