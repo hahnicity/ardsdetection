@@ -27,6 +27,27 @@ access. After this you will be able to use the code described in this repo.
 
 ## Reproduction
 
+### Process Your Dataset
+
+First you need to process the dataset into a pickled format. If you are using
+our dataset from Jason Adams then you need to specify pathing to the dataset and
+pathing to the cohort description.
+
+Steps:
+
+ 1. Unzip the dataset. Remember the final path of the dataset
+```
+    7z x ardsdetection_dataset_anonymized.7z
+```
+ 2. Move to the code path for this repository
+```
+    cd /path/to/ardsdetection
+```
+ 3. Run dataset processing
+```
+    python train.py -dp /path/to/ardsdetection_anon --cohort-description /path/to/ardsdetection_anon/anon-desc.csv --to-pickle processed_dataset.pkl
+```
+
 ### ATS Conference Results
 
 Checkout the `ats-abstract` branch and run.
@@ -39,10 +60,10 @@ Checkout the `ats-abstract` branch and run.
 Checkout the `ccx` tag
 
     git checkout ccx
-    python train.py --algo RF -fsm chi2 --split-type kfold --n-new-features 8
+    python train.py --from-pickle processed_dataset.pkl --algo RF -fsm chi2 --split-type kfold --n-new-features 8
 
 ## Citing
-If you used my dataset or the work herein please cite us :bowtie:
+If you used our dataset or the work herein please cite us :bowtie:
 
 ```
 @article{rehm2021use,
