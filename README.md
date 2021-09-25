@@ -15,10 +15,20 @@ This gives a general overview of the way the ARDS detection works.
 ## Install
 Use anaconda for setting up your environment
 
-	conda create -n ards python=2.7
+	conda create -n ards python=3.8
     conda activate ards
 	conda install matplotlib seaborn
 	pip install -r requirements.txt
+
+    # install ventparliament
+    cd ..
+    git clone https://github.com/hahnicity/ventparliament.git
+    cd ventparliament
+    conda env update --file environment.yml --name ards
+    pip install -e .
+
+    # go back to ardsdetection code
+    cd ../ardsdetection
 
 ## Dataset
 

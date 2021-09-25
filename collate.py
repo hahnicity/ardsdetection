@@ -47,10 +47,9 @@ class Dataset(object):
     necessities = ['ventBN']
     vent_feature_sets = {
         'flow_time': necessities + [
-            # slope_minF_to_zero is just pef_to_zero
             'mean_flow_from_pef',
             'inst_RR',
-            'slope_minF_to_zero',
+            'minF_to_zero',
             'pef_+0.16_to_zero',
             'iTime',
             'eTime',
@@ -63,7 +62,7 @@ class Dataset(object):
         'flow_time_biased': necessities + [
             'mean_flow_from_pef',
             'inst_RR',
-            'slope_minF_to_zero',
+            'minF_to_zero',
             'pef_+0.16_to_zero',
             'iTime',
             'eTime',
@@ -78,7 +77,7 @@ class Dataset(object):
         'flow_time_orig': necessities + [
             'mean_flow_from_pef',
             'inst_RR',
-            'slope_minF_to_zero',
+            'minF_to_zero',
             'pef_+0.16_to_zero',
             'iTime',
             'eTime',
