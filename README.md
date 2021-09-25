@@ -58,14 +58,40 @@ cd /path/to/ardsdetection
 python train.py -dp /dataset/base/path/ardsdetection_anon --cohort-description /dataset/base/path/ardsdetection_anon/anon-desc.csv --to-pickle processed_dataset.pkl
 ```
 
-### ATS Conference Results
+### Running
 
-Checkout the `ats-abstract` branch and run.
+#### Standard Trials
+
+A basic run will look something like
+
+    python train.py -p processed_dataset.pkl
+
+There are a number of options for running the algorithms with a number of different options. For example, you can change the number of features and the feature selection method
+
+    python train.py -p processed_dataset.pkl -fsm chi2 --n-new-features 7
+
+You can also change the algorithm
+
+    python train.py -p processed_dataset.pkl --algo MLP
+
+Another option is to redo the dataset with different feature sets. For instance, if you want to just have static compliance as your only feature:
+
+```
+python train.py -dp /dataset/base/path/ardsdetection_anon --cohort-description /dataset/base/path/ardsdetection_anon/anon-desc.csv --to-pickle processed_dataset.pkl --feature-set stat_compliance
+```
+
+Another option is to change the split type of your data to a random bootstrap
+
+    python train.py -p processed_dataset.pkl --split-type bootstrap
+
+#### ATS Conference Results
+
+Checkout the `ats-abstract` branch and run. This code only runs with Python2.7.
 
 	git checkout ats-abstract
 	python train.py -p flow-time-opt-ats.pkl --folds 5
 
-### CCX Results
+#### CCX Results
 
 Checkout the `ccx` tag
 

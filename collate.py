@@ -107,6 +107,7 @@ class Dataset(object):
             'I:E ratio',
         ],
         'stat_compliance': necessities + ['stat_compliance'],
+        'resist': necessities + ['resist'],
     }
     vent_feature_sets.update({
         'broad': vent_feature_sets['flow_time'] + [
