@@ -70,7 +70,7 @@ Checkout the `ats-abstract` branch and run.
 Checkout the `ccx` tag
 
     git checkout ccx
-    python train.py --from-pickle processed_dataset.pkl --algo RF -fsm chi2 --split-type kfold --n-new-features 8
+    python train.py --from-pickle ccx_dataset.pkl --algo RF -fsm chi2 --split-type kfold --n-new-features 8
 
 ## Citing
 If you used our dataset or the work herein please cite us :bowtie:
