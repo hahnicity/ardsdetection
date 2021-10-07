@@ -20,4 +20,4 @@ dependencies:
     - git+git://github.com/lukauskas/dtwco.git#egg=dtwco
     - prettytable
     - tabulate
-    - ventmap<1.5.3
+    - ventmap>=1.5.3
