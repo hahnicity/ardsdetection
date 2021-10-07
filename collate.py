@@ -32,7 +32,7 @@ from ventmap.raw_utils import extract_raw
 try:
     from algorithms.tor5 import perform_tor_with_bs_be
     from ventmode import datasets
-    from ventmode.main import run_dataset_with_classifier_and_lookahead
+    from ventmode.main import merge_periods_with_low_time_thresh, run_dataset_with_classifier_and_lookahead
     tor_possible = True
 except ImportError:
     tor_possible = False
@@ -497,6 +497,12 @@ class Dataset(object):
             c_res.append([breath['rel_bn'], breath['vent_bn'], compliance, resist])
         df = pd.DataFrame(c_res, columns=['rel_bn', 'vent_bn', 'stat_compliance', 'resist'])
         df['stat_compliance'] = df['stat_compliance'] * 1000
+        mask = (
+            (df['stat_compliance'] > self.compliance_upper_lim) |
+            (df['stat_compliance'] < self.compliance_lower_lim)
+        )
+        df.loc[mask, 'stat_compliance'] = np.nan
+        df.loc[df['resist'] < 0, 'resist'] = np.nan
         df.to_csv(compliance_path, index=False)
         return df
 
@@ -574,17 +580,25 @@ class Dataset(object):
             # it shouldn't be done unless we absolutely need it
             raise Exception('do ventmode and tor together otherwise this line of code will continue to be angry')
 
-        fileset = {'x': [(patient_id, f) for f in pt_files]}
-        # VFinal is pretty bloated and could be dramatically slimmed down if you
-        # really need it for speed sake
-        ventmode_dataset = datasets.VFinalFeatureSet(fileset, 10, 100)
-        ventmode_df = ventmode_dataset.create_prediction_df()
-        ventmode_model = pd.read_pickle(self.ventmode_model_path)
-        ventmode_scaler = pd.read_pickle(self.ventmode_scaler_path)
-        model_results = run_dataset_with_classifier_and_lookahead(
-            ventmode_model, ventmode_scaler, ventmode_df, 'vfinal', 50, 0.6
-        )
-        ventmode_preds = model_results[['rel_bn', 'vent_bn', 'predictions']]
+        # XXX this is kinda bad. you should have ventmode preds in same dir as breath metadata
+        mode_preds_filepath = Path('/tmp/').joinpath('{}-ventmode.pkl'.format(patient_id))
+        if mode_preds_filepath.exists() and self.load_intermediates:
+            ventmode_preds = pd.read_pickle(str(mode_preds_filepath))
+        else:
+            fileset = {'x': [(patient_id, f) for f in pt_files]}
+            # VFinal is pretty bloated and could be dramatically slimmed down if you
+            # really need it for speed sake
+            ventmode_dataset = datasets.VFinalFeatureSet(fileset, 10, 100)
+            ventmode_df = ventmode_dataset.create_prediction_df()
+            ventmode_model = pd.read_pickle(self.ventmode_model_path)
+            ventmode_scaler = pd.read_pickle(self.ventmode_scaler_path)
+            model_results = run_dataset_with_classifier_and_lookahead(
+                ventmode_model, ventmode_scaler, ventmode_df, 'vfinal', 50, 0.6
+            )
+            model_results.predictions = merge_periods_with_low_time_thresh(model_results.predictions, model_results.patient, model_results.abs_bs, pd.Timedelta(minutes=3))
+            ventmode_preds = model_results[['rel_bn', 'vent_bn', 'predictions']]
+            ventmode_preds.to_pickle(str(mode_preds_filepath))
+
         # convert to dataframe because pandas has a handy merge function
         meta = pd.DataFrame(meta)
         meta = meta.rename(columns={0: 'rel_bn', 1: 'vent_bn'})
@@ -593,7 +607,14 @@ class Dataset(object):
         meta = meta.merge(ventmode_preds, on=['rel_bn', 'vent_bn'], how='inner')
         if len(meta) == 0:
             raise Exception('ventmode merge was not completed successfully for pt: {}'.format(patient_id))
-        solo3 = [perform_tor_with_bs_be(f, [], '/tmp', 64, 'F', None)[0] for f in pt_files]
+        solo3 = []
+        for f in pt_files:
+            solo_file = os.path.splitext(Path(f).name)[0] + '_v5_1_0__solo3.csv'
+            solo_filepath = Path('/tmp').joinpath(solo_file)
+            if solo_filepath.exists() and self.load_intermediates:
+                solo3.append(pd.read_csv(str(solo_filepath)))
+            else:
+                solo3.append(perform_tor_with_bs_be(f, [], '/tmp', 64, 'F', None)[0])
 
         solo3 = pd.concat(solo3)
         solo3 = solo3.rename(columns={'BN': 'rel_bn', 'ventBN': 'vent_bn', 'dbl.4': 'dta', 'bs.1or2': 'bsa'})[['rel_bn', 'vent_bn', 'dta', 'bsa']]
@@ -626,17 +647,10 @@ class Dataset(object):
             tmp = self.load_breath_meta_file(f)
             meta.extend(tmp)
             compliance.append(self.load_compliance_file(patient_id, f, tmp))
+        compliance = pd.concat(compliance)
 
         if vm_tor_cond:
             meta = self.process_ventmode_tor(patient_id, pt_files, meta)
-
-        compliance = pd.concat(compliance)
-        mask = (
-            (compliance['stat_compliance'] > self.compliance_upper_lim) |
-            (compliance['stat_compliance'] < self.compliance_lower_lim)
-        )
-        compliance.loc[mask, 'stat_compliance'] = np.nan
-        compliance.loc[compliance['resist'] < 0, 'resist'] = np.nan
 
         if len(meta) != 0:
             # This takes up 54% of the time in this function if ehr and demo data
