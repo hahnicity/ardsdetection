@@ -618,6 +618,7 @@ class Dataset(object):
         pt_files = sorted(pt_files)
         meta = self.load_breath_meta_file(pt_files[0])
         compliance = [self.load_compliance_file(patient_id, pt_files[0], meta)]
+        vm_tor_cond = (self.use_ventmode or self.use_tor) and tor_possible
 
         for f in pt_files[1:]:
             # This takes up about 21% of the time in this function if ehr and demo
@@ -626,6 +627,9 @@ class Dataset(object):
             meta.extend(tmp)
             compliance.append(self.load_compliance_file(patient_id, f, tmp))
 
+        if vm_tor_cond:
+            meta = self.process_ventmode_tor(patient_id, pt_files, meta)
+
         compliance = pd.concat(compliance)
         mask = (
             (compliance['stat_compliance'] > self.compliance_upper_lim) |
@@ -633,18 +637,21 @@ class Dataset(object):
         )
         compliance.loc[mask, 'stat_compliance'] = np.nan
         compliance.loc[compliance['resist'] < 0, 'resist'] = np.nan
+        import IPython; IPython.embed()
 
         if len(meta) != 0:
             # This takes up 54% of the time in this function if ehr and demo data
             # is not processed
             meta = np.array(meta)
-            # ensure meta is proper length
-            len_mask = [len(r) == 49 for r in meta]
+            proper_len = 49 if not vm_tor_cond else 52
+            len_mask = [len(r) == proper_len for r in meta]
             meta = np.array(list(meta[len_mask]))
             c_vals = compliance[['stat_compliance', 'resist']].values
             if len(meta) == len(c_vals):
                 meta = np.append(meta, c_vals, axis=1)
             else:  # corner case
+                # XXX need to make sure cols are proper order
+                import IPython; IPython.embed()
                 compliance = compliance[['rel_bn', 'vent_bn', 'stat_compliance', 'resist']]
                 meta = pd.DataFrame(meta)
                 meta = meta.rename(columns={0: 'rel_bn', 1: 'vent_bn'})
@@ -702,8 +709,6 @@ class Dataset(object):
         elif self.use_demographic_features:
             cols = cols + self.demographic_features
 
-        if self.use_ventmode and self.use_tor:
-            cols += ['ventmode', 'dta', 'bsa']
         df = pd.DataFrame(meta, columns=cols)
         df['row_time'] = stack_times
         try:
@@ -794,6 +799,7 @@ class Dataset(object):
             EXPERIMENTAL_META_HEADER.index(feature) for feature in self.vent_features
             if feature in EXPERIMENTAL_META_HEADER
         ] + (lambda x: [] if 'stat_compliance' not in x else [-2])(self.vent_features) + (lambda x: [] if 'resist' not in x else [-1])(self.vent_features)
+        # XXX
         if self.use_ventmode and self.use_tor:
             row_idxs += [mat.shape[1]-3, mat.shape[1]-2, mat.shape[1]-1]
         mat = mat[:, row_idxs]

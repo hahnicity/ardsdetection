@@ -1,31 +1,23 @@
-name: aim1ards
+name: ards
 dependencies:
-  - python=2.7
+  - python=3.8
   - cython
   - ipython
   - numpy
   - pandas
-  - pytorch=1.0
-  - torchvision
-  - cudatoolkit
   - seaborn
-  - scipy>=1.1
+  - scipy
   - scikit-learn
-  - opencv
   - pathlib
   - matplotlib
   - pyqt
   - jupyter
   - ipython
-  - statsmodels
-  - pyyaml
   - pip
   - pip:
     - coloredlogs
     - pathlib
-    - ucdpvanalysis-1.5.tar.gz
     - git+git://github.com/lukauskas/dtwco.git#egg=dtwco
     - prettytable
     - tabulate
-    - shap<0.29
-    - ventmode-1.0.tar.gz
+    - ventmap<1.5.3

@@ -10,8 +10,10 @@ scaler-*
 *grid_search_results.pkl
 *.xlsx
 *.pkl
+*.pkl.scaler
 *spark_demo.py
 ucdpvanalysis-1.5.tar.gz
+cohort-description.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
