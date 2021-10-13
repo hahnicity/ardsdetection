@@ -494,9 +494,10 @@ class Dataset(object):
             compliance, resist, _, _ = perform_polynomial_model(
                 flow, vols, np.array(breath['pressure']), int(r.x0_index), float(r.PEEP), float(r.tvi)/1000
             )
+            # compliance is mult by 1000 because we divide tvi by 1000.
+            compliance = compliance * 1000
             c_res.append([breath['rel_bn'], breath['vent_bn'], compliance, resist])
         df = pd.DataFrame(c_res, columns=['rel_bn', 'vent_bn', 'stat_compliance', 'resist'])
-        df['stat_compliance'] = df['stat_compliance'] * 1000
         mask = (
             (df['stat_compliance'] > self.compliance_upper_lim) |
             (df['stat_compliance'] < self.compliance_lower_lim)
@@ -880,8 +881,6 @@ class Dataset(object):
             # axis=0 takes function across a column
             for func in self.frame_funcs:
                 if row is None:
-                    if self.use_tor:
-                        stack[:, -2:] = stack[:, -2:].sum(axis=0)
                     row = func(stack, axis=0)
                 else:
                     row = np.append(row, func(stack, axis=0))

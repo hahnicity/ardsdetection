@@ -14,6 +14,7 @@ from random import randint, sample
 import time
 import warnings
 
+from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -135,7 +136,6 @@ class ARDSDetectionModel(object):
         Gathers a list of patients and splits them by pathophysiology. Then just takes a continuous
         kfold split of them.
         """
-        # XXX add logic for doing fractional patients here
         idxs = []
         mapping = {patho: [] for n, patho in self.pathos.items()}
 
@@ -252,6 +252,63 @@ class ARDSDetectionModel(object):
 
         return scaler
 
+    def get_smote_kfold_split(self, x, y, folds):
+        if np.any(x.set_type != 'train_test'):
+            raise Exception('SMOTE data split needs to be run with dataset that only has normal kfold dataset splits')
+        sm = SMOTE()
+        non_feature_cols = pd.Index(['ventBN', 'row_time', 'patient', 'y', 'set_type', 'hour'])
+        feature_cols = x.columns.difference(non_feature_cols)
+        # create a smote split and then a regular split to the dataset.
+
+        idxs = []
+        x_new = []
+        y_new = []
+        mapping = {patho: [] for n, patho in self.pathos.items()}
+        unique_patients = sorted(x.patient.unique())
+
+        for patient in unique_patients:
+            patient_rows = x[x.patient == patient]
+            type_ = self.pathos[y.loc[patient_rows.index].unique()[0]]
+            mapping[type_].append(patient)
+
+        for i in range(folds):
+            test_pts = []
+            train_pts = []
+            for k, v in mapping.items():
+                lower_bound = int(round(i * len(v) / float(folds)))
+                upper_bound = int(round((i + 1) * len(v) / float(folds)))
+                if upper_bound < 1:
+                    raise Exception("You do not have enough patients for {} cohort".format(k))
+                patients = v[lower_bound:upper_bound]
+                test_pts.extend(patients)
+            train_pts = set(x.patient.unique()).difference(test_pts)
+            if self.args.train_pt_frac:
+                n_pts_to_select = int(len(train_pts) * self.args.train_pt_frac)
+                n_pts_each_patho = n_pts_to_select / 2
+                ards_patients = x[(x.patient.isin(train_pts)) & (x.y == 1)].patient.unique()
+                other_patients = x[(x.patient.isin(train_pts)) & (x.y != 1)].patient.unique()
+                train_pts = np.random.choice(ards_patients, size=n_pts_each_patho, replace=False)
+                train_pts = np.append(np.random.choice(other_patients, size=n_pts_each_patho, replace=False), train_pts)
+
+            train_pt_data = x[x.patient.isin(train_pts)]
+            test_pt_data = x[(x.patient.isin(test_pts))]
+            nan_mask = np.any(train_pt_data[feature_cols].isna(), axis=1)
+            fold_x_res, fold_y_res = sm.fit_resample(train_pt_data[~nan_mask][feature_cols], train_pt_data.y[~nan_mask])
+            # set non feature cols to nan because theres no actual reference to real
+            # world values with synthetic data
+            fold_x_res[non_feature_cols] = np.nan
+            x_new.extend([fold_x_res, test_pt_data])
+            y_new.extend([fold_y_res, test_pt_data.y])
+        cur_idx = 0
+        for i in range(0, len(x_new), 2):
+            x_tr_idx = pd.Index(range(cur_idx, cur_idx+len(x_new[i])))
+            cur_idx += len(x_new[i])
+            x_tst_idx = pd.Index(range(cur_idx, cur_idx+len(x_new[i+1])))
+            cur_idx += len(x_new[i+1])
+            idxs.append((x_tr_idx, x_tst_idx))
+        x, y = pd.concat(x_new, ignore_index=True), pd.concat(y_new, ignore_index=True)
+        return x, y, idxs
+
     def perform_data_splits(self):
         y = self.data.y
         x = self.data
@@ -270,6 +327,12 @@ class ARDSDetectionModel(object):
             idxs = [([], x.index)]
         elif self.args.split_type == 'bootstrap':
             idxs = self.get_bootstrap_idxs()
+        elif self.args.split_type == 'smote_kfold':
+            x, y, idxs = self.get_smote_kfold_split(x, y, self.args.folds)
+            # need to reset the main df because of downstream applications. The original
+            # df can still be extracted though by finding which parts of the df are
+            # from the test set
+            self.data = x
 
         if len(idxs) == 0:
             raise NoIndicesError('No indices were found for split. Did you enter your arguments correctly?')
@@ -1191,7 +1254,6 @@ class ARDSDetectionModel(object):
                 vote_cols = ['{}_votes'.format(patho.lower()) for _, patho in self.pathos.items()]
                 # get sum of votes across all patients
                 total_votes = slice[vote_cols].sum(axis=1).values.astype(float)
-                # XXX numerous pts missing votes. why? also only 1 type of patho actually shows
                 for n, patho in self.pathos.items():
                     plots.append(plt.bar(ind, slice['{}_votes'.format(patho.lower())].values / total_votes, bottom=bottom, color=cmap[n]))
                     bottom = bottom + (slice['{}_votes'.format(patho.lower())].values / total_votes)
@@ -1450,7 +1512,7 @@ def build_parser():
     parser.add_argument('--n-new-features', type=int, help='number of features to select using feature selection', default=1)
     parser.add_argument('--print-feature-selection', action='store_true')
     parser.add_argument('--select-from-model-thresh', type=float, default=.2, help='Threshold to use for feature importances when using lasso and gini selection')
-    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'kfold_random', 'train_all', 'test_all', 'bootstrap'], help='All splits are performed so there is no test/train patient overlap', default='kfold')
+    parser.add_argument('--split-type', choices=['holdout', 'holdout_random', 'kfold', 'kfold_random', 'train_all', 'test_all', 'bootstrap', 'smote_kfold'], help='All splits are performed so there is no test/train patient overlap. If SMOTE is needed to correct data imbalances then you need to select this here. smote_kfold will handle traditional kfold with smote', default='kfold')
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument('-sr', '--split-ratio', type=float, default=.2)
     parser.add_argument('--save-model-to', help='save model+scaler to a pickle file')
