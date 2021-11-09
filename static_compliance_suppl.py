@@ -23,9 +23,10 @@ def stat_compliance_resistance_viz(df_before, df_filtered):
     renaming = {f: f.replace('nanmedian_', '').replace('_', ' ') for f in feats}
     df_before = df_before.rename(columns=renaming)
     df_filtered = df_filtered.rename(columns=renaming)
+    figsize = (3*4, 3*2)
 
     for col, pretty_name in [('resist', 'Resistance'), ('stat compliance', 'Static Compliance')]:
-        pl, axes = plt.subplots(nrows=1, ncols=2, figsize=(3*8, 3*4))
+        pl, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize)
         for i, (ax_lab, frame) in enumerate([('Before', df_before), ('After', df_filtered)]):
             for target, label in [(0, 'Other'), (1, 'ARDS'), (2, 'COPD')]:
                 sns.distplot(frame[frame.y==target][col], label=label, ax=axes[i])
@@ -38,7 +39,7 @@ def stat_compliance_resistance_viz(df_before, df_filtered):
 
     # Visualize outliers on static compliance distribution
     for col, pretty_name in [('stat compliance', 'Static Compliance')]:
-        pl, axes = plt.subplots(nrows=1, ncols=2, figsize=(3*8, 3*4))
+        pl, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize)
         for i, (ax_lab, frame) in enumerate([('Before', df_before), ('After', df_filtered)]):
             for target, label in [(0, 'Other'), (1, 'ARDS'), (2, 'COPD')]:
                 sns.distplot(frame[frame.y==target][col], label=label, ax=axes[i])
